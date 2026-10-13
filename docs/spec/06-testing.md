@@ -1,0 +1,129 @@
+# 06 Testing
+
+## Levels
+
+| Level | Tooling | Scope | Target |
+|---|---|---|---|
+| engine | plain `pytest`, no HA | every rule in [02-control.md](02-control.md) and [03-modes.md](03-modes.md) | ≥ 95 % line coverage of `engine/` |
+| components | `pytest-homeassistant-custom-component` | config/options flow, setup/unload, entities, services, persistence, notifications, actuator adapters | ≥ 90 % overall |
+| replay | `tools/replay.py` | recorded history through the engine | plausibility before going live |
+| acceptance | real installation, manual | checklist below | before each minor release |
+
+Every requirement ID (BHV-xx) is referenced in at least one test name or docstring, e.g. `test_bhv18_unavailable_co2_is_ignored`.
+
+Time is always injected (`now` parameter in the engine, `freezer` fixture in component tests). No `sleep` in tests.
+
+## Engine scenarios (minimum set)
+
+| # | Scenario | Expected |
+|---|---|---|
+| E1 | CO₂ 700, 850, 1125, 1400, 1600 ppm, defaults, max 400 | 80, 80, 240, 400, 400 m³/h (before shaping) |
+| E2 | two CO₂ sensors 900 / 1200 | ramp uses 1200, `co2_max_entity` = second |
+| E3 | one CO₂ sensor `unavailable`, other 900 | uses 900, entity listed in `invalid_inputs` |
+| E4 | all CO₂ sensors invalid | mode `fallback`, setpoint 150, reason `fallback` |
+| E5 | CO₂ value unchanged but `last_reported` older than 30 min | invalid |
+| E6 | humidity max 62 % | humidity ramp ≈ 229 m³/h (quantised 230), reason `humidity_high` if above CO₂ demand |
+| E7 | humidity mean 38 %, max 58 % | `dry` active, humidity-high allowed for 60 min, then suppressed, reason `dryness_protection` |
+| E8 | mean 40.5 % after `dry` | stays `dry` (hysteresis until 42 %) |
+| E9 | night 23:00, demand 350 | 250, reason `night_limit` |
+| E10 | night, humidity max 66 % | not limited |
+| E11 | night window 22:00–07:00 at 06:59 and 07:00 | inside / outside |
+| E12 | away, CO₂ 1300 | 80, reason `away` |
+| E13 | shaping: current 80, target 400 | 130, then after 5 min 180 … (steps of 50, one per interval) |
+| E14 | shaping: current 200, target alternating 185/195 | no write (dead band down 20) |
+| E15 | shaping: write 4 min after last write in automatic | held, `write_blocked_by = interval` |
+| E16 | boost from automatic 120 | immediate 300, no step limit |
+| E17 | boost while CO₂ demands 400 | 400, reason `co2` |
+| E18 | boost twice (30 + 30 min) | `until` = start + 60 min |
+| E19 | boost extended beyond `boost_max_duration` | capped |
+| E20 | pause during boost, then boost during pause | last command wins both times |
+| E21 | resume during boost | immediate automatic value |
+| E22 | boost expires | back to automatic, trigger `timeout`, no shaping on the step down |
+| E23 | warning on | `safety_off`, effects: TurnOff, Notify(safety) |
+| E24 | warning on, override, NINA moves the same `id` from slot 2 to slot 1 | stays overridden (key = id) |
+| E25 | override, then a warning with a different incident | `safety_off` again |
+| E26 | warning ends | `restart_pending`, Notify(restart); after 30 min automatic, trigger `timeout` |
+| E27 | warning ends, `keep_off` | mode `off`, indefinite pause |
+| E28 | de defaults on the [warning text fixture](#warning-text-fixture) | every case as expected |
+| E29 | severity filter `severe`, severity "Moderate" | no warning; "Extreme" → warning; "Bogus" → warning |
+| E30 | smoke detector (no attributes) on | warning regardless of filters |
+| E30a | "Entwarnung: Feuerwehreinsatz - X" with instruction "Schließen Sie vorsorglich Fenster und Türen" | no warning (exclude) |
+| E30b | override incident "Großbrand - X", then "1. AKTUALISIERUNG: Großbrand - X" with new id | stays overridden (same incident key) |
+| E30c | details call fails | warning (fail-safe), problem `warning_details_failed` |
+| E30d | HTML in description (`<br/>`, `&quot;`) | stripped before matching and in notification text |
+| E30e | keyword `/rauch\w*entwicklung/` | regex match |
+| E30f | trigger `numeric` threshold 3, DWD level 2 / 3 | inactive / active |
+| E30g | trigger `state_list` [`Orange`, `Rouge`], state `rouge` | active (case-insensitive) |
+| E30h | two sources: smoke detector (no details) and NINA with filters; only smoke on | warning, filters of NINA not applied to the smoke detector |
+| E30i | severity normalisation: `Severe`, `3`, `"3; orange; Severe"`, `bogus` | severe, severe, severe, None (counts as extreme) |
+| E31 | control disabled, warning on, `safety_when_disabled` | `safety_off` |
+| E32 | control disabled, CO₂ 1400 | mode `disabled`, setpoint shown 400, no WriteFlow effect |
+| E33 | shower: 55 → 64 % within 6 min | shower auto boost, baseline 55; ends at ≤ 60 %; cooldown 10 min |
+| E34 | shower at night | level capped at 200 |
+| E35 | shower sensor goes unavailable for > 30 min | shower ends, trigger `inputs_lost` |
+| E36 | cooking `higher_is_worse=false` | detection on falling value |
+| E37 | cooking trigger power 1500 W > 100 | cooking boost until run-on after power drops |
+| E38 | state serialise → deserialise | identical; expired timers ended with `timeout_while_offline` |
+| E39 | startup grace | no WriteFlow effect during grace, safety TurnOff still issued |
+| E40 | indefinite pause | reminder after 8 h, then every 24 h |
+| E41 | select actuator stages 50/100/200/300/400, target 230 | stage 300; decreasing to 190 stays at 300 until target ≤ 180 (hysteresis) |
+| E42 | percent actuator, max 400, flow 150 | 37.5 → rounded to step |
+
+## Warning text fixture
+
+`tests/fixtures/warning_texts_de.json`: list of `{headline, text, expected}` used by E28. Initial content (25 cases):
+
+| Expected | Cases |
+|---|---|
+| shut down | NRW templates "Geruchsbelästigung", "Schadstofffreisetzung", "Rauchgase"; "Starke Geruchsentwicklung nach Brand"; headlines "Großbrand", "Brand mit starker Rauchentwicklung", "Gefahrstoffaustritt", "Gasaustritt", "Austritt von Gefahrstoffen …", "Explosion in Chemiewerk", "Unfall im Kernkraftwerk", "1. AKTUALISIERUNG: Großbrand" |
+| keep running | NRW templates "Kampfmittelfund", "Sirenenfehlauslösung", "Probealarm", "Ausfall Stromversorgung", "Hochwasser/Überflutung", "Entwarnung"; live "Entwarnung: Feuerwehreinsatz …", "Amtliche WARNUNG vor STURMBÖEN", drinking water "… Chlorung …"; "Amtliche WARNUNG vor HOHER UV-INTENSITÄT"; "Sperrung der Gasse … – Brandenburg an der Havel"; "Sie können Fenster und Türen wieder öffnen"; "Trinkwasser mit auffälligem Geruch" |
+
+Constructed headlines are marked as such in the fixture. Real messages that were decided wrongly in operation are added with their date.
+
+## Component tests (minimum set)
+
+| # | Test |
+|---|---|
+| C1 | config flow happy path for `number` (flow), `number` (%), `number` (unknown unit), `fan`, `select`; entry has `data == {}` and all defaults in `options` |
+| C2 | config flow errors: `actuator_not_found`, `select_options`, `select_mapping`, `no_inputs`; abort `already_configured` for an actuator used by another entry |
+| C3 | options flow: each menu step, every validation error key from [01-configuration.md](01-configuration.md#validation-rules), section input flattened, suggested values shown, `output` section hidden without advanced mode and its values kept, entry reloaded after save |
+| C4 | readiness subentries: add (select entity → options dropdown), reconfigure, delete, duplicate entity `already_configured`, `not_correctable`; auto-correct calls `select.select_option`; problem after 3 failures |
+| C4a | entity rename of a configured sensor updates `options` and reloads; removal raises `missing_entity` repair |
+| C4b | `async_migrate_entry`: every migration step, unknown future version fails cleanly |
+| C4c | `strings.json`: every field has `data` and `data_description`, every section and menu option is translated (test parses the schemas and the strings file) |
+| C5 | setup creates all phase entities with expected entity ids and translations (en, de) |
+| C6 | unload removes listeners and timers (no lingering timers: `hass` fixture check) |
+| C7 | services: entry resolution with one and two entries, error translations |
+| C8 | actuator write with context, verification retry, `write_mismatch` |
+| C9 | restart: boost active → reload entry → `ends_at` unchanged, boost continues |
+| C10 | notifications: `notify.mobile_app_x` called with actions and tag; firing `mobile_app_notification_action` with `BHV_<entry8>_KEEP_VENTILATING` overrides |
+| C11 | no notify services → `persistent_notification` created |
+| C11a | NINA: `nina.get_details` mocked with a response; device source expands to all slot binary_sensors; adding a slot (registry change) is picked up |
+| C11b | warning source subentries: add entity / device, trigger step only for sensors, suggested filters per provider and language, reconfigure, duplicate `already_configured`, `invalid_regex`, `keyword_conflict` |
+| C11c | providers with recorded states: DWD (`warning_<i>_*`), Environment Canada (`alert_<i>`), generic attributes (Meteoalarm-like), template binary_sensor without attributes |
+| C12 | logbook describes `mode_changed` |
+| C13 | diagnostics content, presence redacted |
+| C14 | repair issue for a removed entity |
+| C15 | engine import guard: `engine/` imports without `homeassistant` installed in `sys.modules` |
+| C16 | intents: boost/pause/resume/status handlers (0.2) |
+
+## Replay
+
+`tools/replay.py` (BHV-56, phase 0.2) runs recorded data through the same engine:
+
+- Input: a CSV with columns `time, entity_id, state` (e.g. exported from InfluxDB or the HA history API) and an options JSON (or the diagnostics download of a running entry).
+- Output to stdout: setpoint percentiles, share of time per reason and mode, number of writes per day, longest time at max flow. Optionally a CSV with the decision per evaluation to a given file.
+- No HA needed. Standard library only.
+
+Use before going live: replay a winter month and compare the shares of `co2` vs. `minimum` and the number of writes with expectations.
+
+## Acceptance checklist (real installation)
+
+- [ ] Boost via button and via voice; extend by pressing again; cancel; after expiry back to automatic
+- [ ] Pause 1 h; restart HA during the pause; remaining time unchanged after restart
+- [ ] Test warning (a template `binary_sensor` toggled by hand as warning source): unit off, notification with actions arrives, "Keep ventilating" lifts it, a second test warning (toggled again, so a new incident) shuts down again
+- [ ] Warning ends: restart question arrives; without answer the unit restarts after the timeout
+- [ ] Disconnect a CO₂ sensor: it is ignored; with no valid CO₂ sensor, fallback flow and problem notification after `problem_delay`
+- [ ] Set the unit's control mode to a wrong value by hand: readiness auto-correction restores it (if configured), event and logbook entry appear
+- [ ] Setpoint, reason and mode are recorded in history; logbook shows every mode change with its trigger
+- [ ] Four weeks of heating season: writes per day, reason shares and humidity percentiles are plausible (replay or history)
