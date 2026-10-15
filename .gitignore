@@ -14,3 +14,4 @@ build/
 .vscode/
 output/
 coverage.xml
+.claude/worktrees/
