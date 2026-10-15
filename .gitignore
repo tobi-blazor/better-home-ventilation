@@ -13,3 +13,4 @@ build/
 .idea/
 .vscode/
 output/
+coverage.xml
