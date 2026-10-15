@@ -31,6 +31,7 @@ Entities are `available` as long as the controller runs; they do not become unav
 | `pause` | button | 0.1 | – | always | pause with the pause duration entity |
 | `resume` | button | 0.1 | – | always | `resume()` |
 | `control` | switch | 0.1 | – | always | control switch (BHV-03). State kept in the store |
+| `profile` | select | 0.1 | – | always | `balanced`, `air_quality`, `quiet`, `winter` (translated state names, state icons in `icons.json`), BHV-26. State kept in the store |
 | `boost_duration` | select | 0.1 | config | always | `15`, `30`, `60`, `120` min (translated state names); initial value from `boost_default_duration` (nearest option). `RestoreEntity` |
 | `boost_level` | number | 0.1 | config | always | m³/h, `min_flow`…`max_flow`, step `flow_quantum`, mode box. `RestoreNumber` |
 | `pause_duration` | select | 0.1 | config | always | `1h`, `4h`, `8h`, `indefinite` (translated). `RestoreEntity` |
@@ -53,20 +54,21 @@ Rules applied (quality scale `entity-category`, `entity-device-class`, `entity-t
 
 ### Reasons (`reason` sensor options)
 
-`minimum`, `co2`, `humidity_high`, `dryness_protection`, `away`, `night_limit`, `fallback`, `boost`, `shower`, `cooking`, `off`, `safety_off`.
+`minimum`, `co2`, `humidity_high`, `dryness_protection`, `away`, `quiet_limit`, `fallback`, `boost`, `shower`, `cooking`, `off`, `safety_off`.
 
 ### Setpoint attributes
 
 | Attribute | Content |
 |---|---|
 | `mode`, `reason` | as the enum sensors |
-| `target` | setpoint before shaping |
+| `profile` | active profile |
+| `target` | flow the active mode asks for, before shaping |
 | `written` | last value written to the unit (flow) and `last_write` (timestamp) |
 | `actuator_value` | current native actuator value |
 | `contributions` | dict: `minimum`, `co2`, `humidity_high`, `fallback`, `boost`, `shower`, `cooking` (flow or `None`) |
 | `co2_max`, `co2_max_entity` | highest valid CO₂ and its entity |
 | `humidity_max`, `humidity_max_entity`, `humidity_mean` | living humidity |
-| `limits` | list of active limits: `away`, `night`, `dry` |
+| `limits` | list of active limits: `away`, `quiet`, `dry` |
 | `invalid_inputs` | list of entity ids currently invalid |
 | `write_blocked_by` | `None`, `grace`, `interval`, `deadband`, `disabled`, `not_ready`, `unavailable` |
 | `off_method` | `off_actuator` or `minimum` (only in off modes) |
@@ -91,7 +93,7 @@ All services take an optional `config_entry_id` (selector `config_entry`, integr
 | `resume` | – | `resume()` |
 | `override_safety` | – | `override_safety()` |
 
-Errors (all `ServiceValidationError` with translations): `entry_required`, `entry_not_loaded`, `level_out_of_range`, `no_active_warning` (override without warning).
+Errors (all `ServiceValidationError` with translations): `entry_required`, `entry_not_loaded`, `level_out_of_range`, `control_disabled` (boost or pause while control is off; the buttons raise the same error), `no_active_warning` (override without warning).
 
 Services return nothing.
 
@@ -146,7 +148,7 @@ Sent via the configured `notify.mobile_app_*` services (`notify.<service>` with 
 - The integration listens to `mobile_app_notification_action` and maps the action id to the entry and command (`source: notification`).
 - When the reason disappears (warning overridden, problem resolved), the notification is cleared with `message: clear_notification` and the tag.
 - Safety notifications use `data.push.interruption-level: time-sensitive` (iOS) and `data.priority: high`, `data.ttl: 0` (Android).
-- Texts are in `strings.json` under `common` (e.g. `common.notify_safety_title`, with placeholders like `{headline}`). hassfest accepts a `common` category for integrations (`script/hassfest/translations.py`, HA `main` 2026-10-13). They are loaded with `helpers.translation.async_get_translations(hass, hass.config.language, "common", {DOMAIN})`, fallback `en` ([Q7](README.md#open-questions)).
+- Texts are in `strings.json` under `common` (e.g. `common.notify_safety_title`, with placeholders like `{headline}`). hassfest accepts a `common` category for integrations (`script/hassfest/translations.py`, HA `main` 2026-10-13). They are loaded with `helpers.translation.async_get_translations(hass, hass.config.language, "common", {DOMAIN})`, fallback `en` (works for custom integrations, [Q7](README.md#open-questions)).
 
 ## Repairs
 

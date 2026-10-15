@@ -11,14 +11,14 @@ The design follows the Home Assistant developer documentation and the patterns o
 | Integration type | `helper`: the integration builds entities on top of other entities, like Generic Hygrostat. It is created from **Settings → Devices & services → Helpers → Create helper** | manifest docs: *helper* = "provides an entity to help the user with automations"; `generic_hygrostat/manifest.json` |
 | Where settings live | **Everything in `entry.options`**, nothing in `entry.data` except an empty dict. The title is the name | quality rule `config-flow`: only connection data in `data`, all other settings in `options`. There is no connection here. Core helpers (`SchemaConfigFlowHandler`) store all input in `options` |
 | Changing settings | Everything that can be set up can be changed in the options flow, including the actuator. No reconfigure flow needed, because `data` holds nothing | rule `reconfiguration-flow` is about `data`; helpers follow this pattern |
-| Reload | Options flow subclasses `OptionsFlowWithReload`. Subentry changes are picked up by an update listener that reloads only when the set of subentries or their data changed ([Q9](README.md#open-questions)) | options flow docs |
+| Reload | One update listener (`entry.add_update_listener`) reloads the entry on every change of options, subentries or entity ids written by the integration. The options flow is a plain `OptionsFlow`, subentry flows finish with `async_update_and_abort`. `OptionsFlowWithReload` and `async_update_reload_and_abort` are not used ([ADR 0001](../adr/0001-update-listener-instead-of-options-flow-with-reload.md)) | HA core 2026.10.0 `config_entries.py`: subentry add/remove/update only fire update listeners; `OptionsFlowWithReload` refuses entries with update listeners |
 | Repeated items | **Readiness conditions and warning sources are config subentries** (`ConfigSubentryFlow`, types `readiness_condition` and `warning_source`), each with its own add/reconfigure/delete in the UI | config flow docs, config subentries |
 | Unique entry | No `unique_id` on the entry (entity ids are user-changeable and therefore unsuitable). Instead `_async_abort_entries_match({"actuator": …})`, which checks options and data | rule `unique-config-entry`; `config_entries._async_abort_entries_match` |
 | Field help | Every field has a `data_description`, every section a name and description, every menu option a `menu_option_descriptions` entry | rule `config-flow` |
 | UI text | All text in `strings.json` (`config`, `options`, `config_subentries`, `selector`, `entity`, `services`, `exceptions`, `issues`, `common`). No UI text in code | rule `config-flow`, `entity-translations`, `exception-translations` |
 | Selectors | The most specific selector for every field: entity selectors with domain and device class filters, `NumberSelector` with unit and box mode, `DurationSelector` for durations, `TimeSelector` for times, `SelectSelector` with `translation_key` for choices | rule `config-flow`; `generic_hygrostat/config_flow.py` |
 | Grouping | `data_entry_flow.section` (one level, translated, icons in `icons.json`) instead of many small steps. Rarely changed tuning fields are in a collapsed section | data entry flow docs |
-| Advanced fields | Output-shaping parameters are only shown when the user has advanced mode on (`self.show_advanced_options`) | data entry flow docs |
+| Advanced fields | Technical timing parameters (section `advanced`) are only shown when the user has advanced mode on (`self.show_advanced_options`). The output-shaping parameters (section `shaping`) are always shown, collapsed, because users tune how calm the unit runs | data entry flow docs |
 | Current values | Options forms are filled with `add_suggested_values_to_schema(schema, self.config_entry.options)` | options flow docs |
 | Defaults | Defaults are written into `options` when the entry is created. New options in later versions are added by a migration (`MINOR_VERSION` bump, `async_migrate_entry`), never by silently changing code defaults for existing users | config flow docs, versioning |
 | Validation | Errors are reported per field (`errors["co2_end"] = "co2_range"`), `base` only for cross-field problems. Entities are checked to exist before the entry is created | rules `config-flow`, `test-before-configure` |
@@ -63,7 +63,7 @@ All other options get their defaults (see [defaults](#defaults-relative-to-max-f
 
 ## Options flow
 
-`OptionsFlowWithReload`. Step `init` is a menu (`async_show_menu`) with the steps below. Each step is one form; submitting it saves and ends the flow with `async_create_entry(data={**self.config_entry.options, **flattened_input})`. Section input arrives nested per section (`{"co2": {"co2_start": …}}`) and is flattened before saving, so stored keys do not depend on the form layout.
+`OptionsFlow`; the update listener reloads the entry after saving. Step `init` is a menu (`async_show_menu`) with the steps below. Each step is one form; submitting it saves and ends the flow with `async_create_entry(data={**self.config_entry.options, **flattened_input})`. Section input arrives nested per section (`{"co2": {"co2_start": …}}`) and is flattened before saving, so stored keys do not depend on the form layout.
 
 ### `actuator`
 
@@ -85,7 +85,6 @@ Changing the actuator to one used by another entry: error `actuator_in_use`. Cha
 |---|---|---|
 | `rooms` | `co2_sensors`, `humidity_sensors` | as config flow |
 | `presence` | `presence_entities` | `EntitySelector(domain=["person","device_tracker","zone","binary_sensor","input_boolean"], multiple=True)` |
-| `monitoring` (collapsed) | `actual_flow_sensor` | `EntitySelector(domain="sensor", device_class="volume_flow_rate")`, optional |
 
 ### `control`
 
@@ -100,21 +99,24 @@ Changing the actuator to one used by another entry: error `actuator_in_use`. Cha
 | `humidity` | `dryness_threshold` | `NumberSelector(20–60, step 1, %, box)` | 40 | BHV-12 |
 | `humidity` | `dryness_hysteresis` | `NumberSelector(0–10, step 0.5, %, box)` | 2 | BHV-12 |
 | `humidity` | `dryness_humidity_high_limit` | `DurationSelector` | 1 h | BHV-12, 0 = humidity-high suppressed while dry |
-| `night` | `night_enabled` | `BooleanSelector` | true | BHV-14 |
-| `night` | `night_start`, `night_end` | `TimeSelector` | 22:00, 07:00 | window may cross midnight |
-| `night` | `night_max_flow` | `NumberSelector(m³/h)` | 62.5 % of max | |
-| `night` | `night_humidity_override` | `NumberSelector(40–100, %)` | 65 | |
-| `away` | `away_enabled` | `BooleanSelector` | true | BHV-15 |
-| `output` (collapsed, advanced mode only) | `min_write_interval` | `DurationSelector` | 5 min | BHV-16 |
-| `output` | `max_step_up`, `max_step_down` | `NumberSelector(m³/h)` | 12.5 % of max | |
-| `output` | `deadband_up`, `deadband_down` | `NumberSelector(0–100, m³/h)` | 10, 20 | |
-| `output` | `flow_quantum` | `NumberSelector(1–50, m³/h)` | 5 | |
-| `output` | `evaluation_interval` | `DurationSelector` | 1 min | BHV-17 |
-| `output` | `debounce` | `DurationSelector` | 10 s | |
-| `output` | `stale_timeout` | `DurationSelector` | 30 min | BHV-18 |
-| `output` | `startup_grace` | `DurationSelector` | 1 min | |
+| `quiet` | `night_enabled` | `BooleanSelector` | true | BHV-14, quiet limit in the night window; the quiet profile applies it all day regardless |
+| `quiet` | `night_start`, `night_end` | `TimeSelector` | 22:00, 07:00 | window may cross midnight |
+| `quiet` | `quiet_max_flow` | `NumberSelector(m³/h)` | 62.5 % of max | quiet limit (night and quiet profile) |
+| `quiet` | `quiet_humidity_override` | `NumberSelector(40–100, %)` | 65 | above this living humidity maximum the quiet limit does not apply |
+| `away` | `away_enabled` | `BooleanSelector` | true | BHV-15, disables the away limit in every profile |
 
-When advanced mode is off, the `output` section is not shown and its stored values are kept unchanged.
+The profile ([02-control.md](02-control.md#profiles)) is not an option: it is chosen in daily use with the `profile` select entity.
+| `shaping` (collapsed, always shown) | `min_write_interval` | `DurationSelector` | 5 min | BHV-16 |
+| `shaping` | `max_step_up`, `max_step_down` | `NumberSelector(m³/h)` | 12.5 % of max | |
+| `shaping` | `deadband_up`, `deadband_down` | `NumberSelector(0–100, m³/h)` | 10, 20 | |
+| `shaping` | `flow_quantum` | `NumberSelector(1–50, m³/h)` | 5 | |
+| `advanced` (collapsed, advanced mode only) | `evaluation_interval` | `DurationSelector` | 1 min | BHV-17 |
+| `advanced` | `debounce` | `DurationSelector` | 10 s | |
+| `advanced` | `stale_timeout` | `DurationSelector` | 30 min | BHV-18 |
+| `advanced` | `startup_grace` | `DurationSelector` | 1 min | |
+| `advanced` | `problem_delay` | `DurationSelector` | 10 min | time a problem must persist before the `problem` sensor turns on (and, from 0.2, before a notification) |
+
+When advanced mode is off, the `advanced` section is not shown and its stored values are kept unchanged. The `data_description` of each shaping field explains its effect with the default values (e.g. "at most one change every 5 minutes").
 
 ### `boosts`
 
@@ -123,8 +125,6 @@ When advanced mode is off, the `output` section is not shown and its stored valu
 | `manual` | `boost_default_duration` | `DurationSelector` | 30 min |
 | `manual` | `boost_default_level` | `NumberSelector(m³/h)` | 75 % of max |
 | `manual` | `boost_max_duration` | `DurationSelector` | 4 h |
-| `manual` | `pause_reminder_after` | `DurationSelector` | 8 h |
-| `manual` | `off_notice_after` | `DurationSelector` | 24 h |
 | `shower` | `bathroom_humidity_sensors` | `EntitySelector(sensor, humidity, multiple)` | – |
 | `shower` | `shower_rise` | `NumberSelector(1–40, %)` | 8 |
 | `shower` | `shower_window` | `DurationSelector` | 10 min |
@@ -141,7 +141,7 @@ When advanced mode is off, the `output` section is not shown and its stored valu
 | `cooking` | `cooking_trigger_run_on` | `DurationSelector` | 15 min |
 | `cooking` | `cooking_level` | `NumberSelector(m³/h)` | 62.5 % of max |
 | `cooking` | `cooking_max_duration` | `DurationSelector` | 90 min |
-| `common` (collapsed) | `auto_boost_night_cap` | `NumberSelector(m³/h)` | 50 % of max |
+| `common` (collapsed) | `auto_boost_quiet_cap` | `NumberSelector(m³/h)` | 50 % of max |
 | `common` | `auto_boost_cooldown` | `DurationSelector` | 10 min |
 
 A detector is active when its sensors are set. There are no separate "enabled" switches: no sensors = feature off. The `cooking_sensors` description says: IAQ/VOC sensor in the kitchen, not directly above the hob.
@@ -161,7 +161,10 @@ The warning sources themselves are subentries, see [below](#warning-sources-conf
 |---|---|---|
 | `notify_services` | `SelectSelector(multiple=True, mode=list)`, options = all `notify.mobile_app_*` services when the step opens (label = service name) | [] |
 | `notify_safety`, `notify_reminders`, `notify_problems` | `BooleanSelector` | true |
-| `problem_delay` | `DurationSelector` | 10 min |
+| `pause_reminder_after` | `DurationSelector` | 8 h |
+| `off_notice_after` | `DurationSelector` | 24 h |
+
+`problem_delay` is in the `control` step (section `advanced`), because it also defines when the `problem` sensor turns on.
 
 Without `notify_services`, a `persistent_notification` is created instead (no actions). A stored service that no longer exists raises the repair issue `missing_notify_service`.
 
@@ -177,7 +180,7 @@ Without `notify_services`, a `persistent_notification` is created instead (no ac
 | `state` | `expected_state`: for `select`/`input_select` a `SelectSelector` with the entity's current options; `switch`/`input_boolean`/`binary_sensor`: `SelectSelector(["on","off"])`; `number`: `NumberSelector`; otherwise `TextSelector`. `auto_correct`: `BooleanSelector`, only offered for `select`, `input_select`, `switch`, `input_boolean`, `number` |
 | `reconfigure` | same two steps, pre-filled, `async_update_and_abort` |
 
-Subentry title: "<friendly name> = <expected state>". `unique_id` of the subentry = entity id, so the same entity cannot get two conditions (`already_configured`). Adding, changing or removing a subentry reloads the entry.
+Subentry title: "<friendly name> = <expected state>". `unique_id` of the subentry = entity id, so the same entity cannot get two conditions (`already_configured`). Adding, changing or removing a subentry reloads the entry (through the update listener).
 
 Translations under `config_subentries.readiness_condition`.
 
@@ -194,7 +197,7 @@ Subentry type `warning_source`, handler `WarningSourceFlow(ConfigSubentryFlow)`.
 
 - Subentry `unique_id` = source entity id or device id (`already_configured` for duplicates).
 - Subentry title = `name`.
-- Adding, changing or removing a source reloads the entry.
+- Adding, changing or removing a source reloads the entry (through the update listener).
 - Translations under `config_subentries.warning_source`.
 
 **Suggested filters**, pre-filled on creation by detected provider and `hass.config.language` (fallback `en`). The `data_description` explains why.
@@ -229,7 +232,7 @@ Validation: `source_required`, `invalid_regex` (a `/…/` keyword that does not 
 | `humidity_high_start < humidity_high_end` | `humidity_high_end` | `humidity_range` |
 | `dryness_threshold + dryness_hysteresis < humidity_high_start` | `dryness_threshold` | `dryness_overlap` |
 | `min_flow ≤ fallback_flow ≤ max_flow` | `fallback_flow` | `fallback_range` |
-| `min_flow ≤ night_max_flow ≤ max_flow` | `night_max_flow` | `night_range` |
+| `min_flow ≤ quiet_max_flow ≤ max_flow` | `quiet_max_flow` | `quiet_range` |
 | every level and cap within `min_flow`…`max_flow` | the field | `level_range` |
 | `night_start ≠ night_end` | `night_end` | `night_window` |
 | `away_enabled` needs `presence_entities` (checked on the `control` step against stored inputs) | `away_enabled` | `away_needs_presence` |
@@ -247,10 +250,10 @@ Defaults given as "x % of max flow" are calculated when the entry is created, ro
 | `min_flow` | 80 |
 | `fallback_flow` | 150 |
 | `max_step_up`, `max_step_down` | 50 |
-| `night_max_flow` | 250 |
+| `quiet_max_flow` | 250 |
 | `boost_default_level` | 300 |
 | `shower_level`, `cooking_level` | 250 |
-| `auto_boost_night_cap` | 200 |
+| `auto_boost_quiet_cap` | 200 |
 
 ## Stored format
 
@@ -263,7 +266,7 @@ Defaults given as "x % of max flow" are calculated when the entry is created, ro
 
 The controller subscribes to `async_track_entity_registry_updated_event` for every configured entity (options and subentries):
 
-- `action == "update"` with `old_entity_id`: replace the id in `options` / the subentry (`async_update_entry` / `async_update_subentry`) and reload.
+- `action == "update"` with `old_entity_id`: replace the id in `options` / the subentry (`async_update_entry` / `async_update_subentry`); the update listener reloads the entry.
 - `action == "remove"`: repair issue `missing_entity` naming the entity and the option it was used in. The entry keeps running with the remaining inputs.
 
 `async_handle_source_entity_changes` from `helpers/helper_integration.py` handles one source entity per helper and is therefore not used directly; the behavior is the same.

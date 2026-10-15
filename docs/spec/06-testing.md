@@ -25,7 +25,7 @@ Time is always injected (`now` parameter in the engine, `freezer` fixture in com
 | E6 | humidity max 62 % | humidity ramp ≈ 229 m³/h (quantised 230), reason `humidity_high` if above CO₂ demand |
 | E7 | humidity mean 38 %, max 58 % | `dry` active, humidity-high allowed for 60 min, then suppressed, reason `dryness_protection` |
 | E8 | mean 40.5 % after `dry` | stays `dry` (hysteresis until 42 %) |
-| E9 | night 23:00, demand 350 | 250, reason `night_limit` |
+| E9 | night 23:00, demand 350 | 250, reason `quiet_limit` |
 | E10 | night, humidity max 66 % | not limited |
 | E11 | night window 22:00–07:00 at 06:59 and 07:00 | inside / outside |
 | E12 | away, CO₂ 1300 | 80, reason `away` |
@@ -64,10 +64,26 @@ Time is always injected (`now` parameter in the engine, `freezer` fixture in com
 | E36 | cooking `higher_is_worse=false` | detection on falling value |
 | E37 | cooking trigger power 1500 W > 100 | cooking boost until run-on after power drops |
 | E38 | state serialise → deserialise | identical; expired timers ended with `timeout_while_offline` |
-| E39 | startup grace | no WriteFlow effect during grace, safety TurnOff still issued |
+| E39 | startup grace | no WriteFlow effect during grace |
+| E39a | startup grace with an active warning (0.2) | safety TurnOff still issued during grace |
 | E40 | indefinite pause | reminder after 8 h, then every 24 h |
 | E41 | select actuator stages 50/100/200/300/400, target 230 | stage 300; decreasing to 190 stays at 300 until target ≤ 180 (hysteresis) |
 | E42 | percent actuator, max 400, flow 150 | 37.5 → rounded to step |
+| E43 | profile `air_quality`, night 23:00, demand 350 | 350, no quiet limit |
+| E44 | profile `quiet`, 14:00, demand 350; then user boost 300 | 250, reason `quiet_limit`; boost → 300 |
+| E45 | profile `winter`, `dry`, CO₂ 1300 / 1000 | 285 reason `co2` / 80 reason `dryness_protection` (balanced: 340 / 165) |
+| E46 | profile `air_quality`, away, CO₂ 1300 | 340, no away limit |
+| E47 | profile change `balanced` → `quiet` while 400 is written | 250 written in the same evaluation, no step limit |
+| E48 | away and all CO₂ sensors invalid | 150, reason `fallback` (fallback wins over away) |
+| E49 | humidity-high suppressed by dryness, then `dry` ends while `h_max` > 55 % | humidity-high allowed again, counter reset |
+| E50 | boost 300 running, boost again with level 400 | 400 written immediately, `until` extended |
+| E51 | control switch off during boost; boost while off | boost ended; command rejected (`control_disabled`) |
+| E52 | off actuator stopped externally; started externally; `unavailable` → stopped | mode `off` (pause, source `external`); back to `automatic`; no command |
+| E53 | night, all CO₂ invalid, `quiet_max_flow` 120 < `fallback_flow` 150 | 120, reason `quiet_limit` |
+| E54 | profile `quiet`, CO₂ 1400, user boost 300 | 400, reason `co2` (boost uses the demand before the quiet limit) |
+| E55 | pause (unit stopped by the integration), control switch off, control switch on | TurnOn effect, then WriteFlow with bypass; with an external stop instead: no TurnOn |
+| E56 | shaping holds (inside dead band), readiness condition becomes unmet with `auto_correct` | CorrectReadiness effect without WriteFlow; after it is met again the next write uses bypass. Control disabled or startup grace: no CorrectReadiness |
+| E57 | `fan` actuator without off actuator, turned off externally, then on externally | mode `off` (pause, source `external`), then `automatic` |
 
 ## Warning text fixture
 
@@ -86,7 +102,7 @@ Constructed headlines are marked as such in the fixture. Real messages that were
 |---|---|
 | C1 | config flow happy path for `number` (flow), `number` (%), `number` (unknown unit), `fan`, `select`; entry has `data == {}` and all defaults in `options` |
 | C2 | config flow errors: `actuator_not_found`, `select_options`, `select_mapping`, `no_inputs`; abort `already_configured` for an actuator used by another entry |
-| C3 | options flow: each menu step, every validation error key from [01-configuration.md](01-configuration.md#validation-rules), section input flattened, suggested values shown, `output` section hidden without advanced mode and its values kept, entry reloaded after save |
+| C3 | options flow: each menu step, every validation error key from [01-configuration.md](01-configuration.md#validation-rules), section input flattened, suggested values shown, `shaping` section shown without advanced mode, `advanced` section hidden without advanced mode and its values kept, entry reloaded after save |
 | C4 | readiness subentries: add (select entity → options dropdown), reconfigure, delete, duplicate entity `already_configured`, `not_correctable`; auto-correct calls `select.select_option`; problem after 3 failures |
 | C4a | entity rename of a configured sensor updates `options` and reloads; removal raises `missing_entity` repair |
 | C4b | `async_migrate_entry`: every migration step, unknown future version fails cleanly |

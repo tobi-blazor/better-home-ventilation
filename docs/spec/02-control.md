@@ -23,9 +23,9 @@ Each evaluation:
 
 1. Build the input snapshot ([input validity](#input-validity)).
 2. Update detectors (shower, cooking) and safety state, resolve the mode ([03-modes.md](03-modes.md)).
-3. Calculate the automatic demand ([demand](#automatic-demand)) and apply limits ([limits](#limits)).
-4. Calculate the mode setpoint ([03-modes.md](03-modes.md#setpoint-per-mode)).
-5. Apply output shaping ([shaping](#output-shaping)) and map to the actuator ([mapping](#actuator-mapping)).
+3. Calculate the contributions and the demand ([demand](#automatic-demand)) and apply limits ([limits](#limits)).
+4. Calculate the target of the active mode ([03-modes.md](03-modes.md#target-per-mode)).
+5. Apply output shaping to get the setpoint ([shaping](#output-shaping)) and map it to the actuator ([mapping](#actuator-mapping)).
 6. Check readiness and availability ([readiness](#readiness-and-availability)), then write if needed ([writing](#writing)).
 7. Publish the decision to the entities, append it to the decision log, persist state if changed.
 
@@ -41,7 +41,7 @@ Each evaluation:
 | Group | Entities | Use |
 |---|---|---|
 | CO₂ | `co2_sensors` | CO₂ ramp, maximum of valid values |
-| living humidity | `humidity_sensors` | humidity-high ramp (maximum), dryness protection (mean), night override (maximum) |
+| living humidity | `humidity_sensors` | humidity-high ramp (maximum), dryness protection (mean), quiet limit override (maximum) |
 | bathroom humidity | `bathroom_humidity_sensors` | shower detector only |
 | cooking | `cooking_sensors`, `cooking_trigger` | cooking detector only |
 | presence | `presence_entities` | away |
@@ -57,7 +57,7 @@ A numeric input value is **valid** if all of the following hold:
 
 - state is not `unavailable`, `unknown` or empty
 - state parses as a finite float
-- `now - state.last_reported ≤ stale_timeout` (default 30 min). `last_reported` is updated by HA even when the value does not change (unconfirmed for all HA versions, see [open question Q4](README.md#open-questions)). If `last_reported` is not available, `last_updated` is used.
+- `now - state.last_reported ≤ stale_timeout` (default 30 min). `last_reported` is updated by HA even when the value does not change (since HA 2024.4, `States.async_set_internal`; checked on 2026.10.0).
 - plausibility range: CO₂ 250–10000 ppm, humidity 0–100 %. Values outside are invalid.
 
 Invalid values are **excluded** from every calculation. They are listed in the attribute `invalid_inputs` of the setpoint sensor and, after `problem_delay`, reported as problem `inputs_invalid`.
@@ -74,9 +74,12 @@ h_max     = max(valid living humidity values) or None
 h_mean    = mean(valid living humidity values) or None
 
 d_min     = min_flow
-d_co2     = ramp(co2_max, co2_start, co2_end, min_flow, max_flow)        if co2_max  is not None
+co2_from  = (co2_start + co2_end) / 2 if profile is winter and dry else co2_start
+d_co2     = ramp(co2_max, co2_from, co2_end, min_flow, max_flow)         if co2_max  is not None
 d_hum     = ramp(h_max, humidity_high_start, humidity_high_end, min_flow, max_flow) if h_max is not None
 ```
+
+`d_min`, `d_co2`, `d_hum` and `fallback_flow` are the **contributions**; `demand` below is their combination ([glossary](../../CONTEXT.md)).
 
 ### Dryness protection (BHV-12)
 
@@ -86,9 +89,11 @@ State `dry` with hysteresis:
 - becomes inactive when `h_mean ≥ dryness_threshold + dryness_hysteresis`
 - inactive when `h_mean` is None
 
-While `dry` is active, `d_hum` is allowed only for `dryness_humidity_high_limit` minutes **continuously** (counted from the moment `d_hum > d_min` while dry). After that it is suppressed until `h_max < humidity_high_start` again (then the counter resets). The counter state is persisted.
+While `dry` is active, `d_hum` is allowed only for `dryness_humidity_high_limit` minutes **continuously** (counted from the moment `d_hum > d_min` while dry). After that it is suppressed until `h_max < humidity_high_start` again or `dry` ends (then the counter resets). The counter state is persisted.
 
-`dry` only limits humidity-high. CO₂ demand is never limited by dryness (fresh air has priority over humidity).
+In the profiles balanced, air quality and quiet, `dry` only limits humidity-high; the CO₂ demand is never limited by dryness (fresh air has priority over humidity). The winter profile additionally starts the CO₂ ramp at its midpoint while `dry` (`co2_from` above), so moderate CO₂ values no longer raise the flow while the air is too dry; high CO₂ values still reach full flow.
+
+Below the humidity band the **mean** of the living rooms counts (dryness protection). Upwards every **single** room counts: the humidity-high ramp uses the most humid room, so it can raise the flow while the mean is still inside the band. This is intended (one damp bedroom matters even if the house mean is fine).
 
 ### Combining
 
@@ -109,29 +114,49 @@ The reason of the automatic demand is determined in this order:
 | `fallback` and `demand == fallback_flow` | `fallback` |
 | `d_hum` allowed and `d_hum == demand` and `d_hum > d_min` | `humidity_high` |
 | `d_co2 == demand` and `d_co2 > d_min` | `co2` |
-| `dry` and `d_hum` suppressed and `d_hum > demand` | `dryness_protection` |
+| `dry` and (`d_hum` suppressed and `d_hum > demand`, or `co2_from > co2_start` and the CO₂ ramp from `co2_start` would exceed `demand`) | `dryness_protection` |
 | otherwise | `minimum` |
 
 ## Limits
 
 Applied to the automatic demand, in this order.
 
-**Away (BHV-15):** if `away_enabled` and away:
-`demand = max(d_min, d_hum if allowed else d_min)`; reason `away` unless reason is `humidity_high`.
-CO₂ is ignored while away (nobody produces CO₂; pets are a documented limitation).
+Which limits apply depends on the [profile](#profiles).
 
-**Night (BHV-14):** if `night_enabled` and `now` (local time) is within the night window (start inclusive, end exclusive, may cross midnight) and `demand > night_max_flow` and not (`h_max is not None and h_max ≥ night_humidity_override`):
-`demand = night_max_flow`; reason `night_limit`.
+**Away (BHV-15):** if the away limit applies and away:
+`demand = max(fallback_flow if fallback else d_min, d_hum if allowed else d_min)`; reason `away` unless reason is `humidity_high` or `fallback`.
+CO₂ is ignored while away (nobody produces CO₂; pets are a documented limitation). The fallback flow is kept: without valid CO₂ values the integration cannot know that nobody produces CO₂.
 
-All active limits are listed in the attribute `limits` (`away`, `night`, `dry`), also when they did not change the value.
+**Quiet (BHV-14):** if the quiet limit applies and `demand > quiet_max_flow` and not (`h_max is not None and h_max ≥ quiet_humidity_override`):
+`demand = quiet_max_flow`; reason `quiet_limit`. This also caps the fallback flow (noise is independent of sensor failures).
+The demand before this limit is kept as `demand_unquiet` (with its reason); the `boost` mode uses it, so a user boost never gets less than the air quality asks for without noise protection ([03-modes.md](03-modes.md#target-per-mode)).
+
+All active limits are listed in the attribute `limits` (`away`, `quiet`, `dry`), also when they did not change the value.
+
+## Profiles
+
+The profile (BHV-26) is a fixed, built-in strategy, chosen with the `profile` select entity and kept in the store. Default `balanced`. Profiles have no settings of their own; they decide which limits apply, using the options above.
+
+| Profile | Quiet limit | Away limit | CO₂ while `dry` | Auto boost cap (0.3) |
+|---|---|---|---|---|
+| `balanced` | in the night window | yes | full ramp | in the night window |
+| `air_quality` | never | never | full ramp | never |
+| `quiet` | all day | yes | full ramp | all day |
+| `winter` | in the night window | yes | ramp from its midpoint | in the night window |
+
+- "In the night window" requires `night_enabled`; the window is local time, start inclusive, end exclusive, and may cross midnight.
+- The away limit requires `away_enabled` and presence entities.
+- Dryness protection of humidity-high applies in every profile.
+- User boosts are never capped by the quiet limit.
+- A profile change takes effect in the same evaluation and bypasses output shaping, like a command.
 
 ## Output shaping
 
-Shaping turns the mode setpoint into the value actually written. Let:
+Shaping turns the target into the setpoint, the value actually written. Let:
 
-- `target` = mode setpoint, quantised to `flow_quantum` (round half up) and clamped to the actuator range
+- `target` = the flow the active mode asks for ([03-modes.md](03-modes.md#target-per-mode)), quantised to `flow_quantum` (round half up) and clamped to the actuator range
 - `current` = actuator's current value converted to flow if valid, otherwise the last written value, otherwise None
-- `bypass` = the mode changed in this evaluation, or this is the first write after startup, or `current` is None
+- `bypass` = the mode changed in this evaluation, or a boost command (start, extension, level change) or a profile change happened since the last evaluation, or this is the first write after startup, or `current` is None
 
 ```text
 if bypass:
@@ -170,18 +195,20 @@ Internally everything is flow in m³/h. Conversion to the native actuator value:
 ## Off and on
 
 - **Off** (modes `off`, `safety_off`): if an off actuator is configured, set it to `off_state` (`switch.turn_on/turn_off`, `input_boolean.turn_on/turn_off`, `fan.turn_off`). Otherwise write the lowest actuator value (`actuator_min`, 0 %, lowest stage) and set attribute `off_method: minimum`.
-- **On** (leaving an off mode): first set the off actuator to the opposite state, then write the setpoint with `bypass`.
+- **On**: in every running mode (`automatic`, `fallback`, `boost`, `shower`, `cooking`), if the off actuator is in the stopped state **and the integration stopped it** (`stopped_by_integration` in the controller state), first set it to the running state, then write the setpoint with `bypass`. This covers leaving an off mode and also returning from `disabled` after a pause had stopped the unit. A unit stopped at the unit itself is a pause ([writing](#writing)) and is not switched on.
+- `stopped_by_integration` is set when the integration switches the off actuator to the stopped state and cleared when it is running again (by the integration or externally).
 - Off and on are never rate limited.
 
 ## Readiness and availability
 
-Before any write (including off/on):
+Readiness and availability are checked in **every** evaluation, not only when a write is due. Before any write (including off/on) they act as a gate, in this order:
 
-1. **Actuator availability:** actuator (and off actuator, if used for this write) must not be `unavailable`/`unknown`. Otherwise: no write, problem `actuator_unavailable`.
-2. **Readiness conditions:** each condition compares the entity state with `expected_state` (string compare; numeric compare with tolerance 0.5 for `number`).
-   - Not met and `auto_correct`: issue the correction (`select.select_option`, `input_select.select_option`, `switch.turn_on/off`, `input_boolean.turn_on/off`, `number.set_value`) at most once per 60 s per condition, fire event `better_home_ventilation_readiness_corrected`, skip the write in this evaluation and re-evaluate after 5 s.
+1. **Control switch off:** no write and **no readiness correction** (hands-off, BHV-03). Readiness and availability are still evaluated and shown as problems. Exception (0.2): the safety off/on of `safety_when_disabled` is written, without readiness correction.
+2. **Actuator availability:** actuator (and off actuator, if used for this write) must not be `unavailable`/`unknown`. Otherwise: no write, problem `actuator_unavailable`.
+3. **Readiness conditions:** each condition compares the entity state with `expected_state` (string compare; numeric compare with tolerance 0.5 for `number`).
+   - Not met and `auto_correct`: issue the correction (`select.select_option`, `input_select.select_option`, `switch.turn_on/off`, `input_boolean.turn_on/off`, `number.set_value`) at most once per 60 s per condition, fire event `better_home_ventilation_readiness_corrected`, skip the write in this evaluation and re-evaluate after 5 s. The correction is issued even when shaping would hold the value (no write due), because the unit ignores the written value until readiness is restored. It is not issued while control is disabled or during the startup grace.
+   - After a successful correction the next write uses `bypass`: the unit may have run at another flow in the meantime.
    - Not met after 3 correction attempts, or not met without `auto_correct`: no write, problem `not_ready` (with the entity id). Retries continue every 5 min.
-3. Control switch off: no write (except safety, if `safety_when_disabled`).
 
 Problems are cleared automatically once the condition is resolved.
 
@@ -192,6 +219,7 @@ Logging follows the quality rule `log-when-unavailable`: one `info` message when
 - Service calls use `blocking=True` with a timeout of 10 s and carry a context created by the integration (`Context()`), so the logbook attributes the change to Better Home Ventilation.
 - **Verification:** 30 s after a write the actuator value is compared with the written value (tolerance: one actuator step or 5 m³/h, whichever is larger). On mismatch: one retry. On a second mismatch: problem `write_mismatch`, no further retries until the target changes.
 - An external change of the actuator (state change with a context that is not ours) is accepted as the new `current`. The next write follows the normal shaping rules. Pausing control after manual changes is backlog BHV-94.
+- An external change of the **off actuator** (a change between the stopped and the running state with a context that is not ours, e.g. standby set at the unit for a filter change) is a command with source `external`: a stop becomes `pause()` without duration, a start becomes `resume()`. The same applies to a `fan` actuator without off actuator: an external `off` is a stop, an external `on` is a start. Changes from or to `unavailable`/`unknown` are not commands (e.g. a restart of the device). While control is disabled external changes are ignored. During `safety_off`: see [Q11](README.md#open-questions).
 - Exceptions from service calls are caught and logged (`warning` once, then `debug` while the error persists), the evaluation continues and problem `write_failed` is raised.
 
 ## Decision record
@@ -199,7 +227,7 @@ Logging follows the quality rule `log-when-unavailable`: one `info` message when
 Every evaluation produces a `Decision`:
 
 ```text
-time, mode, reason, setpoint (after shaping, flow), target (before shaping), written (flow or None),
+time, mode, profile, reason, setpoint (after shaping, flow), target (before shaping), written (flow or None),
 contributions {minimum, co2, humidity_high, fallback, boost, shower, cooking},
 inputs {co2_max, co2_max_entity, h_max, h_max_entity, h_mean, presence_home},
 limits [..], invalid_inputs [..], problems [..], ends_at, write_blocked_by (None | grace | interval | deadband | disabled | not_ready | unavailable)

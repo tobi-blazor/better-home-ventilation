@@ -33,7 +33,7 @@ custom_components/better_home_ventilation/
   __init__.py          async_setup (services, intents), async_setup_entry / unload / remove, runtime_data
   manifest.json
   const.py             DOMAIN, option keys, defaults, enums
-  config_flow.py       ConfigFlow, OptionsFlowWithReload (menu + sections), ReadinessConditionFlow, WarningSourceFlow (subentries)
+  config_flow.py       ConfigFlow, OptionsFlow (menu + sections), ReadinessConditionFlow, WarningSourceFlow (subentries)
   controller.py        HA glue: subscriptions, debounce, lock, timers, snapshot, effect execution, store
   actuator.py          adapters number/fan/select + off actuator: native <-> flow, service calls, verification
   notify.py            sending/clearing notifications, action listener
@@ -73,7 +73,8 @@ examples/
 | Purpose | API |
 |---|---|
 | runtime data | `ConfigEntry[BetterVentilationData]`, `entry.runtime_data` |
-| configuration | `ConfigFlow`, `OptionsFlowWithReload`, `ConfigSubentryFlow`, `data_entry_flow.section`, `helpers.selector` ([01-configuration.md](01-configuration.md#principles)) |
+| configuration | `ConfigFlow`, `OptionsFlow`, `ConfigSubentryFlow`, `data_entry_flow.section`, `helpers.selector` ([01-configuration.md](01-configuration.md#principles)) |
+| reload on configuration changes | one update listener, `entry.add_update_listener` ([ADR 0001](../adr/0001-update-listener-instead-of-options-flow-with-reload.md)) |
 | YAML guard | `CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)` |
 | entity renames/removals | `async_track_entity_registry_updated_event` |
 | notification texts | `helpers.translation.async_get_translations(…, "common", …)` |
@@ -117,10 +118,9 @@ No polling of external systems, no `requirements` in the manifest.
 
 ## Compatibility
 
-- Schema library: HA core `main` (2026-10-13) builds config flow and service schemas with `probatio` (`import probatio`) instead of `voluptuous`. The integration uses whatever its minimum HA version uses; if both must be supported, schemas go through one small compatibility module.
-
-- Minimum HA version: to be decided at the start of implementation ([Q4](README.md#open-questions)). Guideline: the oldest release of the last six months that provides every API above. Written to `hacs.json`.
-- Python: the version required by the minimum HA version.
+- **Minimum HA version: 2026.4** (decided 2026-10-14). Guideline: the oldest release of the last six months that provides every API above. Every API in the table is available from 2025.10 on (the latest one is `menu_option_descriptions`, 2025.10; config subentries 2025.3; `data_entry_flow.section` 2024.7; `last_reported` 2024.4). Written to `hacs.json` as `"homeassistant": "2026.4.0"`.
+- Python: 3.14 (HA ≥ 2026.3 requires `>=3.14.2`).
+- Schema library: since HA 2026.9 core validates with `probatio` and installs it permanently as `voluptuous` alias (core PR #175128, #182107). The integration uses `import voluptuous as vol`, which works on 2026.4 (real voluptuous) and on 2026.9+ (alias). No compatibility module. CI runs the tests on both sides of this switch.
 - Translations: `en` (source) and `de`.
 
 ## Code quality
@@ -138,13 +138,13 @@ GitHub Actions:
 | Workflow | Content |
 |---|---|
 | `lint.yml` | ruff, mypy |
-| `test.yml` | pytest with coverage on the minimum and the latest HA version |
+| `test.yml` | pytest with coverage on the minimum (2026.4) and the latest HA version |
 | `validate.yml` | `hassfest` (home-assistant/actions), HACS validation (`hacs/action`) |
 | `release.yml` | on tag `v*`: check that the tag matches `manifest.json` version, create GitHub release with notes from `CHANGELOG.md` |
 
 - Versioning: SemVer. `0.x` while the spec phases are implemented.
 - `CHANGELOG.md` in Keep-a-Changelog format.
-- Dev environment: `requirements_test.txt` with `pytest-homeassistant-custom-component` pinned to the HA version used for development, `.devcontainer` optional. The engine tests must also run without HA installed (plain `pytest tests/engine`).
+- Dev environment: WSL (Ubuntu) with `uv` and Python 3.14; Home Assistant does not support Windows as a runtime. `requirements_test.txt` with `pytest-homeassistant-custom-component` pinned to the HA version used for development (`0.13.321` = HA 2026.4.0 for the minimum version job). No devcontainer. The engine tests must also run without HA installed (plain `pytest tests/engine`).
 - Testing on a real instance before the repository is public: HACS custom repository if private repositories work ([Q10](README.md#open-questions)), otherwise copy `custom_components/better_home_ventilation/` to the instance and restart.
 
 ## Before 1.0 / HACS default listing

@@ -6,7 +6,7 @@ This specification describes **what** the integration does and the binding desig
 
 | Document | Content |
 |---|---|
-| [README.md](README.md) (this file) | purpose, goals, non-goals, glossary, requirements, phases, open questions |
+| [README.md](README.md) (this file) | purpose, goals, non-goals, requirements, phases, open questions |
 | [01-configuration.md](01-configuration.md) | config flow, options flow, parameters with defaults and validation |
 | [02-control.md](02-control.md) | evaluation loop, input validity, demand calculation, limits, output shaping, actuator mapping, readiness |
 | [03-modes.md](03-modes.md) | operating modes and priorities, commands, safety shutdown, automatic boosts, reminders, persistence |
@@ -52,23 +52,7 @@ Better Home Ventilation replaces all of this with one config entry per ventilati
 
 ## Glossary
 
-| Term | Meaning |
-|---|---|
-| unit | the ventilation unit being controlled |
-| flow | volume flow in m³/h. **All internal calculations use m³/h**, see [actuator mapping](02-control.md#actuator-mapping) |
-| max flow | nominal maximum flow of the unit, configured once (e.g. 400 m³/h) |
-| actuator | the entity that sets the flow: `number`, `fan` or `select` |
-| off actuator | optional entity that stops the unit (e.g. a standby switch) |
-| demand | flow requested by one rule (CO₂, humidity, …) |
-| contribution | the demand of one rule, shown as attribute |
-| reason | the rule or mode that determined the final setpoint |
-| setpoint | the flow the integration wants the unit to run at, after limits and shaping |
-| mode | the single active operating mode, see [03-modes.md](03-modes.md) |
-| manual command | boost or pause issued by a user, service or voice |
-| auto boost | boost started by a detector (shower, cooking) |
-| warning source | config subentry that turns an entity or device into a hazard signal (official warning, smoke detector, helper), with its own trigger and filters, see [03-modes.md](03-modes.md#warning-sources) |
-| readiness condition | entity state the unit needs before writes have an effect (e.g. control mode `Modbus Flow`) |
-| valid input | an input sensor value that is numeric, available and not stale, see [input validity](02-control.md#input-validity) |
+The domain terms (unit, flow, contribution, demand, target, setpoint, mode, pause, off state, …) are defined in [CONTEXT.md](../../CONTEXT.md), the single glossary of the project. This specification uses them with exactly that meaning.
 
 ## Requirements
 
@@ -78,7 +62,7 @@ Better Home Ventilation replaces all of this with one config entry per ventilati
 |---|---|---|---|
 | BHV-01 | must | One config entry controls one unit through one actuator: `number` (m³/h or %), `fan` (percentage) or `select` (stages mapped to flows) | 0.1 |
 | BHV-02 | should | Optional off actuator: `switch`/`input_boolean` with configurable polarity, or `fan.turn_off`. Without off actuator, "off" means the lowest possible actuator value | 0.1 |
-| BHV-03 | must | A **control switch** disables all writes (hands-off). Entities keep calculating | 0.1 |
+| BHV-03 | must | A **control switch** disables all writes (hands-off), including readiness corrections. Entities keep calculating | 0.1 |
 | BHV-04 | must | **Readiness conditions:** entity + expected state, optionally auto-corrected before writing. If not met, writes are suspended and a problem is reported | 0.1 |
 | BHV-05 | must | Actuator availability is monitored; unavailable actuator suspends writes and raises a problem | 0.1 |
 
@@ -90,12 +74,13 @@ Better Home Ventilation replaces all of this with one config entry per ventilati
 | BHV-11 | must | **Minimum flow** in automatic mode (moisture protection) | 0.1 |
 | BHV-12 | must | **Dryness protection:** if the mean of the living-area humidity sensors is below a threshold, the setpoint is limited to the CO₂ demand; humidity-high may exceed it only for a limited time | 0.1 |
 | BHV-13 | must | **Humidity-high ramp:** linear from min flow at `humidity_high_start` to max flow at `humidity_high_end`, using the highest valid living-area sensor | 0.1 |
-| BHV-14 | should | **Night limit:** within a time window the setpoint is capped, except for user boosts and very high humidity | 0.1 |
+| BHV-14 | should | **Quiet limit:** within the night window (all day in the quiet profile) the setpoint is capped, except for user boosts and very high humidity | 0.1 |
 | BHV-15 | should | **Away:** when nobody is home, minimum flow unless humidity-high applies | 0.1 |
 | BHV-16 | must | **Output shaping:** minimum interval between writes, maximum step, asymmetric dead band, quantisation. No flapping | 0.1 |
 | BHV-17 | must | Evaluation on input changes (debounced) **and** periodically. Never blocking | 0.1 |
 | BHV-18 | must | Inputs that are `unavailable`, `unknown`, non-numeric or stale are **ignored**, never read as 0 | 0.1 |
 | BHV-19 | must | **Fallback flow** when CO₂ sensors are configured but none is valid | 0.1 |
+| BHV-26 | must | **Profiles:** a fixed set of strategies for the automatic demand (balanced, air quality, quiet, winter), selectable in daily use; the profile decides which limits apply and how CO₂ counts while the air is dry | 0.1 |
 
 ### Manual control
 
@@ -113,7 +98,7 @@ Better Home Ventilation replaces all of this with one config entry per ventilati
 |---|---|---|---|
 | BHV-30 | should | **Shower detection:** bathroom humidity rise within a window starts an auto boost until humidity is back near the baseline, with maximum duration | 0.3 |
 | BHV-31 | should | **Cooking detection:** kitchen IAQ/VOC rise relative to its recent minimum starts an auto boost; optional trigger entity (hob power, hood) | 0.3 |
-| BHV-32 | should | Auto boosts are capped at night by their own limit; user boosts are not | 0.3 |
+| BHV-32 | should | Auto boosts are capped by their own limit while the quiet limit applies; user boosts are not | 0.3 |
 
 ### Safety
 
@@ -149,6 +134,7 @@ Better Home Ventilation replaces all of this with one config entry per ventilati
 | BHV-94 | Detect manual changes at the unit and pause control for a while |
 | BHV-95 | Humidifier coordination |
 | BHV-96 | Multiple actuators / zones |
+| BHV-97 | Heat recovery monitoring: optional outdoor, supply and extract temperature sensors give a calculated efficiency sensor, η = (supply − outdoor) / (extract − outdoor), valid only with a temperature difference of about 8 K or more and the preheater off; a problem when it stays low in the heating season (e.g. bypass open, fouled exchanger). Not a control input: at typical efficiencies (≈ 0.9) it changes the demand by less than the dead band, and the winter problem is moisture, not heat (analysis 2026-10-16) |
 
 Outdoor air quality (smoke in the neighbourhood, PM above a threshold) is already covered by BHV-40: a threshold or template helper can be a warning source.
 
@@ -156,8 +142,8 @@ Outdoor air quality (smoke in the neighbourhood, PM above a threshold) is alread
 
 | Version | Content | Usable for |
 |---|---|---|
-| 0.1 | actuator, demand control, shaping, validity, fallback, boost, pause, entities, services, persistence, logbook | replacing a blueprint/automation |
-| 0.2 | safety shutdown with notifications, override, confirmed restart, reminders, voice intents, diagnostics, repairs, replay tool | full operation |
+| 0.1 | actuator, demand control, profiles, shaping, validity, fallback, boost, pause, entities, services, persistence, logbook | test runs on a real installation (everyday operation needs the safety shutdown of 0.2) |
+| 0.2 | safety shutdown with notifications, override, confirmed restart, reminders, voice intents, diagnostics, repairs, replay tool | full operation, replacing a blueprint/automation |
 | 0.3 | shower and cooking detection | comfort |
 | 1.0 | public repository, brands, HACS default listing, docs complete | other users |
 
@@ -178,9 +164,9 @@ Unimplemented options must not appear in the UI. Their defaults are added by mig
 
 ### Before the first line of code
 
-1. Decide the minimum HA version (Q4) and record it in [05-architecture.md](05-architecture.md#compatibility).
+1. ~~Decide the minimum HA version (Q4)~~ Done: HA 2026.4, see [05-architecture.md](05-architecture.md#compatibility).
 2. License (Q5) is the owner's decision; until then no LICENSE file.
-3. Set up the project skeleton and CI ([05-architecture.md](05-architecture.md#ci-and-releases)), then the engine with tests (E1–E22, E38, E39, E41, E42), then the HA glue.
+3. Set up the project skeleton and CI ([05-architecture.md](05-architecture.md#ci-and-releases)), then the engine with tests (E1–E22, E38, E39, E41–E57), then the HA glue.
 
 ## Open questions
 
@@ -191,10 +177,11 @@ To be verified during implementation. Each answer goes into the respective docum
 | Q1 | ~~NINA attribute names and severity values~~ **Answered 2026-10-13:** attributes except `id` are deprecated and removed in HA 2026.11; details come from the service `nina.get_details`; severity values `extreme`/`severe`/`moderate`/`minor`/`unknown` | [03-modes.md](03-modes.md#warning-sources) |
 | Q2 | Are intents registered by a custom integration offered as tools to LLM conversation agents via the Assist API? Which naming/description is needed? (unconfirmed) | [04-interface.md](04-interface.md#intents) |
 | Q3 | Can a custom integration contribute sentences to the default conversation agent, or must users copy `custom_sentences`? (assumed: copy) | [04-interface.md](04-interface.md#intents) |
-| Q4 | Minimum supported HA version (affects `last_reported`, config entry subentries, `runtime_data`) | [05-architecture.md](05-architecture.md#compatibility) |
+| Q4 | ~~Minimum supported HA version~~ **Answered 2026-10-14:** HA 2026.4 (Python 3.14); every used API exists from 2025.10 on; `import voluptuous as vol` works before and after the switch to `probatio` in 2026.9 | [05-architecture.md](05-architecture.md#compatibility) |
 | Q5 | License | repository |
-| Q6 | Does a **custom** integration with `integration_type: helper` appear in the "Create helper" dialog? (expected yes, unconfirmed) | [01-configuration.md](01-configuration.md#principles) |
-| Q7 | Can `async_get_translations(…, "common", {DOMAIN})` load the `common` category of a custom integration? (hassfest accepts the category; loading unconfirmed) | [04-interface.md](04-interface.md#notifications) |
+| Q6 | ~~Does a custom helper integration appear in the "Create helper" dialog?~~ **Answered 2026-10-14:** yes, if it has `config_flow: true` (core `loader.async_get_config_flows`, frontend `dialog-helper-detail.ts`, 2026.10) | [01-configuration.md](01-configuration.md#principles) |
+| Q7 | ~~Can `async_get_translations(…, "common", {DOMAIN})` load the `common` category of a custom integration?~~ **Answered 2026-10-14:** yes; every top-level key of `translations/<lang>.json` becomes a category (`helpers/translation.py`, 2026.10.0; category exists since 2024.7) | [04-interface.md](04-interface.md#notifications) |
 | Q8 | Exact attribute keys and `awareness_level` format of the Meteoalarm `binary_sensor` (expected from the meteoalert API: `headline`, `description`, `severity`, `event`, `awareness_level`; unconfirmed) | [03-modes.md](03-modes.md#details-providers) |
-| Q9 | Does adding/changing/removing a config subentry reload the entry by itself, or must an update listener do it? (assumed: update listener needed) | [01-configuration.md](01-configuration.md#principles) |
+| Q9 | ~~Does adding/changing/removing a config subentry reload the entry by itself?~~ **Answered 2026-10-14:** no, it only fires update listeners; the integration reloads through one update listener ([ADR 0001](../adr/0001-update-listener-instead-of-options-flow-with-reload.md)) | [01-configuration.md](01-configuration.md#principles) |
 | Q10 | Can HACS install from a **private** GitHub repository (needed for testing before the repo is public)? Otherwise copy `custom_components/` manually | [05-architecture.md](05-architecture.md#ci-and-releases) |
+| Q11 | What does an external start of the unit (off actuator switched on by someone else) mean during `safety_off`: an override, or ignored and switched off again? Outside safety it ends the pause ([02-control.md](02-control.md#writing)). To decide in 0.2 | [03-modes.md](03-modes.md#safety-shutdown) |

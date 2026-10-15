@@ -7,6 +7,7 @@ Exactly one mode is active at any time. It is resolved in every evaluation from 
 ```text
 ControllerState
   control_enabled: bool                       # control switch, default true
+  profile: str                                # balanced | air_quality | quiet | winter, default balanced
   manual: None | Boost(until, level, started, source) | Pause(until | None, started, source)
   auto_boosts: {detector_key: AutoBoost(kind, entity_id, baseline, started, deadline)}
   detector_cooldown: {detector_key: until}
@@ -18,6 +19,7 @@ ControllerState
   dry_active: bool
   off_since: None | datetime                  # start of the current off state
   last_reminder: None | datetime
+  stopped_by_integration: bool                # off actuator stopped by an integration write, see 02-control "Off and on"
   last_write: None | datetime
   last_written_flow: None | float
   last_mode: str                              # for change detection and events only
@@ -39,27 +41,27 @@ Highest priority first:
 
 Between `off` and `boost` the last command wins, because both live in the single `manual` slot.
 
-**Safety while control is disabled** (`safety_when_disabled`): the integration only switches the unit off (off actuator, or lowest value) and, after the restart confirmation, back on to the state it had before. It writes no setpoint while control is disabled.
+**Safety while control is disabled** (`safety_when_disabled`): the integration only switches the unit off (off actuator, or lowest value) and, after the restart confirmation, back on to the state it had before. It writes no setpoint and no readiness correction while control is disabled.
 
 `not_ready` and `actuator_unavailable` are **problems**, not modes: the mode stays, writes are suspended (`write_blocked_by`).
 
-## Setpoint per mode
+## Target per mode
 
-`auto` = automatic demand after limits ([02-control.md](02-control.md#limits)).
+`demand` = automatic demand after limits ([02-control.md](02-control.md#limits)). The target is shaped into the setpoint ([02-control.md](02-control.md#output-shaping)).
 
-| Mode | Setpoint | Reason | Night limit | Shaping |
+| Mode | Target | Reason | Quiet limit | Shaping |
 |---|---|---|---|---|
 | `safety_off` | off | `safety_off` | – | none |
-| `disabled` | `auto` (shown, not written) | reason of `auto` | as `auto` | – |
+| `disabled` | `demand` (shown, not written) | reason of `demand` | as `demand` | – |
 | `off` | off | `off` | – | none |
-| `boost` | `max(level, auto)` | `boost` (or reason of `auto` if `auto > level`) | ignored | bypass on start/end |
-| `shower`, `cooking` | `max(min(level, night_cap_if_night), auto)` | `shower` / `cooking` (or reason of `auto` if higher) | `auto_boost_night_cap` instead of `night_max_flow` | bypass on start/end |
-| `fallback` | `auto` (already contains `fallback_flow`) | `fallback` or `humidity_high` | applies | normal |
-| `automatic` | `auto` | reason of `auto` | applies | normal |
+| `boost` | `max(level, demand_unquiet)` | `boost` (or reason of `demand_unquiet` if it is higher than `level`) | ignored: uses the demand before the quiet limit | bypass on every boost command and on end |
+| `shower`, `cooking` | `max(min(level, cap_if_quiet), demand)` | `shower` / `cooking` (or reason of `demand` if higher) | `auto_boost_quiet_cap` instead of `quiet_max_flow`, when the profile applies it | bypass on start/end |
+| `fallback` | `demand` (already contains `fallback_flow`) | `fallback` or `humidity_high` | applies | normal |
+| `automatic` | `demand` | reason of `demand` | applies | normal |
 
 ## Commands
 
-Commands come from buttons, services, intents and notification actions. Each command carries a `source` (`button`, `service`, `voice`, `notification`) for the logbook.
+Commands come from buttons, services, intents, notification actions and the unit itself (external stop/start of the off actuator, [02-control.md](02-control.md#writing)). Each command carries a `source` (`button`, `service`, `voice`, `notification`, `external`) for the logbook.
 
 | Command | Effect |
 |---|---|
@@ -68,9 +70,10 @@ Commands come from buttons, services, intents and notification actions. Each com
 | `resume()` | `manual = None`, all `auto_boosts` cleared (detectors enter cooldown), `restart_pending` cleared (= confirm restart). Does **not** lift an active warning: that is `override_safety` |
 | `override_safety()` | the incident keys of all warnings in `safety.active` are added to `safety.overridden`; `restart_pending` cleared; safety notifications cleared |
 | `keep_off()` | only valid while `restart_pending`: `restart_pending` cleared, `manual = Pause(None)` |
-| control switch on/off | `control_enabled` |
+| control switch on/off | `control_enabled`. Switching off ends a `Boost` or `Pause` (`manual = None`) and clears `auto_boosts` (detectors enter cooldown) |
+| profile change | `profile`; accepted at any time, also while control is disabled |
 
-Commands while `control_enabled` is false are accepted and stored (they take effect when control is enabled again), but services return a warning in the log. Exception: `override_safety` always acts.
+While `control_enabled` is false, `boost` and `pause` are **rejected**: services, buttons and intents raise `ServiceValidationError` (`control_disabled`), and external off actuator changes are ignored. `resume` has nothing to end and does nothing. Exceptions: `override_safety` always acts; `keep_off` during `restart_pending` only clears `restart_pending`, so the unit is not switched back on.
 
 Timer expiry (`Boost.until`, `Pause.until`, `AutoBoost.deadline`, `RestartPending.deadline`) is scheduled with `async_track_point_in_utc_time` and re-scheduled whenever the state changes. Expiry runs an evaluation with trigger `timeout`.
 

@@ -4,7 +4,7 @@ How the engineering skills should consume this repo's domain documentation when 
 
 ## Specification first
 
-`docs/spec/` is the source of truth for behavior (see `CLAUDE.md`). Read the relevant spec document before anything else. The glossary currently lives in `docs/spec/README.md#glossary`; if a `CONTEXT.md` is created later, it must not contradict the spec glossary, and the spec wins on conflict. If an ADR or `CONTEXT.md` disagrees with the spec, stop and ask.
+`docs/spec/` is the source of truth for behavior (see `CLAUDE.md`). Read the relevant spec document before anything else. `CONTEXT.md` at the repo root is the single glossary; the spec uses its terms. If an ADR or `CONTEXT.md` disagrees with the spec, stop and ask.
 
 ## Before exploring, read these
 
