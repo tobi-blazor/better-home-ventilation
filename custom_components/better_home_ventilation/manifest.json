@@ -1,0 +1,14 @@
+{
+  "domain": "better_home_ventilation",
+  "name": "Better Home Ventilation",
+  "codeowners": ["@tobi-blazor"],
+  "config_flow": true,
+  "dependencies": [],
+  "after_dependencies": ["mobile_app", "conversation", "logbook", "nina"],
+  "documentation": "https://github.com/tobi-blazor/better-home-ventilation",
+  "integration_type": "helper",
+  "iot_class": "calculated",
+  "issue_tracker": "https://github.com/tobi-blazor/better-home-ventilation/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}

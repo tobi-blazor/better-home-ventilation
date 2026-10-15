@@ -1,0 +1,17 @@
+# Ruff configuration for the pure engine (docs/spec/05-architecture.md).
+# Extends the root configuration and bans everything that would make the
+# engine impure: Home Assistant, the HA glue, logging and reading the clock.
+# Inside engine/ only relative imports are used.
+extend = "../../../pyproject.toml"
+
+[lint.flake8-tidy-imports.banned-api]
+"homeassistant".msg = "The engine is pure: no Home Assistant imports in engine/."
+"custom_components".msg = "The engine must not import the HA glue; use relative imports inside engine/."
+"engine".msg = "Use relative imports inside engine/ (it is imported under two package names)."
+"logging".msg = "The engine does not log; return data and let the glue log."
+"time.time".msg = "The engine does not read the clock; `now` is passed in."
+"time.monotonic".msg = "The engine does not read the clock; `now` is passed in."
+"datetime.datetime.now".msg = "The engine does not read the clock; `now` is passed in."
+"datetime.datetime.utcnow".msg = "The engine does not read the clock; `now` is passed in."
+"datetime.datetime.today".msg = "The engine does not read the clock; `now` is passed in."
+"datetime.date.today".msg = "The engine does not read the clock; `now` is passed in."
