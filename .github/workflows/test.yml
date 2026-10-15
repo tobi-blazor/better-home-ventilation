@@ -1,0 +1,70 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    name: pytest (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: HA 2026.4 minimum
+            phcc: "0.13.321"
+          - name: HA 2026.10 latest
+            phcc: "0.13.372"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: requirements_test.txt
+
+      - name: Install pytest-homeassistant-custom-component ${{ matrix.phcc }}
+        run: pip install "pytest-homeassistant-custom-component==${{ matrix.phcc }}"
+
+      - name: Home Assistant version
+        run: python -c "from homeassistant.const import __version__; print(__version__)"
+
+      - name: pytest
+        run: pytest --cov --cov-report=term-missing --cov-report=xml
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-${{ matrix.phcc }}
+          path: coverage.xml
+          if-no-files-found: ignore
+
+  engine:
+    name: pytest tests/engine (without Home Assistant)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install pytest only
+        run: pip install pytest
+
+      - name: Home Assistant must not be installed
+        run: python -c "import importlib.util, sys; sys.exit(importlib.util.find_spec('homeassistant') is not None)"
+
+      - name: pytest tests/engine
+        run: pytest tests/engine
