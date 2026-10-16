@@ -458,6 +458,7 @@ async def test_e52_external_stop_becomes_pause(
         "trigger": "command",
         "source": "external",
         "warning": None,
+        "ends_at": None,
         "entry_id": entry.entry_id,
         "device_id": controller.device_id,
         "name": "Ventilation",
