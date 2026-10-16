@@ -15,4 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Options for actuator (off actuator, native range), inputs (room sensors, presence), control (CO₂ and humidity ramps, flows, quiet and away limits, output shaping, advanced timing) and manual boost defaults, with validation of every cross-field rule.
 - Readiness conditions as sub-entries (entity, expected state, optional automatic correction).
 - Every change of the settings or readiness conditions reloads the entry; English and German translations.
+- The control now runs in Home Assistant (no entities yet): it starts once Home Assistant has started, writes nothing during the startup grace, evaluates sensor and presence changes after the debounce time, every evaluation interval and at once when the unit or a readiness entity changes, and writes the flow to a `number`, `fan` or `select` actuator. Every write is checked after 30 s and retried once; failed and ignored writes are reported as problems.
+- The off actuator stops and starts the unit for a pause; a stop or start at the unit itself is taken as a pause or resume.
+- Readiness conditions with automatic correction are corrected before writing (event `better_home_ventilation_readiness_corrected`); a condition that stays unmet after three attempts is reported as not ready.
+- Boost, pause, control switch and profile are kept across restarts; a boost or pause that ended while Home Assistant was offline ends on startup. Mode changes fire `better_home_ventilation_mode_changed`.
+- Renamed entities are followed in the settings and readiness conditions automatically.
 - HACS metadata, development tooling (ruff, mypy, pytest) and CI workflows (lint, tests on the minimum and latest Home Assistant version, hassfest and HACS validation, releases from `CHANGELOG.md`).
