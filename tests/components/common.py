@@ -2,10 +2,17 @@
 
 from __future__ import annotations
 
-from typing import Any
+from datetime import timedelta
+from typing import Any, ClassVar
 
+from freezegun.api import FrozenDateTimeFactory
+from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.data_entry_flow import section
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from homeassistant.exceptions import HomeAssistantError
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_fire_time_changed,
+)
 
 from custom_components.better_home_ventilation.config_flow import (
     BetterHomeVentilationConfigFlow,
@@ -69,6 +76,76 @@ def mock_entry(*remove: str, **overrides: Any) -> MockConfigEntry:
         version=BetterHomeVentilationConfigFlow.VERSION,
         minor_version=BetterHomeVentilationConfigFlow.MINOR_VERSION,
     )
+
+
+async def advance(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory, seconds: float
+) -> None:
+    """Move the clock forward, fire due timers and wait until HA is idle."""
+    freezer.tick(timedelta(seconds=seconds))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+
+
+class MockUnit:
+    """Service handlers that stand in for a ventilation unit and its helpers.
+
+    Every handled call sets the entity state with the caller's context, like a
+    real entity does. Entities in ``ignore`` accept calls without changing
+    their state; calls for entities in ``fail`` raise ``HomeAssistantError``.
+    """
+
+    SERVICES: ClassVar[tuple[tuple[str, str], ...]] = (
+        ("number", "set_value"),
+        ("select", "select_option"),
+        ("input_select", "select_option"),
+        ("fan", "set_percentage"),
+        ("fan", "turn_on"),
+        ("fan", "turn_off"),
+        ("switch", "turn_on"),
+        ("switch", "turn_off"),
+        ("input_boolean", "turn_on"),
+        ("input_boolean", "turn_off"),
+    )
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        """Register the service handlers."""
+        self.hass = hass
+        self.calls: list[ServiceCall] = []
+        self.ignore: set[str] = set()
+        self.fail: set[str] = set()
+        for domain, service in self.SERVICES:
+            hass.services.async_register(domain, service, self._handle)
+
+    def calls_for(self, domain: str, service: str) -> list[ServiceCall]:
+        """Return the calls of one service."""
+        return [
+            call
+            for call in self.calls
+            if call.domain == domain and call.service == service
+        ]
+
+    async def _handle(self, call: ServiceCall) -> None:
+        self.calls.append(call)
+        entity_id = call.data["entity_id"]
+        if entity_id in self.fail:
+            raise HomeAssistantError("unit does not answer")
+        if entity_id in self.ignore:
+            return
+        state = self.hass.states.get(entity_id)
+        attributes = dict(state.attributes) if state is not None else {}
+        if call.service == "set_value":
+            new_state = str(call.data["value"])
+        elif call.service == "select_option":
+            new_state = call.data["option"]
+        elif call.service == "set_percentage":
+            attributes["percentage"] = call.data["percentage"]
+            new_state = "on" if call.data["percentage"] else "off"
+        else:
+            new_state = "on" if call.service == "turn_on" else "off"
+        self.hass.states.async_set(
+            entity_id, new_state, attributes, context=call.context
+        )
 
 
 def schema_fields(schema: Any) -> dict[str, tuple[str | None, Any, Any]]:

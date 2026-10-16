@@ -21,6 +21,7 @@ from .common import (
     SELECT_STAGES,
     STAGE_OPTIONS,
     STANDBY_SWITCH,
+    MockUnit,
     mock_entry,
 )
 
@@ -65,6 +66,12 @@ def entities(hass: HomeAssistant) -> None:
         "Manual",
         {"options": ["Manual", "Remote"], "friendly_name": "Unit control mode"},
     )
+
+
+@pytest.fixture
+def unit(hass: HomeAssistant) -> MockUnit:
+    """Register service handlers that stand in for the unit's entities."""
+    return MockUnit(hass)
 
 
 @pytest.fixture
