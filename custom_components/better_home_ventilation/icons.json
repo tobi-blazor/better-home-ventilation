@@ -1,0 +1,34 @@
+{
+  "options": {
+    "step": {
+      "actuator": {
+        "sections": {
+          "off": "mdi:power",
+          "range": "mdi:arrow-expand-horizontal"
+        }
+      },
+      "inputs": {
+        "sections": {
+          "rooms": "mdi:home-thermometer-outline",
+          "presence": "mdi:account-multiple"
+        }
+      },
+      "control": {
+        "sections": {
+          "co2": "mdi:molecule-co2",
+          "flows": "mdi:fan",
+          "humidity": "mdi:water-percent",
+          "quiet": "mdi:weather-night",
+          "away": "mdi:home-export-outline",
+          "shaping": "mdi:tune-variant",
+          "advanced": "mdi:cog-outline"
+        }
+      },
+      "boosts": {
+        "sections": {
+          "manual": "mdi:fan-plus"
+        }
+      }
+    }
+  }
+}
