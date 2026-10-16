@@ -65,7 +65,7 @@ Commands come from buttons, services, intents, notification actions and the unit
 
 | Command | Effect |
 |---|---|
-| `boost(duration?, level?)` | If `manual` is `Boost`: `until = min(max(until, now) + duration, now + boost_max_duration)`, `level` replaced if given. Otherwise `manual = Boost(now + duration, level or boost level entity)`. Replaces a `Pause`. `duration` default: boost duration entity |
+| `boost(duration?, level?)` | If `manual` is `Boost`: `until = min(max(until, now) + duration, now + boost_max_duration)`, `level` replaced if given. Otherwise `manual = Boost(min(now + duration, now + boost_max_duration), level or boost level entity)`. Replaces a `Pause`. `duration` default: boost duration entity |
 | `pause(duration?)` | `manual = Pause(now + duration)` or `Pause(None)` (indefinite). Replaces a `Boost` |
 | `resume()` | `manual = None`, all `auto_boosts` cleared (detectors enter cooldown), `restart_pending` cleared (= confirm restart). Does **not** lift an active warning: that is `override_safety` |
 | `override_safety()` | the incident keys of all warnings in `safety.active` are added to `safety.overridden`; `restart_pending` cleared; safety notifications cleared |

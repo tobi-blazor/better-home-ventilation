@@ -70,7 +70,7 @@ Time is always injected (`now` parameter in the engine, `freezer` fixture in com
 | E41 | select actuator stages 50/100/200/300/400, target 230 | stage 300; decreasing to 190 stays at 300 until target ≤ 180 (hysteresis) |
 | E42 | percent actuator, max 400, flow 150 | 37.5 → rounded to step |
 | E43 | profile `air_quality`, night 23:00, demand 350 | 350, no quiet limit |
-| E44 | profile `quiet`, 14:00, demand 350; then user boost 300 | 250, reason `quiet_limit`; boost → 300 |
+| E44 | profile `quiet`, 14:00, demand 350; then user boost 300 | 250, reason `quiet_limit`; boost → 350, reason `co2` (boost uses the demand before the quiet limit) |
 | E45 | profile `winter`, `dry`, CO₂ 1300 / 1000 | 285 reason `co2` / 80 reason `dryness_protection` (balanced: 340 / 165) |
 | E46 | profile `air_quality`, away, CO₂ 1300 | 340, no away limit |
 | E47 | profile change `balanced` → `quiet` while 400 is written | 250 written in the same evaluation, no step limit |

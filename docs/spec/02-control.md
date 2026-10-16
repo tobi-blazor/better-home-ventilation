@@ -89,7 +89,7 @@ State `dry` with hysteresis:
 - becomes inactive when `h_mean ≥ dryness_threshold + dryness_hysteresis`
 - inactive when `h_mean` is None
 
-While `dry` is active, `d_hum` is allowed only for `dryness_humidity_high_limit` minutes **continuously** (counted from the moment `d_hum > d_min` while dry). After that it is suppressed until `h_max < humidity_high_start` again or `dry` ends (then the counter resets). The counter state is persisted.
+While `dry` is active, `d_hum` is allowed only for `dryness_humidity_high_limit` minutes **continuously** (counted from the moment `d_hum > d_min`, i.e. `h_max > humidity_high_start`, while dry; at exactly `humidity_high_start` the counter neither starts nor resets). After that it is suppressed until `h_max < humidity_high_start` again or `dry` ends (then the counter resets). The counter state is persisted.
 
 In the profiles balanced, air quality and quiet, `dry` only limits humidity-high; the CO₂ demand is never limited by dryness (fresh air has priority over humidity). The winter profile additionally starts the CO₂ ramp at its midpoint while `dry` (`co2_from` above), so moderate CO₂ values no longer raise the flow while the air is too dry; high CO₂ values still reach full flow.
 
@@ -124,7 +124,7 @@ Applied to the automatic demand, in this order.
 Which limits apply depends on the [profile](#profiles).
 
 **Away (BHV-15):** if the away limit applies and away:
-`demand = max(fallback_flow if fallback else d_min, d_hum if allowed else d_min)`; reason `away` unless reason is `humidity_high` or `fallback`.
+`demand = max(fallback_flow if fallback else d_min, d_hum if allowed else d_min)`; the reason is determined again for the limited value: `fallback` or `humidity_high` if that contribution sets it, otherwise `away`.
 CO₂ is ignored while away (nobody produces CO₂; pets are a documented limitation). The fallback flow is kept: without valid CO₂ values the integration cannot know that nobody produces CO₂.
 
 **Quiet (BHV-14):** if the quiet limit applies and `demand > quiet_max_flow` and not (`h_max is not None and h_max ≥ quiet_humidity_override`):
@@ -190,7 +190,7 @@ Internally everything is flow in m³/h. Conversion to the native actuator value:
 | `number`, unit flow | value, rounded to the entity `step`, clamped to `actuator_min`…`actuator_max` | value |
 | `number`, unit percent | `flow / max_flow * 100`, rounded to `step`, clamped | `value / 100 * max_flow` |
 | `fan` | `flow / max_flow * 100`, rounded to `percentage_step`, at least one step above 0 | `percentage / 100 * max_flow`; `off` → 0 |
-| `select` | lowest mapped stage with `stage_flow ≥ flow`; if none, the highest stage. When decreasing, the stage is chosen for `flow + deadband_down` (hysteresis between stages) | flow of the current option; unmapped option → None |
+| `select` | lowest mapped stage with `stage_flow ≥ flow`; if none, the highest stage. When decreasing, the stage is chosen for `flow + deadband_down` (hysteresis between stages). With step limits a shaped value could map back to the current stage forever; shaping therefore moves at least to the adjacent stage when the target maps to a different stage | flow of the current option; unmapped option → None |
 
 ## Off and on
 
@@ -208,7 +208,8 @@ Readiness and availability are checked in **every** evaluation, not only when a 
 3. **Readiness conditions:** each condition compares the entity state with `expected_state` (string compare; numeric compare with tolerance 0.5 for `number`).
    - Not met and `auto_correct`: issue the correction (`select.select_option`, `input_select.select_option`, `switch.turn_on/off`, `input_boolean.turn_on/off`, `number.set_value`) at most once per 60 s per condition, fire event `better_home_ventilation_readiness_corrected`, skip the write in this evaluation and re-evaluate after 5 s. The correction is issued even when shaping would hold the value (no write due), because the unit ignores the written value until readiness is restored. It is not issued while control is disabled or during the startup grace.
    - After a successful correction the next write uses `bypass`: the unit may have run at another flow in the meantime.
-   - Not met after 3 correction attempts, or not met without `auto_correct`: no write, problem `not_ready` (with the entity id). Retries continue every 5 min.
+   - Not met after 3 correction attempts, or not met without `auto_correct`: no write, problem `not_ready` (with the entity id). Retries continue every 5 min. A condition that cannot be corrected right now (entity unavailable, no `auto_correct`, control disabled, startup grace) is reported as `not_ready` at once; the `problem` sensor still waits `problem_delay`.
+   - Readiness gates every write, including TurnOff/TurnOn.
 
 Problems are cleared automatically once the condition is resolved.
 
