@@ -129,6 +129,8 @@ def evaluate(
     effects: list[Effect] = [*readiness.corrections, *out.effects]
 
     # 5. Mode change event (BHV-52).
+    manual = state.manual
+    ends_at = manual.until if manual is not None else None
     if mode_changed:
         trigger = _trigger(
             state, mode, previous_mode, first_evaluation=first_evaluation
@@ -148,6 +150,7 @@ def evaluate(
                         else None
                     ),
                     "warning": None,
+                    "ends_at": ends_at.isoformat() if ends_at is not None else None,
                 },
             )
         )
@@ -170,8 +173,6 @@ def evaluate(
     )
 
     # 7. Next scheduled evaluation (timer end, readiness re-check, grace end).
-    manual = state.manual
-    ends_at = manual.until if manual is not None else None
     wake = [*readiness.wake_at]
     if ends_at is not None:
         wake.append(ends_at)
