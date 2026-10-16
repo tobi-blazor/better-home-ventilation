@@ -6,8 +6,8 @@ rules:
     comment: No polling. The integration is event driven (state changes, timers); iot_class is calculated.
   brands: todo
   common-modules: todo
-  config-flow: todo
-  config-flow-test-coverage: todo
+  config-flow: done
+  config-flow-test-coverage: done
   dependency-transparency:
     status: exempt
     comment: No external requirements; the manifest has an empty requirements list.
@@ -25,13 +25,13 @@ rules:
   entity-unique-id: todo
   has-entity-name: todo
   runtime-data: todo
-  test-before-configure: todo
+  test-before-configure: done
   test-before-setup: todo
-  unique-config-entry: todo
+  unique-config-entry: done
 
   # Silver
   action-exceptions: todo
-  config-entry-unloading: todo
+  config-entry-unloading: done
   docs-configuration-parameters: todo
   docs-installation-parameters: todo
   entity-unavailable: todo
