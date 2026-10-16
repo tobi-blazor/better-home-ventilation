@@ -1,0 +1,564 @@
+"""Options flow (C3): docs/spec/01-configuration.md, BHV-53."""
+
+from __future__ import annotations
+
+from collections.abc import Iterator
+from typing import Any
+from unittest.mock import MagicMock, patch
+
+from homeassistant.config_entries import ConfigEntryState, ConfigFlowResult
+from homeassistant.core import HomeAssistant
+from homeassistant.data_entry_flow import FlowResultType
+import pytest
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+from custom_components.better_home_ventilation.const import (
+    ACTUATOR_UNIT_FLOW,
+    ACTUATOR_UNIT_PERCENT,
+    CONF_ACTUATOR,
+    CONF_ACTUATOR_MAX,
+    CONF_ACTUATOR_MIN,
+    CONF_ACTUATOR_UNIT,
+    CONF_AWAY_ENABLED,
+    CONF_BOOST_DEFAULT_DURATION,
+    CONF_BOOST_DEFAULT_LEVEL,
+    CONF_BOOST_MAX_DURATION,
+    CONF_CO2_END,
+    CONF_CO2_SENSORS,
+    CONF_CO2_START,
+    CONF_DEADBAND_DOWN,
+    CONF_DRYNESS_HYSTERESIS,
+    CONF_DRYNESS_THRESHOLD,
+    CONF_FALLBACK_FLOW,
+    CONF_HUMIDITY_HIGH_END,
+    CONF_HUMIDITY_HIGH_START,
+    CONF_HUMIDITY_SENSORS,
+    CONF_MAX_FLOW,
+    CONF_MIN_FLOW,
+    CONF_MIN_WRITE_INTERVAL,
+    CONF_NIGHT_END,
+    CONF_NIGHT_START,
+    CONF_OFF_ENTITY,
+    CONF_OFF_STATE,
+    CONF_PRESENCE_ENTITIES,
+    CONF_PROBLEM_DELAY,
+    CONF_QUIET_MAX_FLOW,
+    CONF_SELECT_MAPPING,
+    CONF_STALE_TIMEOUT,
+    DOMAIN,
+    OFF_STATE_OFF,
+    OFF_STATE_ON,
+)
+
+from .common import (
+    CO2_BEDROOM,
+    CO2_LIVING,
+    FAN,
+    HUMIDITY_BEDROOM,
+    HUMIDITY_LIVING,
+    NUMBER_FLOW,
+    NUMBER_PERCENT,
+    NUMBER_RAW,
+    PERSON,
+    SELECT_SINGLE,
+    SELECT_STAGES,
+    STAGE_OPTIONS,
+    STANDBY_SWITCH,
+    mock_entry,
+    schema_fields,
+    sections,
+    suggested,
+)
+
+
+@pytest.fixture
+def reload_spy(hass: HomeAssistant) -> Iterator[MagicMock]:
+    """Spy on reloads scheduled by the update listener (the reload still runs)."""
+    with patch.object(
+        hass.config_entries,
+        "async_schedule_reload",
+        wraps=hass.config_entries.async_schedule_reload,
+    ) as spy:
+        yield spy
+
+
+async def _open(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    step: str,
+) -> ConfigFlowResult:
+    """Open the options menu and choose ``step``."""
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert result["type"] is FlowResultType.MENU
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": step}
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == step
+    return result
+
+
+def _form_input(result: ConfigFlowResult, **changes: Any) -> dict[str, Any]:
+    """Return the suggested values of a form as nested input, with changes."""
+    # The frontend sends every section, empty or not.
+    user_input: dict[str, Any] = {name: {} for name in sections(result["data_schema"])}
+    for key, (section_name, marker, _) in schema_fields(result["data_schema"]).items():
+        value = changes.get(key, (marker.description or {}).get("suggested_value"))
+        if value is None:
+            continue
+        target = (
+            user_input
+            if section_name is None
+            else user_input.setdefault(section_name, {})
+        )
+        target[key] = value
+    return user_input
+
+
+async def _submit(
+    hass: HomeAssistant, result: ConfigFlowResult, **changes: Any
+) -> ConfigFlowResult:
+    """Submit a form with its suggested values and ``changes``."""
+    return await hass.config_entries.options.async_configure(
+        result["flow_id"], _form_input(result, **changes)
+    )
+
+
+async def _assert_saved_and_reloaded(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    result: ConfigFlowResult,
+    reload_spy: MagicMock,
+) -> None:
+    """Assert the options were saved and the update listener reloaded the entry."""
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+    assert entry.options == result["data"]
+    reload_spy.assert_called_once_with(entry.entry_id)
+    assert entry.state is ConfigEntryState.LOADED
+
+
+async def test_menu(hass: HomeAssistant, entry: MockConfigEntry) -> None:
+    """The options flow starts with a menu of the 0.1 steps."""
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+
+    assert result["type"] is FlowResultType.MENU
+    assert result["menu_options"] == ["actuator", "inputs", "control", "boosts"]
+
+
+# --- actuator ---------------------------------------------------------------------
+
+
+async def test_actuator_form_shows_current_values_and_hint(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """The actuator step is pre-filled and shows the max-flow hint."""
+    result = await _open(hass, entry, "actuator")
+
+    schema = result["data_schema"]
+    assert suggested(schema, CONF_ACTUATOR) == NUMBER_FLOW
+    assert suggested(schema, CONF_MAX_FLOW) == 400
+    assert suggested(schema, CONF_OFF_STATE) == OFF_STATE_ON
+    assert suggested(schema, CONF_OFF_ENTITY) is None
+    assert sections(schema)["off"].options == {"collapsed": False}
+    assert sections(schema)["range"].options == {"collapsed": True}
+    assert result["description_placeholders"] == {
+        "max_flow": "400",
+        "min_flow": "80",
+        "fallback_flow": "150",
+        "quiet_max_flow": "250",
+        "boost_default_level": "300",
+    }
+
+
+async def test_actuator_save_flattens_sections(
+    hass: HomeAssistant, entry: MockConfigEntry, reload_spy: MagicMock
+) -> None:
+    """Section input is stored flat; other options are kept (BHV-53)."""
+    result = await _open(hass, entry, "actuator")
+
+    result = await _submit(
+        hass,
+        result,
+        **{
+            CONF_MAX_FLOW: 350.0,
+            CONF_OFF_ENTITY: STANDBY_SWITCH,
+            CONF_OFF_STATE: OFF_STATE_OFF,
+            CONF_ACTUATOR_MIN: 20,
+            CONF_ACTUATOR_MAX: 380,
+        },
+    )
+
+    await _assert_saved_and_reloaded(hass, entry, result, reload_spy)
+    assert "off" not in entry.options
+    assert "range" not in entry.options
+    assert entry.options[CONF_MAX_FLOW] == 350
+    assert isinstance(entry.options[CONF_MAX_FLOW], int)
+    assert entry.options[CONF_OFF_ENTITY] == STANDBY_SWITCH
+    assert entry.options[CONF_OFF_STATE] == OFF_STATE_OFF
+    assert entry.options[CONF_ACTUATOR_MIN] == 20
+    assert entry.options[CONF_ACTUATOR_MAX] == 380
+    assert entry.options[CONF_ACTUATOR_UNIT] == ACTUATOR_UNIT_FLOW
+    # Defaults relative to max flow do not follow a change of the max flow.
+    assert entry.options[CONF_MIN_FLOW] == 80
+
+
+async def test_actuator_cleared_optional_field_is_removed(
+    hass: HomeAssistant, entities: None
+) -> None:
+    """Clearing the off actuator removes it from the options."""
+    entry = mock_entry(**{CONF_OFF_ENTITY: STANDBY_SWITCH})
+    entry.add_to_hass(hass)
+    result = await _open(hass, entry, "actuator")
+    assert suggested(result["data_schema"], CONF_OFF_ENTITY) == STANDBY_SWITCH
+
+    user_input = _form_input(result)
+    del user_input["off"][CONF_OFF_ENTITY]
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input
+    )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert CONF_OFF_ENTITY not in entry.options
+
+
+@pytest.mark.parametrize(
+    ("actuator", "error"),
+    [
+        ("number.missing", "actuator_not_found"),
+        (SELECT_SINGLE, "select_options"),
+        ("number.other_unit", "actuator_in_use"),
+    ],
+)
+async def test_actuator_errors(
+    hass: HomeAssistant, entry: MockConfigEntry, actuator: str, error: str
+) -> None:
+    """Invalid or used actuators are rejected on the actuator field."""
+    hass.states.async_set("number.other_unit", "100", {"unit_of_measurement": "m³/h"})
+    mock_entry(**{CONF_ACTUATOR: "number.other_unit"}).add_to_hass(hass)
+    result = await _open(hass, entry, "actuator")
+
+    result = await _submit(hass, result, **{CONF_ACTUATOR: actuator})
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {CONF_ACTUATOR: error}
+    assert suggested(result["data_schema"], CONF_ACTUATOR) == actuator
+
+
+async def test_actuator_change_to_percent_number(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """Changing to a number in % stores the unit without a mapping step."""
+    result = await _open(hass, entry, "actuator")
+
+    result = await _submit(hass, result, **{CONF_ACTUATOR: NUMBER_PERCENT})
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert entry.options[CONF_ACTUATOR] == NUMBER_PERCENT
+    assert entry.options[CONF_ACTUATOR_UNIT] == ACTUATOR_UNIT_PERCENT
+
+
+async def test_actuator_change_to_fan_drops_mapping(
+    hass: HomeAssistant, entities: None
+) -> None:
+    """Changing from a select to a fan removes the select mapping."""
+    entry = mock_entry(
+        CONF_ACTUATOR_UNIT,
+        **{
+            CONF_ACTUATOR: SELECT_STAGES,
+            CONF_SELECT_MAPPING: {"Off": 0, "Stage 1": 100},
+        },
+    )
+    entry.add_to_hass(hass)
+    result = await _open(hass, entry, "actuator")
+
+    result = await _submit(hass, result, **{CONF_ACTUATOR: FAN})
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert entry.options[CONF_ACTUATOR] == FAN
+    assert CONF_SELECT_MAPPING not in entry.options
+    assert CONF_ACTUATOR_UNIT not in entry.options
+
+
+async def test_actuator_change_to_select_continues_to_mapping(
+    hass: HomeAssistant, entry: MockConfigEntry, reload_spy: MagicMock
+) -> None:
+    """Changing to a select asks for the mapping (empty), then saves it."""
+    result = await _open(hass, entry, "actuator")
+
+    result = await _submit(hass, result, **{CONF_ACTUATOR: SELECT_STAGES})
+    assert result["step_id"] == "actuator_mapping"
+    assert list(schema_fields(result["data_schema"])) == STAGE_OPTIONS
+    assert all(suggested(result["data_schema"], key) is None for key in STAGE_OPTIONS)
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"Stage 1": 100}
+    )
+    assert result["step_id"] == "actuator_mapping"
+    assert result["errors"] == {"base": "select_mapping"}
+    assert suggested(result["data_schema"], "Stage 1") == 100
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"Stage 1": 100, "Stage 3": 300}
+    )
+    await _assert_saved_and_reloaded(hass, entry, result, reload_spy)
+    assert entry.options[CONF_ACTUATOR] == SELECT_STAGES
+    assert entry.options[CONF_SELECT_MAPPING] == {"Stage 1": 100, "Stage 3": 300}
+    assert CONF_ACTUATOR_UNIT not in entry.options
+
+
+async def test_actuator_kept_select_mapping_is_prefilled(
+    hass: HomeAssistant, entities: None
+) -> None:
+    """A kept select shows its stored mapping for editing."""
+    entry = mock_entry(
+        **{
+            CONF_ACTUATOR: SELECT_STAGES,
+            CONF_SELECT_MAPPING: {"Off": 0, "Stage 2": 200, "Removed stage": 50},
+        }
+    )
+    entry.add_to_hass(hass)
+    result = await _open(hass, entry, "actuator")
+
+    result = await _submit(hass, result)
+
+    assert result["step_id"] == "actuator_mapping"
+    assert suggested(result["data_schema"], "Off") == 0
+    assert suggested(result["data_schema"], "Stage 2") == 200
+    assert "Removed stage" not in schema_fields(result["data_schema"])
+
+
+@pytest.mark.parametrize(
+    ("stored_unit", "expected_suggestion"),
+    [(ACTUATOR_UNIT_PERCENT, ACTUATOR_UNIT_PERCENT), (None, None)],
+)
+async def test_actuator_number_unknown_unit(
+    hass: HomeAssistant,
+    entities: None,
+    stored_unit: str | None,
+    expected_suggestion: str | None,
+) -> None:
+    """A number with unknown unit asks for the unit, pre-filled when kept."""
+    if stored_unit is None:
+        entry = mock_entry(CONF_ACTUATOR_UNIT, **{CONF_ACTUATOR: NUMBER_RAW})
+    else:
+        entry = mock_entry(
+            **{CONF_ACTUATOR: NUMBER_RAW, CONF_ACTUATOR_UNIT: stored_unit}
+        )
+    entry.add_to_hass(hass)
+    result = await _open(hass, entry, "actuator")
+
+    result = await _submit(hass, result)
+    assert result["step_id"] == "actuator_mapping"
+    assert suggested(result["data_schema"], CONF_ACTUATOR_UNIT) == expected_suggestion
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_ACTUATOR_UNIT: ACTUATOR_UNIT_FLOW}
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert entry.options[CONF_ACTUATOR_UNIT] == ACTUATOR_UNIT_FLOW
+
+
+# --- inputs -----------------------------------------------------------------------
+
+
+async def test_inputs_save(
+    hass: HomeAssistant, entry: MockConfigEntry, reload_spy: MagicMock
+) -> None:
+    """The inputs step is pre-filled and stores sections flat."""
+    result = await _open(hass, entry, "inputs")
+    schema = result["data_schema"]
+    assert set(sections(schema)) == {"rooms", "presence"}
+    assert suggested(schema, CONF_CO2_SENSORS) == [CO2_LIVING]
+    assert suggested(schema, CONF_HUMIDITY_SENSORS) == [HUMIDITY_LIVING]
+    assert "actual_flow_sensor" not in schema_fields(schema)
+
+    result = await _submit(
+        hass,
+        result,
+        **{
+            CONF_CO2_SENSORS: [CO2_LIVING, CO2_BEDROOM],
+            CONF_HUMIDITY_SENSORS: [HUMIDITY_LIVING, HUMIDITY_BEDROOM],
+            CONF_PRESENCE_ENTITIES: [PERSON],
+        },
+    )
+
+    await _assert_saved_and_reloaded(hass, entry, result, reload_spy)
+    assert entry.options[CONF_CO2_SENSORS] == [CO2_LIVING, CO2_BEDROOM]
+    assert entry.options[CONF_PRESENCE_ENTITIES] == [PERSON]
+    assert "rooms" not in entry.options
+
+
+@pytest.mark.parametrize(
+    ("changes", "errors"),
+    [
+        (
+            {CONF_CO2_SENSORS: [], CONF_HUMIDITY_SENSORS: []},
+            {"base": "no_inputs"},
+        ),
+        ({CONF_CO2_SENSORS: ["sensor.missing_co2"]}, {"rooms": "sensor_not_found"}),
+        ({CONF_HUMIDITY_SENSORS: [CO2_LIVING]}, {"rooms": "duplicate_sensor"}),
+    ],
+)
+async def test_inputs_errors(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    changes: dict[str, Any],
+    errors: dict[str, str],
+) -> None:
+    """Input errors of fields in a section are reported on the section."""
+    result = await _open(hass, entry, "inputs")
+
+    result = await _submit(hass, result, **changes)
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == errors
+
+
+# --- control ----------------------------------------------------------------------
+
+
+async def test_control_save(
+    hass: HomeAssistant, entry: MockConfigEntry, reload_spy: MagicMock
+) -> None:
+    """All control sections are shown; `shaping` and `advanced` collapsed.
+
+    Advanced mode is not used: HA deprecated it in 2026.10 (breaks in 2027.6).
+    Away without presence entities is valid and simply has no effect.
+    """
+    result = await _open(hass, entry, "control")
+    schema = result["data_schema"]
+    assert list(sections(schema)) == [
+        "co2",
+        "flows",
+        "humidity",
+        "quiet",
+        "away",
+        "shaping",
+        "advanced",
+    ]
+    assert sections(schema)["co2"].options == {"collapsed": False}
+    assert sections(schema)["shaping"].options == {"collapsed": True}
+    assert sections(schema)["advanced"].options == {"collapsed": True}
+    assert suggested(schema, CONF_MIN_WRITE_INTERVAL) == {
+        "hours": 0,
+        "minutes": 5,
+        "seconds": 0,
+    }
+    assert suggested(schema, CONF_PROBLEM_DELAY) == {
+        "hours": 0,
+        "minutes": 10,
+        "seconds": 0,
+    }
+    assert suggested(schema, CONF_NIGHT_START) == "22:00:00"
+    assert suggested(schema, CONF_AWAY_ENABLED) is True
+    assert entry.options[CONF_PRESENCE_ENTITIES] == []
+
+    result = await _submit(
+        hass,
+        result,
+        **{
+            CONF_CO2_START: 800.0,
+            CONF_MIN_WRITE_INTERVAL: {"minutes": 10},
+            CONF_DEADBAND_DOWN: 15,
+            CONF_DRYNESS_HYSTERESIS: 2.5,
+            CONF_PROBLEM_DELAY: {"minutes": 15},
+        },
+    )
+
+    await _assert_saved_and_reloaded(hass, entry, result, reload_spy)
+    assert entry.options[CONF_CO2_START] == 800
+    assert entry.options[CONF_MIN_WRITE_INTERVAL] == 600
+    assert entry.options[CONF_DEADBAND_DOWN] == 15
+    assert entry.options[CONF_DRYNESS_HYSTERESIS] == 2.5
+    assert entry.options[CONF_PROBLEM_DELAY] == 900
+    assert entry.options[CONF_STALE_TIMEOUT] == 1800
+    assert entry.options[CONF_AWAY_ENABLED] is True
+    assert "co2" not in entry.options
+    assert "advanced" not in entry.options
+
+
+@pytest.mark.parametrize(
+    ("changes", "errors"),
+    [
+        ({CONF_CO2_START: 1400, CONF_CO2_END: 1400}, {"co2": "co2_range"}),
+        (
+            {CONF_HUMIDITY_HIGH_START: 70, CONF_HUMIDITY_HIGH_END: 60},
+            {"humidity": "humidity_range"},
+        ),
+        (
+            {CONF_DRYNESS_THRESHOLD: 50, CONF_DRYNESS_HYSTERESIS: 5},
+            {"humidity": "dryness_overlap"},
+        ),
+        ({CONF_FALLBACK_FLOW: 50}, {"flows": "fallback_range"}),
+        ({CONF_QUIET_MAX_FLOW: 60}, {"quiet": "quiet_range"}),
+        ({CONF_NIGHT_END: "22:00:00"}, {"quiet": "night_window"}),
+    ],
+)
+async def test_control_errors(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    changes: dict[str, Any],
+    errors: dict[str, str],
+) -> None:
+    """Every cross-field rule of the control step reports its error key."""
+    result = await _open(hass, entry, "control")
+
+    result = await _submit(hass, result, **changes)
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == errors
+    assert entry.options[CONF_CO2_START] == 850
+
+
+# --- boosts -----------------------------------------------------------------------
+
+
+async def test_boosts_save(
+    hass: HomeAssistant, entry: MockConfigEntry, reload_spy: MagicMock
+) -> None:
+    """The boosts step has only the `manual` section in 0.1."""
+    result = await _open(hass, entry, "boosts")
+    schema = result["data_schema"]
+    assert list(sections(schema)) == ["manual"]
+    assert suggested(schema, CONF_BOOST_DEFAULT_LEVEL) == 300
+    assert suggested(schema, CONF_BOOST_MAX_DURATION) == {
+        "hours": 4,
+        "minutes": 0,
+        "seconds": 0,
+    }
+
+    result = await _submit(
+        hass,
+        result,
+        **{CONF_BOOST_DEFAULT_LEVEL: 350, CONF_BOOST_DEFAULT_DURATION: {"hours": 1}},
+    )
+
+    await _assert_saved_and_reloaded(hass, entry, result, reload_spy)
+    assert entry.options[CONF_BOOST_DEFAULT_LEVEL] == 350
+    assert entry.options[CONF_BOOST_DEFAULT_DURATION] == 3600
+
+
+async def test_boosts_level_range(hass: HomeAssistant, entry: MockConfigEntry) -> None:
+    """A boost level below the minimum flow is rejected."""
+    result = await _open(hass, entry, "boosts")
+
+    result = await _submit(hass, result, **{CONF_BOOST_DEFAULT_LEVEL: 50})
+
+    assert result["errors"] == {"manual": "level_range"}
+    assert suggested(result["data_schema"], CONF_BOOST_DEFAULT_LEVEL) == 50
+
+
+async def test_options_of_other_entries_are_untouched(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """Saving one entry does not change another entry."""
+    other = mock_entry(**{CONF_ACTUATOR: FAN})
+    other.add_to_hass(hass)
+    before = dict(other.options)
+    result = await _open(hass, entry, "boosts")
+
+    await _submit(hass, result, **{CONF_BOOST_DEFAULT_LEVEL: 350})
+
+    assert dict(other.options) == before
+    assert len(hass.config_entries.async_entries(DOMAIN)) == 2

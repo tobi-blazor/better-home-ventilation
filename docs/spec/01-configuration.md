@@ -18,15 +18,16 @@ The design follows the Home Assistant developer documentation and the patterns o
 | UI text | All text in `strings.json` (`config`, `options`, `config_subentries`, `selector`, `entity`, `services`, `exceptions`, `issues`, `common`). No UI text in code | rule `config-flow`, `entity-translations`, `exception-translations` |
 | Selectors | The most specific selector for every field: entity selectors with domain and device class filters, `NumberSelector` with unit and box mode, `DurationSelector` for durations, `TimeSelector` for times, `SelectSelector` with `translation_key` for choices | rule `config-flow`; `generic_hygrostat/config_flow.py` |
 | Grouping | `data_entry_flow.section` (one level, translated, icons in `icons.json`) instead of many small steps. Rarely changed tuning fields are in a collapsed section | data entry flow docs |
-| Advanced fields | Technical timing parameters (section `advanced`) are only shown when the user has advanced mode on (`self.show_advanced_options`). The output-shaping parameters (section `shaping`) are always shown, collapsed, because users tune how calm the unit runs | data entry flow docs |
+| Advanced fields | No advanced mode. Technical timing parameters (section `advanced`) and the output-shaping parameters (section `shaping`) are always shown, collapsed. Advanced mode is deprecated in flows: `show_advanced_options` always returns `True` and logs a deprecation warning, and the frontend no longer sends it | HA core 2026.10 `data_entry_flow.py` (`show_advanced_options` deprecated, breaks in 2027.6) |
 | Current values | Options forms are filled with `add_suggested_values_to_schema(schema, self.config_entry.options)` | options flow docs |
 | Defaults | Defaults are written into `options` when the entry is created. New options in later versions are added by a migration (`MINOR_VERSION` bump, `async_migrate_entry`), never by silently changing code defaults for existing users | config flow docs, versioning |
-| Validation | Errors are reported per field (`errors["co2_end"] = "co2_range"`), `base` only for cross-field problems. Entities are checked to exist before the entry is created | rules `config-flow`, `test-before-configure` |
+| Validation | Errors are reported per field (`errors["co2_end"] = "co2_range"`), `base` only for cross-field problems. A field inside a section reports its error under the section key (`errors["co2"] = "co2_range"`), because the frontend shows errors per top-level form item; the core MQTT flow does the same. Entities are checked to exist before the entry is created | rules `config-flow`, `test-before-configure`; `mqtt/config_flow.py` |
+| Cleared fields | An optional field the user clears (e.g. `off_entity`, `actuator_min`) is removed from `options`; options of fields that are not in the submitted form are kept | – |
 | Renamed or removed entities | Entity id changes of configured entities are followed automatically; removed entities raise a repair issue | `helpers/helper_integration.py` (`async_handle_source_entity_changes`) does the same for single-source helpers |
 
 ## Config flow
 
-`ConfigFlow`, `VERSION = 1`, `MINOR_VERSION = 1`. Three short steps, the second only when needed. The entry is created with `data={}`, `options={…all fields and defaults…}`, `title=name`.
+`ConfigFlow`, `VERSION = 1`, `MINOR_VERSION = 1`. Three short steps, the second only when needed. The entry is created with `data={}`, `options={…all fields and defaults…}`, `title=name`. The name is stored only as the title, not in `options`.
 
 ### Step `user`
 
@@ -34,9 +35,11 @@ The design follows the Home Assistant developer documentation and the patterns o
 |---|---|---|---|
 | `name` | `TextSelector` | yes | "Ventilation" |
 | `actuator` | `EntitySelector(domain=["number", "fan", "select"])` | yes | – |
-| `max_flow` | `NumberSelector(min=10, max=2000, step=5, unit="m³/h", mode=box)` | yes | `max` attribute of a `number` actuator if its unit is m³/h |
+| `max_flow` | `NumberSelector(min=10, max=2000, step=5, unit="m³/h", mode=box)` | optional in the form | `max` attribute of a `number` actuator if its unit is m³/h |
 
-Validation: actuator has a state or an entity registry entry (`actuator_not_found`); `select` has at least two options (`select_options`); actuator not used by another entry (abort `already_configured`).
+The default of `max_flow` cannot be shown before the actuator is chosen in the same form, so the field is optional: left empty, the `max` attribute (state, else registry capabilities) of a `number` actuator in m³/h is used if it is between 10 and 2000; otherwise the error `max_flow_required` asks for a value.
+
+Validation: actuator has a state or an entity registry entry (`actuator_not_found`); `select` has at least two options (`select_options`); actuator not used by another entry (abort `already_configured`); `max_flow_required`.
 
 ### Step `actuator`
 
@@ -48,7 +51,7 @@ Shown only if needed:
 | `number` with unit `%` | none (step skipped), `actuator_unit = percent` |
 | `number` with another or no unit | `actuator_unit`: `SelectSelector(["flow", "percent"], translation_key="actuator_unit")` |
 | `fan` | none (step skipped) |
-| `select` | one `NumberSelector(m³/h)` per option, optional. Empty = option is never used. Field keys are the option texts, so the form shows them as labels; there is no translation for these keys (they come from the device). At least two mapped options with distinct flows (`select_mapping`). Stored in `options` under `select_mapping` as a dict `{option text: flow}`; unmapped options are left out |
+| `select` | one `NumberSelector(m³/h)` per option, optional. Empty = option is never used. Field keys are the option texts, so the form shows them as labels; there is no translation for these keys (they come from the device). At least two mapped options, and no two options with the same flow, so every flow maps back to exactly one option (`select_mapping`). Stored in `options` under `select_mapping` as a dict `{option text: flow}`; unmapped options are left out |
 
 ### Step `inputs`
 
@@ -77,7 +80,7 @@ All other options get their defaults (see [defaults](#defaults-relative-to-max-f
 
 `off_state` = which state of `off_entity` means "unit stopped" (a standby switch: `on`). Ignored for `fan`.
 
-Changing the actuator to one used by another entry: error `actuator_in_use`. Changing to a `select` or to a `number` with unknown unit continues to the step `actuator_mapping` (same fields as config step `actuator`).
+Changing the actuator to one used by another entry: error `actuator_in_use`. Changing to a `select` or to a `number` with unknown unit continues to the step `actuator_mapping` (same fields as config step `actuator`). The step is also shown when such an actuator is kept, pre-filled with the stored mapping or unit, so the mapping can be edited.
 
 ### `inputs`
 
@@ -103,20 +106,20 @@ Changing the actuator to one used by another entry: error `actuator_in_use`. Cha
 | `quiet` | `night_start`, `night_end` | `TimeSelector` | 22:00, 07:00 | window may cross midnight |
 | `quiet` | `quiet_max_flow` | `NumberSelector(m³/h)` | 62.5 % of max | quiet limit (night and quiet profile) |
 | `quiet` | `quiet_humidity_override` | `NumberSelector(40–100, %)` | 65 | above this living humidity maximum the quiet limit does not apply |
-| `away` | `away_enabled` | `BooleanSelector` | true | BHV-15, disables the away limit in every profile |
+| `away` | `away_enabled` | `BooleanSelector` | true | BHV-15, disables the away limit in every profile; without `presence_entities` it has no effect (the away limit needs presence entities, [02-control.md](02-control.md#profiles)) |
 
 The profile ([02-control.md](02-control.md#profiles)) is not an option: it is chosen in daily use with the `profile` select entity.
 | `shaping` (collapsed, always shown) | `min_write_interval` | `DurationSelector` | 5 min | BHV-16 |
 | `shaping` | `max_step_up`, `max_step_down` | `NumberSelector(m³/h)` | 12.5 % of max | |
 | `shaping` | `deadband_up`, `deadband_down` | `NumberSelector(0–100, m³/h)` | 10, 20 | |
 | `shaping` | `flow_quantum` | `NumberSelector(1–50, m³/h)` | 5 | |
-| `advanced` (collapsed, advanced mode only) | `evaluation_interval` | `DurationSelector` | 1 min | BHV-17 |
+| `advanced` (collapsed, always shown) | `evaluation_interval` | `DurationSelector` | 1 min | BHV-17 |
 | `advanced` | `debounce` | `DurationSelector` | 10 s | |
 | `advanced` | `stale_timeout` | `DurationSelector` | 30 min | BHV-18 |
 | `advanced` | `startup_grace` | `DurationSelector` | 1 min | |
 | `advanced` | `problem_delay` | `DurationSelector` | 10 min | time a problem must persist before the `problem` sensor turns on (and, from 0.2, before a notification) |
 
-When advanced mode is off, the `advanced` section is not shown and its stored values are kept unchanged. The `data_description` of each shaping field explains its effect with the default values (e.g. "at most one change every 5 minutes").
+The `data_description` of each shaping field explains its effect with the default values (e.g. "at most one change every 5 minutes").
 
 ### `boosts`
 
@@ -177,7 +180,7 @@ Without `notify_services`, a `persistent_notification` is created instead (no ac
 | Step | Fields |
 |---|---|
 | `user` | `entity_id`: `EntitySelector(domain=["select","input_select","switch","input_boolean","number","sensor","binary_sensor"])` |
-| `state` | `expected_state`: for `select`/`input_select` a `SelectSelector` with the entity's current options; `switch`/`input_boolean`/`binary_sensor`: `SelectSelector(["on","off"])`; `number`: `NumberSelector`; otherwise `TextSelector`. `auto_correct`: `BooleanSelector`, only offered for `select`, `input_select`, `switch`, `input_boolean`, `number` |
+| `state` | `expected_state`: for `select`/`input_select` a `SelectSelector` with the entity's current options; `switch`/`input_boolean`/`binary_sensor`: `SelectSelector(["on","off"], translation_key="binary_state")`; `number`: `NumberSelector` (stored as a number); otherwise (and for a `select` without a state) `TextSelector`. `auto_correct`: `BooleanSelector`, only offered for `select`, `input_select`, `switch`, `input_boolean`, `number`. For other domains the form accepts extra keys, so a submitted `auto_correct: true` is rejected with `base: not_correctable` instead of failing schema validation |
 | `reconfigure` | same two steps, pre-filled, `async_update_and_abort` |
 
 Subentry title: "<friendly name> = <expected state>". `unique_id` of the subentry = entity id, so the same entity cannot get two conditions (`already_configured`). Adding, changing or removing a subentry reloads the entry (through the update listener).
@@ -228,6 +231,7 @@ Validation: `source_required`, `invalid_regex` (a `/…/` keyword that does not 
 | actuator not used by another entry | `actuator` | abort `already_configured` (config flow), error `actuator_in_use` (options) |
 | `select` has ≥ 2 options; ≥ 2 mapped options with distinct flows | `actuator` / `base` | `select_options` / `select_mapping` |
 | at least one CO₂ or humidity sensor | `base` | `no_inputs` |
+| every CO₂ and humidity sensor exists (state or registry entry) | `co2_sensors` / `humidity_sensors` | `sensor_not_found` |
 | `co2_start < co2_end` | `co2_end` | `co2_range` |
 | `humidity_high_start < humidity_high_end` | `humidity_high_end` | `humidity_range` |
 | `dryness_threshold + dryness_hysteresis < humidity_high_start` | `dryness_threshold` | `dryness_overlap` |
@@ -235,8 +239,7 @@ Validation: `source_required`, `invalid_regex` (a `/…/` keyword that does not 
 | `min_flow ≤ quiet_max_flow ≤ max_flow` | `quiet_max_flow` | `quiet_range` |
 | every level and cap within `min_flow`…`max_flow` | the field | `level_range` |
 | `night_start ≠ night_end` | `night_end` | `night_window` |
-| `away_enabled` needs `presence_entities` (checked on the `control` step against stored inputs) | `away_enabled` | `away_needs_presence` |
-| `auto_correct` only for writable domains | `auto_correct` | `not_correctable` |
+| `auto_correct` only for writable domains | `base` (the field is not shown for other domains) | `not_correctable` |
 | a sensor appears in more than one input group (e.g. living and bathroom humidity) | the later field | `duplicate_sensor` |
 
 Range limits of single fields are enforced by the selectors and are not repeated as errors.
