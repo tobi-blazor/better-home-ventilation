@@ -347,6 +347,14 @@
       }
     }
   },
+  "exceptions": {
+    "control_disabled": {
+      "message": "Die Regelung ist ausgeschaltet. Schalte sie ein, um die Lüftung zu verstärken oder zu pausieren."
+    },
+    "level_out_of_range": {
+      "message": "Die Boost-Stufe muss zwischen dem minimalen und dem maximalen Volumenstrom liegen."
+    }
+  },
   "selector": {
     "actuator_unit": {
       "options": {
