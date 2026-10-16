@@ -29,7 +29,6 @@ from homeassistant.config_entries import (
 )
 from homeassistant.const import (
     ATTR_UNIT_OF_MEASUREMENT,
-    CONCENTRATION_PARTS_PER_MILLION,
     PERCENTAGE,
     UnitOfVolumeFlowRate,
 )
@@ -105,6 +104,9 @@ from .const import (
 # --- Selector building blocks -------------------------------------------------
 
 FLOW_UNIT: Final = UnitOfVolumeFlowRate.CUBIC_METERS_PER_HOUR
+# `CONCENTRATION_PARTS_PER_MILLION` is deprecated from HA 2026.x and its
+# replacement `UnitOfRatio` does not exist in HA 2026.4, so the plain unit is used.
+PPM: Final = "ppm"
 #: Units of a `number` actuator that mean "flow in m³/h".
 FLOW_UNITS: Final = frozenset({FLOW_UNIT, "m3/h"})
 MAX_FLOW_MIN: Final = 10
@@ -770,12 +772,8 @@ def _control_options_schema(max_flow: float, *, show_advanced: bool) -> vol.Sche
     fields: dict[Any, Any] = {
         vol.Required(SECTION_CO2): _section(
             {
-                vol.Required(CONF_CO2_START): _number_selector(
-                    400, 2000, 10, CONCENTRATION_PARTS_PER_MILLION
-                ),
-                vol.Required(CONF_CO2_END): _number_selector(
-                    500, 3000, 10, CONCENTRATION_PARTS_PER_MILLION
-                ),
+                vol.Required(CONF_CO2_START): _number_selector(400, 2000, 10, PPM),
+                vol.Required(CONF_CO2_END): _number_selector(500, 3000, 10, PPM),
             }
         ),
         vol.Required(SECTION_FLOWS): _section(
@@ -1063,18 +1061,28 @@ def _expected_state_selector(hass: HomeAssistant, entity_id: str) -> Any:
     return selector.TextSelector()
 
 
-def _readiness_state_schema(hass: HomeAssistant, entity_id: str) -> vol.Schema:
-    """Return the schema of the readiness step `state`.
+def _readiness_state_schema(
+    hass: HomeAssistant, entity_id: str, suggested: Mapping[str, Any]
+) -> vol.Schema:
+    """Return the schema of the readiness step `state` with suggested values.
 
     `auto_correct` is only offered for writable domains. For other domains the
     schema accepts extra keys, so a submitted `auto_correct` is reported as
-    `not_correctable` instead of failing schema validation.
+    `not_correctable` instead of failing schema validation. The suggested
+    values are set on the markers directly, because
+    `add_suggested_values_to_schema` would drop the `extra` setting.
     """
+
+    def marker(key: str, **kwargs: Any) -> vol.Required:
+        if key in suggested:
+            kwargs["description"] = {"suggested_value": suggested[key]}
+        return vol.Required(key, **kwargs)
+
     fields: dict[Any, Any] = {
-        vol.Required(CONF_EXPECTED_STATE): _expected_state_selector(hass, entity_id)
+        marker(CONF_EXPECTED_STATE): _expected_state_selector(hass, entity_id)
     }
     if split_entity_id(entity_id)[0] in WRITABLE_DOMAINS:
-        fields[vol.Required(CONF_AUTO_CORRECT, default=False)] = BOOLEAN_SELECTOR
+        fields[marker(CONF_AUTO_CORRECT, default=False)] = BOOLEAN_SELECTOR
         return vol.Schema(fields)
     return vol.Schema(fields, extra=vol.ALLOW_EXTRA)
 
@@ -1134,7 +1142,6 @@ class ReadinessConditionFlow(ConfigSubentryFlow):
         """Choose the expected state and whether it is corrected automatically."""
         entity_id = self._entity_id
         name = _friendly_name(self.hass, entity_id)
-        schema = _readiness_state_schema(self.hass, entity_id)
         errors: dict[str, str] = {}
         if user_input is not None:
             auto_correct = bool(user_input.get(CONF_AUTO_CORRECT, False))
@@ -1168,7 +1175,7 @@ class ReadinessConditionFlow(ConfigSubentryFlow):
             suggested = {}
         return self.async_show_form(
             step_id="state",
-            data_schema=self.add_suggested_values_to_schema(schema, suggested),
+            data_schema=_readiness_state_schema(self.hass, entity_id, suggested),
             errors=errors,
             description_placeholders={"entity": name},
         )
