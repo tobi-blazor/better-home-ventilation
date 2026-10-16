@@ -39,6 +39,14 @@ def test_e41_bhv01_select_stage_hysteresis() -> None:
     assert native_to_flow(options, "Unmapped") is None
 
 
+def test_e41a_bhv01_select_reaches_lowest_stage() -> None:
+    """E41a: decreasing to the lowest stage flow (or below) selects the lowest stage."""
+    options = make_options(actuator=SELECT, select_mapping=STAGES)
+    assert select_stage(50, options, 100) == "Stage 1"
+    assert select_stage(40, options, 200) == "Stage 1"
+    assert select_stage(51, options, 100) == "Stage 2"
+
+
 def test_e41_select_hysteresis_through_shaping() -> None:
     """E41 end to end: with step limits the unit leaves stage 300 at target 180."""
     options = make_options(actuator=SELECT, select_mapping=STAGES)

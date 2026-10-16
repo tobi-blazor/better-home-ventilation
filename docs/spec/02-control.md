@@ -190,7 +190,7 @@ Internally everything is flow in m³/h. Conversion to the native actuator value:
 | `number`, unit flow | value, rounded to the entity `step`, clamped to `actuator_min`…`actuator_max` | value |
 | `number`, unit percent | `flow / max_flow * 100`, rounded to `step`, clamped | `value / 100 * max_flow` |
 | `fan` | `flow / max_flow * 100`, rounded to `percentage_step`, at least one step above 0 | `percentage / 100 * max_flow`; `off` → 0 |
-| `select` | lowest mapped stage with `stage_flow ≥ flow`; if none, the highest stage. When decreasing, the stage is chosen for `flow + deadband_down` (hysteresis between stages). With step limits a shaped value could map back to the current stage forever; shaping therefore moves at least to the adjacent stage when the target maps to a different stage | flow of the current option; unmapped option → None |
+| `select` | lowest mapped stage with `stage_flow ≥ flow`; if none, the highest stage. When decreasing, the stage is chosen for `flow + deadband_down` (hysteresis between stages); a flow at or below the lowest stage always selects the lowest stage, otherwise the hysteresis would never reach it. With step limits a shaped value could map back to the current stage forever; shaping therefore moves at least to the adjacent stage when the target maps to a different stage | flow of the current option; unmapped option → None |
 
 ## Off and on
 

@@ -135,8 +135,15 @@ def flow_to_native(
 
 
 def select_stage(flow: float, options: Options, current_flow: float | None) -> str:
-    """Choose the ``select`` stage for a flow, with hysteresis when decreasing."""
+    """Choose the ``select`` stage for a flow, with hysteresis when decreasing.
+
+    A flow at or below the lowest stage always maps to the lowest stage: the
+    target is clamped to the lowest stage flow, so with the hysteresis lookup
+    (``flow + deadband_down``) the unit could never reach it.
+    """
     ordered = stages(options)
+    if flow <= ordered[0][1]:
+        return ordered[0][0]
     lookup = flow
     if current_flow is not None and flow < current_flow:
         lookup = flow + options.deadband_down
