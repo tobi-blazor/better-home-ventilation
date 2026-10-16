@@ -1,0 +1,156 @@
+# Example dashboard for Better Home Ventilation (built-in cards only).
+#
+# A complete dashboard with one view: create a new dashboard (Settings ->
+# Dashboards -> Add dashboard -> New dashboard from scratch), open it, choose
+# Edit dashboard -> menu -> Raw configuration editor and replace the content
+# with this file. To add the view to an existing dashboard instead, paste the
+# list item under `views:` there.
+#
+# Entity ids depend on the device name and the server language. The ids below
+# are created for the default device name "Ventilation" with English as the
+# server language; with German they are, for example, `sensor.ventilation_sollwert`.
+# Check the ids on the device page and replace them, and replace the room
+# sensors (`sensor.living_room_co2`, ...) with your own.
+views:
+  - title: Ventilation
+    path: ventilation
+    icon: mdi:fan
+    type: sections
+    max_columns: 3
+    sections:
+      - type: grid
+        cards:
+          - type: heading
+            heading: Ventilation
+          - type: tile
+            entity: sensor.ventilation_setpoint
+            name: Setpoint
+          - type: tile
+            entity: sensor.ventilation_mode
+            name: Mode
+          - type: tile
+            entity: sensor.ventilation_reason
+            name: Reason
+          - type: tile
+            entity: sensor.ventilation_ends_at
+            name: Ends at
+          - type: tile
+            entity: select.ventilation_profile
+            name: Profile
+            grid_options:
+              columns: 12
+            features:
+              - type: select-options
+          - type: tile
+            entity: switch.ventilation_control
+            name: Control
+          - type: tile
+            entity: binary_sensor.ventilation_problem
+            name: Problem
+
+      - type: grid
+        cards:
+          - type: heading
+            heading: Boost and pause
+          - type: button
+            entity: button.ventilation_boost
+            name: Boost
+            icon: mdi:fan-plus
+            tap_action:
+              action: perform-action
+              perform_action: button.press
+              target:
+                entity_id: button.ventilation_boost
+            grid_options:
+              columns: 4
+          - type: button
+            entity: button.ventilation_pause
+            name: Pause
+            icon: mdi:fan-off
+            tap_action:
+              action: perform-action
+              perform_action: button.press
+              target:
+                entity_id: button.ventilation_pause
+            grid_options:
+              columns: 4
+          - type: button
+            entity: button.ventilation_resume
+            name: Resume
+            icon: mdi:fan-auto
+            tap_action:
+              action: perform-action
+              perform_action: button.press
+              target:
+                entity_id: button.ventilation_resume
+            grid_options:
+              columns: 4
+          - type: entities
+            title: Settings for the buttons
+            entities:
+              - entity: select.ventilation_boost_duration
+              - entity: number.ventilation_boost_level
+              - entity: select.ventilation_pause_duration
+          - type: entities
+            title: Decision
+            entities:
+              - type: attribute
+                entity: sensor.ventilation_setpoint
+                attribute: target
+                name: Target
+                suffix: m³/h
+              - type: attribute
+                entity: sensor.ventilation_setpoint
+                attribute: written
+                name: Written
+                suffix: m³/h
+              - type: attribute
+                entity: sensor.ventilation_setpoint
+                attribute: write_blocked_by
+                name: Write blocked by
+              - type: attribute
+                entity: sensor.ventilation_setpoint
+                attribute: co2_max
+                name: Highest CO₂
+                suffix: ppm
+              - type: attribute
+                entity: sensor.ventilation_setpoint
+                attribute: humidity_mean
+                name: Mean humidity
+                suffix: "%"
+              - type: attribute
+                entity: sensor.ventilation_setpoint
+                attribute: limits
+                name: Active limits
+
+      - type: grid
+        column_span: 2
+        cards:
+          - type: heading
+            heading: History
+          - type: history-graph
+            title: Setpoint, reason and mode
+            hours_to_show: 24
+            grid_options:
+              columns: 12
+            entities:
+              - entity: sensor.ventilation_setpoint
+              - entity: sensor.ventilation_reason
+              - entity: sensor.ventilation_mode
+          - type: history-graph
+            title: Rooms
+            hours_to_show: 24
+            grid_options:
+              columns: 12
+            entities:
+              - entity: sensor.living_room_co2
+              - entity: sensor.bedroom_co2
+              - entity: sensor.living_room_humidity
+              - entity: sensor.bedroom_humidity
+          - type: logbook
+            title: Mode changes
+            hours_to_show: 48
+            grid_options:
+              columns: 12
+            entities:
+              - sensor.ventilation_mode
