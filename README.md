@@ -4,7 +4,7 @@ Demand-controlled ventilation for central home ventilation units (MVHR / HRV / E
 
 One integration instead of a pile of helpers, template sensors and automations: pick your ventilation unit and your room sensors in a config dialog, and Better Home Ventilation takes care of the rest.
 
-> **Status:** specification phase. There is no code yet. The specification in [docs/spec/](docs/spec/README.md) is the source of truth for the implementation.
+> **Status:** early development. Only the integration skeleton exists; it has no features yet. The specification in [docs/spec/](docs/spec/README.md) is the source of truth for the implementation.
 
 ## Planned features
 
@@ -28,6 +28,32 @@ Device drivers (use the integration or ESPHome package for your unit), humidifie
 
 - [Specification](docs/spec/README.md)
 - [Implementation plan](docs/plan.md)
+
+## Development
+
+Home Assistant does not run on Windows, so development happens in WSL (Ubuntu) with [uv](https://docs.astral.sh/uv/) and Python 3.14. Keep the virtual environment in the WSL home directory, not on `/mnt/c`.
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh   # installs uv to ~/.local/bin
+uv python install 3.14
+uv venv --python 3.14 ~/.venvs/bhv
+uv pip install --python ~/.venvs/bhv/bin/python -r requirements_test.txt
+source ~/.venvs/bhv/bin/activate
+```
+
+`requirements_test.txt` pins `pytest-homeassistant-custom-component` to the latest supported Home Assistant version; CI also runs the tests against the minimum version (2026.4).
+
+From the repository root:
+
+| Check | Command |
+|---|---|
+| format | `ruff format --check .` (`ruff format .` to fix) |
+| lint | `ruff check .` |
+| types | `mypy` and `MYPYPATH=custom_components/better_home_ventilation mypy tests/engine` |
+| tests | `pytest --cov` |
+| engine tests only (no Home Assistant needed) | `pytest tests/engine` |
+
+The control logic lives in `custom_components/better_home_ventilation/engine/` and must not import Home Assistant. Ruff enforces this through `engine/ruff.toml`, and a test imports the engine with Home Assistant blocked.
 
 ## License
 

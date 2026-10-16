@@ -1,0 +1,54 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: GitHub release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check tag matches manifest version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          manifest="$(jq -r .version custom_components/better_home_ventilation/manifest.json)"
+          if [ "$tag" != "$manifest" ]; then
+            echo "::error::Tag v$tag does not match manifest.json version $manifest"
+            exit 1
+          fi
+          echo "VERSION=$tag" >> "$GITHUB_ENV"
+
+      - name: Extract release notes from CHANGELOG.md
+        run: |
+          awk -v version="$VERSION" '
+            /^## \[/ {
+              if (found) exit
+              if (index($0, "## [" version "]") == 1) { found = 1; next }
+            }
+            found { print }
+          ' CHANGELOG.md > release_notes.md
+          if ! grep -q '[^[:space:]]' release_notes.md; then
+            echo "::error::No section '## [$VERSION]' with content in CHANGELOG.md"
+            exit 1
+          fi
+          cat release_notes.md
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Only SemVer pre-release versions (1.2.0-beta.1) are GitHub
+          # pre-releases; HACS hides those unless users opt in.
+          prerelease=""
+          case "$VERSION" in *-*) prerelease="--prerelease" ;; esac
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file release_notes.md \
+            --verify-tag \
+            $prerelease

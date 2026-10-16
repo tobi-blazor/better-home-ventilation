@@ -1,0 +1,144 @@
+[project]
+name = "better-home-ventilation"
+version = "0.1.0"
+description = "Demand-controlled home ventilation for Home Assistant (custom integration)."
+readme = "README.md"
+requires-python = ">=3.14"
+
+# ---------------------------------------------------------------------------
+# Ruff (format + lint)
+# The engine package has its own ruff.toml (extends this file) that bans
+# homeassistant imports, logging and clock reads in engine/.
+# ---------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py314"
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+  "A",     # flake8-builtins
+  "ASYNC", # flake8-async
+  "B",     # flake8-bugbear
+  "BLE",   # flake8-blind-except
+  "C4",    # flake8-comprehensions
+  "D",     # pydocstyle
+  "DTZ",   # flake8-datetimez
+  "E",     # pycodestyle errors
+  "F",     # pyflakes
+  "FLY",   # flynt
+  "G",     # flake8-logging-format
+  "I",     # isort
+  "ICN",   # flake8-import-conventions
+  "LOG",   # flake8-logging
+  "N",     # pep8-naming
+  "PERF",  # perflint
+  "PGH",   # pygrep-hooks
+  "PIE",   # flake8-pie
+  "PL",    # pylint
+  "PT",    # flake8-pytest-style
+  "PTH",   # flake8-use-pathlib
+  "PYI",   # flake8-pyi
+  "RET",   # flake8-return
+  "RSE",   # flake8-raise
+  "RUF",   # ruff-specific
+  "S",     # flake8-bandit
+  "SIM",   # flake8-simplify
+  "SLF",   # flake8-self
+  "SLOT",  # flake8-slots
+  "T20",   # flake8-print
+  "TID",   # flake8-tidy-imports
+  "TRY",   # tryceratops
+  "UP",    # pyupgrade
+  "W",     # pycodestyle warnings
+]
+ignore = [
+  "D202",    # no blank lines allowed after function docstring (conflicts with formatter)
+  "D203",    # one-blank-line-before-class (incompatible with D211)
+  "D213",    # multi-line-summary-second-line (incompatible with D212)
+  "E501",    # line too long (handled by the formatter)
+  "PLR0911", # too many return statements
+  "PLR0912", # too many branches
+  "PLR0913", # too many arguments
+  "PLR0915", # too many statements
+  "TRY003",  # long messages outside exception classes
+  "W191",    # formatter conflicts
+  "E111",
+  "E114",
+  "E117",
+  "D206",
+  "D300",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = [
+  "PLR2004", # magic values are fine in tests
+  "S101",    # assert is how pytest works
+  "SLF001",  # private access in tests
+]
+
+[tool.ruff.lint.isort]
+force-sort-within-sections = true
+combine-as-imports = true
+known-first-party = ["custom_components", "engine", "tests"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "pep257"
+
+# ---------------------------------------------------------------------------
+# mypy
+# `mypy` checks the integration and the component tests. The engine tests
+# import the engine as the top-level package `engine` and are checked in a
+# second run: `MYPYPATH=custom_components/better_home_ventilation mypy tests/engine`.
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.14"
+files = ["custom_components", "tests/components"]
+mypy_path = "."
+explicit_package_bases = true
+show_error_codes = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+
+# pytest-homeassistant-custom-component ships no py.typed marker.
+[[tool.mypy.overrides]]
+module = ["pytest_homeassistant_custom_component.*"]
+ignore_missing_imports = true
+
+# Engine: the per-module equivalent of --strict.
+[[tool.mypy.overrides]]
+module = [
+  "custom_components.better_home_ventilation.engine.*",
+  "engine.*",
+]
+check_untyped_defs = true
+disallow_any_generics = true
+disallow_incomplete_defs = true
+disallow_subclassing_any = true
+disallow_untyped_calls = true
+disallow_untyped_decorators = true
+disallow_untyped_defs = true
+extra_checks = true
+no_implicit_reexport = true
+strict_equality = true
+warn_return_any = true
+
+# ---------------------------------------------------------------------------
+# pytest and coverage
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.coverage.run]
+source = ["custom_components/better_home_ventilation"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+skip_empty = true
+exclude_also = [
+  "if TYPE_CHECKING:",
+  "raise NotImplementedError",
+]

@@ -13,3 +13,5 @@ build/
 .idea/
 .vscode/
 output/
+coverage.xml
+.claude/worktrees/

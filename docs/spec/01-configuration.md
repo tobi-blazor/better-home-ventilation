@@ -48,7 +48,7 @@ Shown only if needed:
 | `number` with unit `%` | none (step skipped), `actuator_unit = percent` |
 | `number` with another or no unit | `actuator_unit`: `SelectSelector(["flow", "percent"], translation_key="actuator_unit")` |
 | `fan` | none (step skipped) |
-| `select` | one `NumberSelector(m³/h)` per option, optional. Empty = option is never used. Field keys are the option texts, so the form shows them as labels; there is no translation for these keys (they come from the device). At least two mapped options with distinct flows (`select_mapping`) |
+| `select` | one `NumberSelector(m³/h)` per option, optional. Empty = option is never used. Field keys are the option texts, so the form shows them as labels; there is no translation for these keys (they come from the device). At least two mapped options with distinct flows (`select_mapping`). Stored in `options` under `select_mapping` as a dict `{option text: flow}`; unmapped options are left out |
 
 ### Step `inputs`
 

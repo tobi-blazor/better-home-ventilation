@@ -1,0 +1,44 @@
+name: Lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: ruff and mypy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: requirements_test.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements_test.txt
+
+      - name: ruff format
+        run: ruff format --check .
+
+      - name: ruff check
+        run: ruff check --output-format=github .
+
+      - name: mypy (integration and component tests)
+        run: mypy
+
+      - name: mypy (engine tests, engine as top-level package)
+        run: mypy tests/engine
+        env:
+          MYPYPATH: custom_components/better_home_ventilation

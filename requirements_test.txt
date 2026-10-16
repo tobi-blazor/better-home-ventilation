@@ -1,0 +1,8 @@
+# Development and CI test requirements (Python 3.14).
+# pytest-homeassistant-custom-component pins Home Assistant, pytest,
+# pytest-asyncio and pytest-cov. Development uses the latest supported HA:
+#   0.13.372 = HA 2026.10.1 (latest)
+#   0.13.321 = HA 2026.4.0  (minimum, installed by the CI minimum job)
+pytest-homeassistant-custom-component==0.13.372
+mypy==2.4.0
+ruff==0.17.1

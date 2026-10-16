@@ -60,7 +60,7 @@ Goal: an empty integration that loads, passes all checks and has CI.
 
 - [ ] `pyproject.toml`: ruff (format + lint, `flake8-tidy-imports` banning `homeassistant` in `engine/`), mypy (`--strict` for `engine/`), pytest, coverage
 - [ ] Dev environment in WSL (Ubuntu): `uv`, Python 3.14, virtual environment; documented in the README (development section)
-- [ ] `requirements_test.txt` with `pytest-homeassistant-custom-component` pinned to the development HA version (`0.13.321` for HA 2026.4.0)
+- [ ] `requirements_test.txt` with `pytest-homeassistant-custom-component` pinned to the development HA version (`0.13.372` for HA 2026.10.1; CI minimum job `0.13.321` for HA 2026.4.0)
 - [ ] `custom_components/better_home_ventilation/`: `manifest.json` (version `0.1.0`), `__init__.py` (`CONFIG_SCHEMA` config-entry-only, empty setup), `const.py` (`DOMAIN`), `strings.json`, `translations/en.json`, `translations/de.json`
 - [ ] `quality_scale.yaml` with every rule as `todo` or `exempt` with comment
 - [ ] `hacs.json` with the minimum HA version
