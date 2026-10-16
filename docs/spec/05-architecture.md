@@ -101,10 +101,10 @@ No polling of external systems, no `requirements` in the manifest.
 {
   "domain": "better_home_ventilation",
   "name": "Better Home Ventilation",
+  "after_dependencies": ["mobile_app", "conversation", "logbook", "nina"],
   "codeowners": ["@tobi-blazor"],
   "config_flow": true,
   "dependencies": [],
-  "after_dependencies": ["mobile_app", "conversation", "logbook", "nina"],
   "documentation": "https://github.com/tobi-blazor/better-home-ventilation",
   "integration_type": "helper",
   "iot_class": "calculated",
@@ -139,7 +139,7 @@ GitHub Actions:
 |---|---|
 | `lint.yml` | ruff, mypy |
 | `test.yml` | pytest with coverage on the minimum (2026.4) and the latest HA version |
-| `validate.yml` | `hassfest` (home-assistant/actions), HACS validation (`hacs/action`) |
+| `validate.yml` | `hassfest` (home-assistant/actions) on every push and PR; HACS validation (`hacs/action`) only on `main`, because it reads the default branch through the GitHub API |
 | `release.yml` | on tag `v*`: check that the tag matches `manifest.json` version, create GitHub release with notes from `CHANGELOG.md` |
 
 - Versioning: SemVer. `0.x` while the spec phases are implemented.

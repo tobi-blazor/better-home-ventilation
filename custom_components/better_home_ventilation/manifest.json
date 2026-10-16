@@ -1,10 +1,10 @@
 {
   "domain": "better_home_ventilation",
   "name": "Better Home Ventilation",
+  "after_dependencies": ["mobile_app", "conversation", "logbook", "nina"],
   "codeowners": ["@tobi-blazor"],
   "config_flow": true,
   "dependencies": [],
-  "after_dependencies": ["mobile_app", "conversation", "logbook", "nina"],
   "documentation": "https://github.com/tobi-blazor/better-home-ventilation",
   "integration_type": "helper",
   "iot_class": "calculated",
