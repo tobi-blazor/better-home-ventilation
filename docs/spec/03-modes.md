@@ -249,8 +249,10 @@ One rule for all off states (`off`, `safety_off`):
 On every change of the resolved mode an event `better_home_ventilation_mode_changed` is fired:
 
 ```text
-entry_id, device_id, name, from_mode, to_mode, reason, setpoint, trigger, source, warning (headline or None)
+entry_id, device_id, name, from_mode, to_mode, reason, setpoint, trigger, source, warning (headline or None), ends_at
 ```
+
+`ends_at` is the end of the new boost or pause as an ISO 8601 string, `None` for an indefinite pause and every other mode (decided 2026-10-16 for M5: the logbook shows "until 18:30" from the event alone, because the `ends_at` sensor may have changed again by the time the logbook is read).
 
 `trigger` values: `startup`, `command`, `timeout`, `timeout_while_offline`, `warning`, `warning_ended`, `override`, `detector_start`, `detector_end`, `inputs_lost`, `inputs_restored`, `control_switch`.
 

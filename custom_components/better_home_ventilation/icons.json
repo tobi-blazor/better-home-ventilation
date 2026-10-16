@@ -30,5 +30,98 @@
         }
       }
     }
+  },
+  "entity": {
+    "button": {
+      "boost": {
+        "default": "mdi:fan-plus"
+      },
+      "pause": {
+        "default": "mdi:fan-off"
+      },
+      "resume": {
+        "default": "mdi:fan-auto"
+      }
+    },
+    "number": {
+      "boost_level": {
+        "default": "mdi:fan-chevron-up"
+      }
+    },
+    "select": {
+      "profile": {
+        "default": "mdi:tune-variant",
+        "state": {
+          "balanced": "mdi:scale-balance",
+          "air_quality": "mdi:air-filter",
+          "quiet": "mdi:volume-low",
+          "winter": "mdi:snowflake"
+        }
+      },
+      "boost_duration": {
+        "default": "mdi:timer-plus-outline"
+      },
+      "pause_duration": {
+        "default": "mdi:timer-pause-outline"
+      }
+    },
+    "sensor": {
+      "setpoint": {
+        "default": "mdi:fan"
+      },
+      "reason": {
+        "default": "mdi:information-outline",
+        "state": {
+          "minimum": "mdi:fan-minus",
+          "co2": "mdi:molecule-co2",
+          "humidity_high": "mdi:water-percent",
+          "dryness_protection": "mdi:water-off-outline",
+          "away": "mdi:home-export-outline",
+          "quiet_limit": "mdi:weather-night",
+          "fallback": "mdi:fan-alert",
+          "boost": "mdi:fan-plus",
+          "shower": "mdi:shower",
+          "cooking": "mdi:stove",
+          "off": "mdi:fan-off",
+          "safety_off": "mdi:shield-alert-outline"
+        }
+      },
+      "mode": {
+        "default": "mdi:fan-auto",
+        "state": {
+          "automatic": "mdi:fan-auto",
+          "fallback": "mdi:fan-alert",
+          "boost": "mdi:fan-plus",
+          "shower": "mdi:shower",
+          "cooking": "mdi:stove",
+          "off": "mdi:fan-off",
+          "safety_off": "mdi:shield-alert-outline",
+          "disabled": "mdi:fan-remove"
+        }
+      },
+      "ends_at": {
+        "default": "mdi:timer-outline"
+      }
+    },
+    "switch": {
+      "control": {
+        "default": "mdi:robot",
+        "state": {
+          "on": "mdi:robot",
+          "off": "mdi:robot-off"
+        }
+      }
+    }
+  },
+  "services": {
+    "boost": {
+      "service": "mdi:fan-plus"
+    },
+    "pause": {
+      "service": "mdi:fan-off"
+    },
+    "resume": {
+      "service": "mdi:fan-auto"
+    }
   }
 }

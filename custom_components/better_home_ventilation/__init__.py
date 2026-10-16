@@ -19,24 +19,34 @@ from .controller import (
     VentilationController,
     create_store,
 )
+from .entity import async_remove_stale_entities
+from .services import async_setup_services
 
 _LOGGER = logging.getLogger(__name__)
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
-#: Entity platforms of the entry (added in milestone M5).
-PLATFORMS: Final[list[Platform]] = []
+#: Entity platforms of the entry (docs/spec/04-interface.md#entities).
+PLATFORMS: Final[list[Platform]] = [
+    Platform.BINARY_SENSOR,
+    Platform.BUTTON,
+    Platform.NUMBER,
+    Platform.SELECT,
+    Platform.SENSOR,
+    Platform.SWITCH,
+]
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Set up the integration (services and intents follow in later milestones)."""
+    """Set up the integration: register the services (BHV-22)."""
+    async_setup_services(hass)
     return True
 
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: BetterVentilationConfigEntry
 ) -> bool:
-    """Set up a config entry: controller, store, device, platforms, start.
+    """Set up a config entry: controller, store, device, entities, start.
 
     Missing source entities do not fail the setup (they may load later); they
     count as invalid inputs. Control starts once Home Assistant has started.
@@ -48,6 +58,7 @@ async def async_setup_entry(
     await controller.async_setup()
     entry.runtime_data = controller
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
+    async_remove_stale_entities(hass, entry)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(async_at_started(hass, controller.async_start))
     return True

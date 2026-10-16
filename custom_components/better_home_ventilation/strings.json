@@ -353,6 +353,15 @@
     },
     "level_out_of_range": {
       "message": "The boost level must be between the min flow and the max flow."
+    },
+    "entry_required": {
+      "message": "Choose the ventilation entry (config_entry_id). It can only be omitted if exactly one entry exists."
+    },
+    "entry_not_found": {
+      "message": "{entry_id} is not a Better Home Ventilation entry."
+    },
+    "entry_not_loaded": {
+      "message": "{entry_title} is not loaded."
     }
   },
   "selector": {
@@ -374,5 +383,166 @@
         "off": "Off (e.g. a power switch)"
       }
     }
+  },
+  "entity": {
+    "binary_sensor": {
+      "problem": {
+        "name": "Problem"
+      }
+    },
+    "button": {
+      "boost": {
+        "name": "Boost"
+      },
+      "pause": {
+        "name": "Pause"
+      },
+      "resume": {
+        "name": "Resume"
+      }
+    },
+    "number": {
+      "boost_level": {
+        "name": "Boost level"
+      }
+    },
+    "select": {
+      "profile": {
+        "name": "Profile",
+        "state": {
+          "balanced": "Balanced",
+          "air_quality": "Air quality",
+          "quiet": "Quiet",
+          "winter": "Winter"
+        }
+      },
+      "boost_duration": {
+        "name": "Boost duration",
+        "state": {
+          "15": "15 min",
+          "30": "30 min",
+          "60": "1 h",
+          "120": "2 h"
+        }
+      },
+      "pause_duration": {
+        "name": "Pause duration",
+        "state": {
+          "1h": "1 h",
+          "4h": "4 h",
+          "8h": "8 h",
+          "indefinite": "Until resumed"
+        }
+      }
+    },
+    "sensor": {
+      "setpoint": {
+        "name": "Setpoint"
+      },
+      "reason": {
+        "name": "Reason",
+        "state": {
+          "minimum": "Minimum",
+          "co2": "CO₂",
+          "humidity_high": "High humidity",
+          "dryness_protection": "Dryness protection",
+          "away": "Away",
+          "quiet_limit": "Quiet limit",
+          "fallback": "Fallback",
+          "boost": "Boost",
+          "shower": "Shower",
+          "cooking": "Cooking",
+          "off": "Off",
+          "safety_off": "Safety shutdown"
+        }
+      },
+      "mode": {
+        "name": "Mode",
+        "state": {
+          "automatic": "Automatic",
+          "fallback": "Fallback",
+          "boost": "Boost",
+          "shower": "Shower",
+          "cooking": "Cooking",
+          "off": "Off",
+          "safety_off": "Safety shutdown",
+          "disabled": "Control off"
+        }
+      },
+      "ends_at": {
+        "name": "Ends at"
+      }
+    },
+    "switch": {
+      "control": {
+        "name": "Control"
+      }
+    }
+  },
+  "services": {
+    "boost": {
+      "name": "Boost",
+      "description": "Raises the flow to a level for a duration. A running boost is extended.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Entry",
+          "description": "The ventilation entry. Optional if only one exists."
+        },
+        "duration": {
+          "name": "Duration",
+          "description": "Duration in minutes. Default: the boost duration entity."
+        },
+        "level": {
+          "name": "Level",
+          "description": "Flow between the min flow and the max flow. Default: the boost level entity."
+        }
+      }
+    },
+    "pause": {
+      "name": "Pause",
+      "description": "Stops the ventilation for a duration or until resumed.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Entry",
+          "description": "The ventilation entry. Optional if only one exists."
+        },
+        "duration": {
+          "name": "Duration",
+          "description": "Duration in minutes. Without a duration the pause lasts until resumed."
+        }
+      }
+    },
+    "resume": {
+      "name": "Resume",
+      "description": "Ends a boost or a pause and returns to automatic control.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Entry",
+          "description": "The ventilation entry. Optional if only one exists."
+        }
+      }
+    }
+  },
+  "common": {
+    "logbook_switched_to": "switched to {mode} ({details})",
+    "logbook_back_to": "back to {mode} ({details})",
+    "logbook_until": "until {time}",
+    "logbook_source_button": "button",
+    "logbook_source_service": "action",
+    "logbook_source_voice": "voice",
+    "logbook_source_notification": "notification",
+    "logbook_source_external": "at the unit",
+    "logbook_trigger_startup": "startup",
+    "logbook_trigger_command": "command",
+    "logbook_trigger_timeout": "timeout",
+    "logbook_trigger_timeout_while_offline": "ended while offline",
+    "logbook_trigger_warning": "warning",
+    "logbook_trigger_warning_ended": "warning ended",
+    "logbook_trigger_override": "override",
+    "logbook_trigger_detector_start": "detected",
+    "logbook_trigger_detector_end": "detection ended",
+    "logbook_trigger_inputs_lost": "inputs lost",
+    "logbook_trigger_inputs_restored": "inputs restored",
+    "logbook_trigger_control_switch": "control switch"
   }
 }

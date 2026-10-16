@@ -1,0 +1,42 @@
+boost:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: better_home_ventilation
+    duration:
+      selector:
+        number:
+          min: 5
+          max: 720
+          unit_of_measurement: min
+          mode: box
+    level:
+      selector:
+        number:
+          min: 0
+          max: 10000
+          step: 5
+          unit_of_measurement: "m³/h"
+          mode: box
+
+pause:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: better_home_ventilation
+    duration:
+      selector:
+        number:
+          min: 1
+          max: 10080
+          unit_of_measurement: min
+          mode: box
+
+resume:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: better_home_ventilation
