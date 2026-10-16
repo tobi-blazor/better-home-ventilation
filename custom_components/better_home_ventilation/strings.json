@@ -352,7 +352,7 @@
       "message": "Control is switched off. Switch it on to boost or pause the ventilation."
     },
     "level_out_of_range": {
-      "message": "The boost level must be between the min flow and the max flow."
+      "message": "The boost level must be between the minimum flow and the maximum flow."
     },
     "entry_required": {
       "message": "Choose the ventilation entry (config_entry_id). It can only be omitted if exactly one entry exists."
@@ -494,7 +494,7 @@
         },
         "level": {
           "name": "Level",
-          "description": "Flow between the min flow and the max flow. Default: the boost level entity."
+          "description": "Flow between the minimum flow and the maximum flow. Default: the boost level entity."
         }
       }
     },

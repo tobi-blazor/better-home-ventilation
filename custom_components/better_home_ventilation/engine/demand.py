@@ -79,8 +79,8 @@ def update_dryness(
     (``h_max > humidity_high_start``) and resets when ``h_max`` drops below
     ``humidity_high_start`` or ``dry`` ends.
 
-    SPEC-GAP: "continuously" is read as "until ``h_max < humidity_high_start``";
-    at exactly ``humidity_high_start`` the counter neither starts nor resets.
+    At exactly ``humidity_high_start`` the counter neither starts nor resets
+    (02-control.md, dryness protection).
     """
     if h_mean is None:
         dry = False
@@ -194,9 +194,8 @@ def compute_demand(
     if away_limit_applies(profile, options) and readings.presence_home is False:
         limits.append(Limit.AWAY)
         demand = max(options.fallback_flow if fallback else d_min, hum_term)
-        # SPEC-GAP: the spec keeps the reason unless it was humidity_high or
-        # fallback; it is recalculated here so that it names the rule that
-        # determines the limited value (e.g. humidity-high taking over from CO₂).
+        # The reason is determined again for the limited value (02-control.md,
+        # limits), e.g. humidity-high taking over from CO₂.
         if fallback and demand == options.fallback_flow:
             reason = Reason.FALLBACK
         elif hum_allowed and hum_term == demand and hum_term > d_min:

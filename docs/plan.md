@@ -41,7 +41,7 @@ Goal: no open question blocks phase 0.1.
   - [x] `pause_reminder_after` and `off_notice_after` moved to the `notifications` step (0.2)
   - [x] `actual_flow_sensor` removed (no behavior until BHV-91)
   - [x] `problem_delay` moved to the `control` step, section `advanced` (0.1)
-  - [x] Shaping parameters always visible in the options flow (section `shaping`), technical timing parameters in `advanced` (advanced mode only), decided 2026-10-16
+  - [x] Shaping parameters always visible in the options flow (section `shaping`), technical timing parameters in `advanced` (collapsed, always shown since HA deprecated advanced mode in flows), decided 2026-10-16
   - [x] E39 split into E39 (0.1) and E39a (0.2)
   - [x] Control switch off also blocks readiness corrections (BHV-03)
 - [x] Q4: minimum HA version 2026.4, Python 3.14, `import voluptuous as vol`, no schema compatibility module ([05-architecture.md](spec/05-architecture.md#compatibility))
