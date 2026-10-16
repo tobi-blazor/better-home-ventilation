@@ -86,12 +86,9 @@ async def _open(
     hass: HomeAssistant,
     entry: MockConfigEntry,
     step: str,
-    context: Any = None,
 ) -> ConfigFlowResult:
     """Open the options menu and choose ``step``."""
-    result = await hass.config_entries.options.async_init(
-        entry.entry_id, context=context
-    )
+    result = await hass.config_entries.options.async_init(entry.entry_id)
     assert result["type"] is FlowResultType.MENU
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"next_step_id": step}
@@ -421,16 +418,15 @@ async def test_inputs_errors(
 # --- control ----------------------------------------------------------------------
 
 
-async def test_control_without_advanced_mode(
-    hass: HomeAssistant, entities: None, reload_spy: MagicMock
+async def test_control_save(
+    hass: HomeAssistant, entry: MockConfigEntry, reload_spy: MagicMock
 ) -> None:
-    """Without advanced mode, `shaping` is shown and `advanced` hidden but kept."""
-    entry = mock_entry(**{CONF_PRESENCE_ENTITIES: [PERSON], CONF_STALE_TIMEOUT: 1200})
-    entry.add_to_hass(hass)
-    assert await hass.config_entries.async_setup(entry.entry_id)
-    result = await _open(
-        hass, entry, "control", context={"show_advanced_options": False}
-    )
+    """All control sections are shown; `shaping` and `advanced` collapsed.
+
+    Advanced mode is not used: HA deprecated it in 2026.10 (breaks in 2027.6).
+    Away without presence entities is valid and simply has no effect.
+    """
+    result = await _open(hass, entry, "control")
     schema = result["data_schema"]
     assert list(sections(schema)) == [
         "co2",
@@ -439,14 +435,24 @@ async def test_control_without_advanced_mode(
         "quiet",
         "away",
         "shaping",
+        "advanced",
     ]
+    assert sections(schema)["co2"].options == {"collapsed": False}
     assert sections(schema)["shaping"].options == {"collapsed": True}
+    assert sections(schema)["advanced"].options == {"collapsed": True}
     assert suggested(schema, CONF_MIN_WRITE_INTERVAL) == {
         "hours": 0,
         "minutes": 5,
         "seconds": 0,
     }
+    assert suggested(schema, CONF_PROBLEM_DELAY) == {
+        "hours": 0,
+        "minutes": 10,
+        "seconds": 0,
+    }
     assert suggested(schema, CONF_NIGHT_START) == "22:00:00"
+    assert suggested(schema, CONF_AWAY_ENABLED) is True
+    assert entry.options[CONF_PRESENCE_ENTITIES] == []
 
     result = await _submit(
         hass,
@@ -456,6 +462,7 @@ async def test_control_without_advanced_mode(
             CONF_MIN_WRITE_INTERVAL: {"minutes": 10},
             CONF_DEADBAND_DOWN: 15,
             CONF_DRYNESS_HYSTERESIS: 2.5,
+            CONF_PROBLEM_DELAY: {"minutes": 15},
         },
     )
 
@@ -464,27 +471,11 @@ async def test_control_without_advanced_mode(
     assert entry.options[CONF_MIN_WRITE_INTERVAL] == 600
     assert entry.options[CONF_DEADBAND_DOWN] == 15
     assert entry.options[CONF_DRYNESS_HYSTERESIS] == 2.5
-    assert entry.options[CONF_STALE_TIMEOUT] == 1200
-    assert "co2" not in entry.options
-
-
-async def test_control_with_advanced_mode(hass: HomeAssistant, entities: None) -> None:
-    """With advanced mode (or without the context flag), `advanced` is shown."""
-    entry = mock_entry(**{CONF_PRESENCE_ENTITIES: [PERSON]})
-    entry.add_to_hass(hass)
-    result = await _open(hass, entry, "control")
-    schema = result["data_schema"]
-    assert sections(schema)["advanced"].options == {"collapsed": True}
-    assert suggested(schema, CONF_PROBLEM_DELAY) == {
-        "hours": 0,
-        "minutes": 10,
-        "seconds": 0,
-    }
-
-    result = await _submit(hass, result, **{CONF_PROBLEM_DELAY: {"minutes": 15}})
-
-    assert result["type"] is FlowResultType.CREATE_ENTRY
     assert entry.options[CONF_PROBLEM_DELAY] == 900
+    assert entry.options[CONF_STALE_TIMEOUT] == 1800
+    assert entry.options[CONF_AWAY_ENABLED] is True
+    assert "co2" not in entry.options
+    assert "advanced" not in entry.options
 
 
 @pytest.mark.parametrize(
@@ -502,7 +493,6 @@ async def test_control_with_advanced_mode(hass: HomeAssistant, entities: None) -
         ({CONF_FALLBACK_FLOW: 50}, {"flows": "fallback_range"}),
         ({CONF_QUIET_MAX_FLOW: 60}, {"quiet": "quiet_range"}),
         ({CONF_NIGHT_END: "22:00:00"}, {"quiet": "night_window"}),
-        ({CONF_AWAY_ENABLED: True}, {"away": "away_needs_presence"}),
     ],
 )
 async def test_control_errors(
@@ -513,9 +503,8 @@ async def test_control_errors(
 ) -> None:
     """Every cross-field rule of the control step reports its error key."""
     result = await _open(hass, entry, "control")
-    base = {} if CONF_AWAY_ENABLED in changes else {CONF_AWAY_ENABLED: False}
 
-    result = await _submit(hass, result, **(base | changes))
+    result = await _submit(hass, result, **changes)
 
     assert result["type"] is FlowResultType.FORM
     assert result["errors"] == errors

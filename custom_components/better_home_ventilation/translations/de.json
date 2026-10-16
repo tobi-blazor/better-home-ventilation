@@ -56,7 +56,6 @@
     "error": {
       "actuator_in_use": "Dieser Aktor wird bereits von einem anderen Better-Home-Ventilation-Eintrag gesteuert.",
       "actuator_not_found": "Die Aktor-Entität existiert nicht.",
-      "away_needs_presence": "Abwesenheit braucht Anwesenheits-Entitäten. Bitte unter Eingänge hinzufügen oder Abwesenheit ausschalten.",
       "co2_range": "Das CO₂-Ende muss höher als der CO₂-Beginn sein.",
       "dryness_overlap": "Die Trockenheitsschwelle plus Hysterese muss unter dem Beginn der Feuchte-Rampe liegen.",
       "duplicate_sensor": "Ein Sensor ist sowohl als CO₂- als auch als Feuchtesensor ausgewählt.",
@@ -234,7 +233,7 @@
               "away_enabled": "Abwesenheitsbegrenzung"
             },
             "data_description": {
-              "away_enabled": "Den Volumenstrom auf das Minimum senken, solange niemand zu Hause ist. Braucht Anwesenheits-Entitäten. Ausgeschaltet gilt die Abwesenheitsbegrenzung in keinem Profil."
+              "away_enabled": "Den Volumenstrom auf das Minimum senken, solange niemand zu Hause ist, außer bei hoher Feuchte. Ohne Anwesenheits-Entitäten hat es keine Wirkung. Ausgeschaltet gilt die Abwesenheitsbegrenzung in keinem Profil."
             }
           },
           "shaping": {

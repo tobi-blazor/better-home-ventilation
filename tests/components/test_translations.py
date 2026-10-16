@@ -49,7 +49,6 @@ CONFIG_ERRORS = {
 OPTIONS_ERRORS = {
     "actuator_in_use",
     "actuator_not_found",
-    "away_needs_presence",
     "co2_range",
     "dryness_overlap",
     "duplicate_sensor",

@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from enum import StrEnum
 from functools import partial
-from typing import TYPE_CHECKING, Any, Final, Literal, cast
+from typing import TYPE_CHECKING, Any, Final, Literal
 
 from homeassistant.config_entries import (
     SOURCE_RECONFIGURE,
@@ -258,10 +258,8 @@ USER_SCHEMA: Final = vol.Schema(
     {
         vol.Required(CONF_NAME, default=DEFAULT_NAME): selector.TextSelector(),
         vol.Required(CONF_ACTUATOR): ACTUATOR_SELECTOR,
-        # SPEC-GAP: the default "max attribute of a number actuator" cannot be
-        # shown before the actuator is chosen in the same form. The field is
-        # optional; left empty, it takes the actuator's `max` if its unit is
-        # m³/h, otherwise the error `max_flow_required` asks for a value.
+        # Optional: left empty, the actuator's `max` is used if its unit is m³/h,
+        # otherwise `max_flow_required` (docs/spec/01-configuration.md).
         vol.Optional(CONF_MAX_FLOW): MAX_FLOW_SELECTOR,
     }
 )
@@ -428,9 +426,7 @@ def _mapping_result(
         if user_input.get(option) is not None
     }
     flows = list(mapping.values())
-    # SPEC-GAP: "at least two mapped options with distinct flows" is read as
-    # "at least two mapped options, and no two options with the same flow",
-    # because a flow must map back to exactly one option.
+    # A flow must map back to exactly one option: no duplicate flows.
     if len(flows) < MIN_SELECT_OPTIONS or len(set(flows)) != len(flows):
         return None
     return {CONF_SELECT_MAPPING: mapping}
@@ -467,8 +463,6 @@ def _validate_inputs(hass: HomeAssistant, values: Mapping[str, Any]) -> dict[str
     if not co2 and not humidity:
         return {"base": "no_inputs"}
     errors: dict[str, str] = {}
-    # SPEC-GAP: "sensors are checked to exist" (test-before-configure) has no
-    # error key in the validation rules; `sensor_not_found` is used.
     for field, sensors in ((CONF_CO2_SENSORS, co2), (CONF_HUMIDITY_SENSORS, humidity)):
         if any(not _entity_exists(hass, sensor) for sensor in sensors):
             errors[field] = "sensor_not_found"
@@ -501,8 +495,6 @@ def _validate_control(values: Mapping[str, Any]) -> dict[str, str]:
         errors[CONF_QUIET_MAX_FLOW] = "quiet_range"
     if values[CONF_NIGHT_START] == values[CONF_NIGHT_END]:
         errors[CONF_NIGHT_END] = "night_window"
-    if values[CONF_AWAY_ENABLED] and not values.get(CONF_PRESENCE_ENTITIES):
-        errors[CONF_AWAY_ENABLED] = "away_needs_presence"
     return errors
 
 
@@ -767,7 +759,7 @@ def _inputs_options_schema() -> vol.Schema:
     )
 
 
-def _control_options_schema(max_flow: float, *, show_advanced: bool) -> vol.Schema:
+def _control_options_schema(max_flow: float) -> vol.Schema:
     """Return the schema of the options step `control`."""
     fields: dict[Any, Any] = {
         vol.Required(SECTION_CO2): _section(
@@ -817,17 +809,18 @@ def _control_options_schema(max_flow: float, *, show_advanced: bool) -> vol.Sche
             collapsed=True,
         ),
     }
-    if show_advanced:
-        fields[vol.Required(SECTION_ADVANCED)] = _section(
-            {
-                vol.Required(CONF_EVALUATION_INTERVAL): DURATION_SELECTOR,
-                vol.Required(CONF_DEBOUNCE): DURATION_SELECTOR,
-                vol.Required(CONF_STALE_TIMEOUT): DURATION_SELECTOR,
-                vol.Required(CONF_STARTUP_GRACE): DURATION_SELECTOR,
-                vol.Required(CONF_PROBLEM_DELAY): DURATION_SELECTOR,
-            },
-            collapsed=True,
-        )
+    # Always shown, collapsed: HA deprecated advanced mode in 2026.10
+    # (`show_advanced_options`, breaks in 2027.6).
+    fields[vol.Required(SECTION_ADVANCED)] = _section(
+        {
+            vol.Required(CONF_EVALUATION_INTERVAL): DURATION_SELECTOR,
+            vol.Required(CONF_DEBOUNCE): DURATION_SELECTOR,
+            vol.Required(CONF_STALE_TIMEOUT): DURATION_SELECTOR,
+            vol.Required(CONF_STARTUP_GRACE): DURATION_SELECTOR,
+            vol.Required(CONF_PROBLEM_DELAY): DURATION_SELECTOR,
+        },
+        collapsed=True,
+    )
     return vol.Schema(fields)
 
 
@@ -864,20 +857,6 @@ class BetterHomeVentilationOptionsFlow(OptionsFlow):
         self._pending: dict[str, Any] = {}
         self._actuator: ActuatorInfo = ActuatorInfo(ActuatorKind.FAN)
 
-    @property
-    def _show_advanced(self) -> bool:
-        """Return True if the `advanced` section is shown.
-
-        SPEC-GAP: the spec shows `advanced` only in advanced mode
-        (`show_advanced_options`). HA 2026.4 passes the user's advanced mode in
-        the flow context; newer HA versions no longer send it and deprecate the
-        property (it always returns True there). The context value is read
-        directly with True as the fallback, which matches HA's own fallback
-        without the deprecation warning.
-        """
-        context = cast(Mapping[str, Any], self.context)
-        return bool(context.get("show_advanced_options", True))
-
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -902,10 +881,8 @@ class BetterHomeVentilationOptionsFlow(OptionsFlow):
             else:
                 self._pending = _without_mapping(merged)
                 self._actuator = info
-                # SPEC-GAP: the spec continues to `actuator_mapping` when the
-                # actuator is changed to a `select` or a `number` with unknown
-                # unit. It is also shown when such an actuator is kept, so its
-                # mapping can be edited (pre-filled with the stored mapping).
+                # Also shown when such an actuator is kept, so its mapping can
+                # be edited (pre-filled with the stored mapping).
                 if info.kind in MAPPING_KINDS:
                     return await self.async_step_actuator_mapping()
                 return self.async_create_entry(
@@ -962,10 +939,7 @@ class BetterHomeVentilationOptionsFlow(OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Change the control parameters."""
-        schema = _control_options_schema(
-            self.config_entry.options[CONF_MAX_FLOW],
-            show_advanced=self._show_advanced,
-        )
+        schema = _control_options_schema(self.config_entry.options[CONF_MAX_FLOW])
         return await self._async_options_form(
             STEP_CONTROL, schema, user_input, _validate_control
         )

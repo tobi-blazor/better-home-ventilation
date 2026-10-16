@@ -56,7 +56,6 @@
     "error": {
       "actuator_in_use": "This actuator is already controlled by another Better Home Ventilation entry.",
       "actuator_not_found": "The actuator entity does not exist.",
-      "away_needs_presence": "Away needs presence entities. Add them in the inputs settings or turn away off.",
       "co2_range": "The CO₂ end must be higher than the CO₂ start.",
       "dryness_overlap": "The dryness threshold plus its hysteresis must be below the humidity-high start.",
       "duplicate_sensor": "A sensor is used both as CO₂ and as humidity sensor.",
@@ -234,7 +233,7 @@
               "away_enabled": "Away limit"
             },
             "data_description": {
-              "away_enabled": "Reduce the flow to the minimum while nobody is home. Needs presence entities. Turning it off disables the away limit in every profile."
+              "away_enabled": "Reduce the flow to the minimum while nobody is home, unless the humidity is high. Without presence entities it has no effect. Turning it off disables the away limit in every profile."
             }
           },
           "shaping": {
