@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from datetime import timedelta
+import inspect
 from typing import Any, ClassVar
 
 from freezegun.api import FrozenDateTimeFactory
-from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.core import HomeAssistant, Service, ServiceCall
 from homeassistant.data_entry_flow import section
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
@@ -109,13 +111,30 @@ class MockUnit:
     )
 
     def __init__(self, hass: HomeAssistant) -> None:
-        """Register the service handlers."""
+        """Register the service handlers.
+
+        Services that already exist (the entity components of the
+        integration's own platforms) are kept for entities with a registry
+        entry: only the stand-in states are simulated.
+        """
         self.hass = hass
         self.calls: list[ServiceCall] = []
         self.ignore: set[str] = set()
         self.fail: set[str] = set()
+        self._originals: dict[tuple[str, str], Service] = {}
         for domain, service in self.SERVICES:
+            if original := hass.services.async_services_for_domain(domain).get(service):
+                self._originals[domain, service] = original
             hass.services.async_register(domain, service, self._handle)
+
+    async def _delegate(self, original: Service, call: ServiceCall) -> None:
+        """Run the original handler of a service (for real entities)."""
+        data = original.schema(dict(call.data)) if original.schema else call.data
+        result = original.job.target(
+            ServiceCall(self.hass, call.domain, call.service, data, call.context)
+        )
+        if inspect.isawaitable(result):
+            await result
 
     def calls_for(self, domain: str, service: str) -> list[ServiceCall]:
         """Return the calls of one service."""
@@ -126,8 +145,19 @@ class MockUnit:
         ]
 
     async def _handle(self, call: ServiceCall) -> None:
-        self.calls.append(call)
         entity_id = call.data["entity_id"]
+        original = self._originals.get((call.domain, call.service))
+        registry_entry = er.async_get(self.hass).async_get(
+            entity_id if isinstance(entity_id, str) else entity_id[0]
+        )
+        if (
+            original is not None
+            and registry_entry is not None
+            and registry_entry.platform == DOMAIN
+        ):
+            await self._delegate(original, call)
+            return
+        self.calls.append(call)
         if entity_id in self.fail:
             raise HomeAssistantError("unit does not answer")
         if entity_id in self.ignore:

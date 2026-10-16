@@ -15,7 +15,7 @@ One device per config entry:
 
 The device has its own identity. It never copies identifiers or connections of the actuator's device: in HA's single-config-entry device model a helper that does so ends up owning a duplicate device (`helpers/helper_integration.py`, `async_remove_helper_devices`). Linking the entities to the unit's device instead is backlog, because a ventilation unit often has dozens of entities and the controller entities would get lost among them.
 
-All entities use `has_entity_name = True`, a `translation_key` and `unique_id = f"{entry_id}_{key}"`. With the device name "Lüftung" the setpoint sensor becomes `sensor.luftung_setpoint` / „Lüftung Sollwert“.
+All entities use `has_entity_name = True`, a `translation_key` and `unique_id = f"{entry_id}_{key}"`. HA derives the entity id from the translated name in the server language (for every language in `homeassistant.generated.languages.NATIVE_ENTITY_IDS`, which includes `en` and `de`; HA 2026.4 and 2026.10): with the device name "Lüftung" and German as server language the setpoint sensor becomes `sensor.luftung_sollwert` / „Lüftung Sollwert“, with English `sensor.luftung_setpoint` / "Lüftung Setpoint".
 
 Entities are `available` as long as the controller runs; they do not become unavailable because an input failed (that is shown in attributes and the problem sensor).
 
@@ -33,8 +33,8 @@ Entities are `available` as long as the controller runs; they do not become unav
 | `control` | switch | 0.1 | – | always | control switch (BHV-03). State kept in the store |
 | `profile` | select | 0.1 | – | always | `balanced`, `air_quality`, `quiet`, `winter` (translated state names, state icons in `icons.json`), BHV-26. State kept in the store |
 | `boost_duration` | select | 0.1 | config | always | `15`, `30`, `60`, `120` min (translated state names); initial value from `boost_default_duration` (nearest option). `RestoreEntity` |
-| `boost_level` | number | 0.1 | config | always | m³/h, `min_flow`…`max_flow`, step `flow_quantum`, mode box. `RestoreNumber` |
-| `pause_duration` | select | 0.1 | config | always | `1h`, `4h`, `8h`, `indefinite` (translated). `RestoreEntity` |
+| `boost_level` | number | 0.1 | config | always | m³/h, `min_flow`…`max_flow`, step `flow_quantum`, mode box. `RestoreNumber`; initial value `boost_default_level`; a restored value outside the current range is clamped |
+| `pause_duration` | select | 0.1 | config | always | `1h`, `4h`, `8h`, `indefinite` (translated). `RestoreEntity`; initial value `1h` (decided 2026-10-16 for M5: a finite pause is the safe default for moisture protection) |
 | `problem` | binary_sensor | 0.1 | diagnostic | always | `device_class` problem, on if any problem persists longer than `problem_delay` |
 | `safety_warning` | binary_sensor | 0.2 | – | at least one `warning_source` subentry | `device_class` safety, on while any warning is active (overridden or not). Attribute `warnings`: list of `{source, headline, severity, overridden, since}` |
 | `safety_override` | switch | 0.2 | – | at least one `warning_source` subentry | on = active warnings are overridden. Turning on = `override_safety()`; turning off = remove overrides (shuts down again if a warning is active). Without an active warning, turning on has no effect and the switch returns to off |
@@ -50,7 +50,9 @@ Rules applied (quality scale `entity-category`, `entity-device-class`, `entity-t
 - **No entity disabled by default:** every created entity is useful in the UI. Revisit if users report noise.
 - `PARALLEL_UPDATES = 0` in every platform (push-based, no polling; buttons/switches only call the controller).
 
-`boost_duration`, `boost_level` and `pause_duration` are the only "parameter" entities. They exist because they are changed in daily use from the dashboard. All other parameters are in the options flow.
+`boost_duration`, `boost_level` and `pause_duration` are the only "parameter" entities. They exist because they are changed in daily use from the dashboard. All other parameters are in the options flow. Their values live in the controller at runtime (not in the store); the restored entity state is the persistence. A restored option that no longer exists falls back to the initial value.
+
+Commands from the buttons, the control switch and the profile select carry `source: button` (the command sources have no separate value for switches and selects).
 
 ### Reasons (`reason` sensor options)
 
@@ -63,7 +65,7 @@ Rules applied (quality scale `entity-category`, `entity-device-class`, `entity-t
 | `mode`, `reason` | as the enum sensors |
 | `profile` | active profile |
 | `target` | flow the active mode asks for, before shaping |
-| `written` | last value written to the unit (flow) and `last_write` (timestamp) |
+| `written`, `last_write` | last value written to the unit (flow) and its time (timestamp) |
 | `actuator_value` | current native actuator value |
 | `contributions` | dict: `minimum`, `co2`, `humidity_high`, `fallback`, `boost`, `shower`, `cooking` (flow or `None`) |
 | `co2_max`, `co2_max_entity` | highest valid CO₂ and its entity |
@@ -72,19 +74,19 @@ Rules applied (quality scale `entity-category`, `entity-device-class`, `entity-t
 | `invalid_inputs` | list of entity ids currently invalid |
 | `write_blocked_by` | `None`, `grace`, `interval`, `deadband`, `disabled`, `not_ready`, `unavailable` |
 | `off_method` | `off_actuator` or `minimum` (only in off modes) |
-| `awaiting_restart` | bool (only in `safety_off`) |
+| `awaiting_restart` | bool (only in `safety_off`; phase 0.2) |
 
 Attributes that change on every evaluation but have no value for history (`actuator_value`, `write_blocked_by`) are excluded from the recorder via `_unrecorded_attributes`.
 
 ### Problem attributes
 
-`problems`: list of `{key, entity_id?, since}`. Keys: `actuator_unavailable`, `not_ready`, `write_failed`, `write_mismatch`, `inputs_invalid`, `no_valid_co2`, `warning_source_unavailable`, `warning_details_failed`, `missing_entity`, `missing_notify_service`.
+`problems`: list of `{key, entity_id?, since}` of the problems that persist longer than `problem_delay` (the ones that turn the sensor on); `entity_id` is omitted for problems without an entity. Keys: `actuator_unavailable`, `not_ready`, `write_failed`, `write_mismatch`, `inputs_invalid`, `no_valid_co2`, `warning_source_unavailable`, `warning_details_failed`, `missing_entity`, `missing_notify_service`.
 
 ## Services
 
 Registered in `async_setup` (not per entry), as required by HA for services of integrations with config entries.
 
-All services take an optional `config_entry_id` (selector `config_entry`, integration `better_home_ventilation`). If omitted and exactly one entry exists, that entry is used; otherwise `ServiceValidationError` (`translation_key: entry_required`).
+All services take an optional `config_entry_id` (selector `config_entry`, integration `better_home_ventilation`). If omitted and exactly one entry exists, that entry is used; otherwise `ServiceValidationError` (`translation_key: entry_required`). Disabled entries do not count. An id that is unknown or belongs to another integration raises `entry_not_found`; an entry that is not loaded raises `entry_not_loaded`.
 
 | Service | Fields | Effect |
 |---|---|---|
@@ -93,7 +95,7 @@ All services take an optional `config_entry_id` (selector `config_entry`, integr
 | `resume` | – | `resume()` |
 | `override_safety` | – | `override_safety()` |
 
-Errors (all `ServiceValidationError` with translations): `entry_required`, `entry_not_loaded`, `level_out_of_range`, `control_disabled` (boost or pause while control is off; the buttons raise the same error), `no_active_warning` (override without warning).
+Errors (all `ServiceValidationError` with translations): `entry_required`, `entry_not_found`, `entry_not_loaded`, `level_out_of_range`, `control_disabled` (boost or pause while control is off; the buttons raise the same error), `no_active_warning` (override without warning).
 
 Services return nothing.
 
@@ -108,9 +110,11 @@ Services return nothing.
 
 `logbook.py` implements `async_describe_events` for `better_home_ventilation_mode_changed`:
 
-- name: device name
-- message (translated): e.g. "switched to boost (button, until 18:30)", "safety shutdown: <headline>", "safety override by user", "back to automatic (timeout)".
+- name: device name (a name given by the user wins), otherwise `name` from the event
+- message (translated): e.g. "switched to Boost (button, until 18:30)", "safety shutdown: <headline>", "safety override by user", "back to Automatic (timeout)". The details are the command source for `trigger: command`, otherwise the trigger; "until" comes from `ends_at` of the event (with the date if it is not the day of the event).
 - `entity_id`: the `mode` sensor, so the entry shows up on the device page.
+
+Translation (decided 2026-10-16 for M5): the logbook has no translation support for descriptions, and the describe callback is synchronous (`homeassistant.components.logbook`, HA 2026.4 and 2026.10; none of the core logbook platforms translates its message). The message is built from the integration's cached backend translations in the server language (`hass.config.language`, English as fallback): sentence templates, sources and triggers from `common` (`logbook_switched_to`, `logbook_back_to`, `logbook_until`, `logbook_source_<source>`, `logbook_trigger_<trigger>`), mode names from the state translations of the `mode` sensor. The text is therefore in the server language, not in each user's frontend language.
 
 The setpoint itself is not logged per write (the history of the `setpoint` sensor covers it).
 

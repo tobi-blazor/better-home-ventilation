@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from homeassistant.core import HomeAssistant
+from homeassistant.setup import async_setup_component
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -69,8 +70,14 @@ def entities(hass: HomeAssistant) -> None:
 
 
 @pytest.fixture
-def unit(hass: HomeAssistant) -> MockUnit:
-    """Register service handlers that stand in for the unit's entities."""
+async def unit(hass: HomeAssistant) -> MockUnit:
+    """Register service handlers that stand in for the unit's entities.
+
+    The entity components of the integration's own platforms are set up first,
+    so their services stay available for the integration's entities.
+    """
+    for domain in ("number", "select", "switch"):
+        assert await async_setup_component(hass, domain, {})
     return MockUnit(hass)
 
 

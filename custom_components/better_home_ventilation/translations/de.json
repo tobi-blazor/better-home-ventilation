@@ -353,6 +353,15 @@
     },
     "level_out_of_range": {
       "message": "Die Boost-Stufe muss zwischen dem minimalen und dem maximalen Volumenstrom liegen."
+    },
+    "entry_required": {
+      "message": "Wähle den Lüftungseintrag (config_entry_id). Er kann nur weggelassen werden, wenn genau ein Eintrag existiert."
+    },
+    "entry_not_found": {
+      "message": "{entry_id} ist kein Better-Home-Ventilation-Eintrag."
+    },
+    "entry_not_loaded": {
+      "message": "{entry_title} ist nicht geladen."
     }
   },
   "selector": {
@@ -374,5 +383,166 @@
         "off": "Aus (z. B. ein Netzschalter)"
       }
     }
+  },
+  "entity": {
+    "binary_sensor": {
+      "problem": {
+        "name": "Problem"
+      }
+    },
+    "button": {
+      "boost": {
+        "name": "Boost"
+      },
+      "pause": {
+        "name": "Pause"
+      },
+      "resume": {
+        "name": "Fortsetzen"
+      }
+    },
+    "number": {
+      "boost_level": {
+        "name": "Boost-Stufe"
+      }
+    },
+    "select": {
+      "profile": {
+        "name": "Profil",
+        "state": {
+          "balanced": "Ausgewogen",
+          "air_quality": "Luftqualität",
+          "quiet": "Leise",
+          "winter": "Winter"
+        }
+      },
+      "boost_duration": {
+        "name": "Boost-Dauer",
+        "state": {
+          "15": "15 Min.",
+          "30": "30 Min.",
+          "60": "1 Std.",
+          "120": "2 Std."
+        }
+      },
+      "pause_duration": {
+        "name": "Pausendauer",
+        "state": {
+          "1h": "1 Std.",
+          "4h": "4 Std.",
+          "8h": "8 Std.",
+          "indefinite": "Bis zur Fortsetzung"
+        }
+      }
+    },
+    "sensor": {
+      "setpoint": {
+        "name": "Sollwert"
+      },
+      "reason": {
+        "name": "Grund",
+        "state": {
+          "minimum": "Minimum",
+          "co2": "CO₂",
+          "humidity_high": "Hohe Luftfeuchte",
+          "dryness_protection": "Trockenheitsschutz",
+          "away": "Abwesend",
+          "quiet_limit": "Ruhegrenze",
+          "fallback": "Ersatzbetrieb",
+          "boost": "Boost",
+          "shower": "Dusche",
+          "cooking": "Kochen",
+          "off": "Aus",
+          "safety_off": "Sicherheitsabschaltung"
+        }
+      },
+      "mode": {
+        "name": "Modus",
+        "state": {
+          "automatic": "Automatik",
+          "fallback": "Ersatzbetrieb",
+          "boost": "Boost",
+          "shower": "Dusche",
+          "cooking": "Kochen",
+          "off": "Aus",
+          "safety_off": "Sicherheitsabschaltung",
+          "disabled": "Regelung aus"
+        }
+      },
+      "ends_at": {
+        "name": "Endet um"
+      }
+    },
+    "switch": {
+      "control": {
+        "name": "Regelung"
+      }
+    }
+  },
+  "services": {
+    "boost": {
+      "name": "Boost",
+      "description": "Erhöht den Volumenstrom für eine Dauer auf eine Stufe. Ein laufender Boost wird verlängert.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Eintrag",
+          "description": "Der Lüftungseintrag. Optional, wenn nur einer existiert."
+        },
+        "duration": {
+          "name": "Dauer",
+          "description": "Dauer in Minuten. Standard: die Entität Boost-Dauer."
+        },
+        "level": {
+          "name": "Stufe",
+          "description": "Volumenstrom zwischen dem minimalen und dem maximalen Volumenstrom. Standard: die Entität Boost-Stufe."
+        }
+      }
+    },
+    "pause": {
+      "name": "Pause",
+      "description": "Hält die Lüftung für eine Dauer oder bis zur Fortsetzung an.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Eintrag",
+          "description": "Der Lüftungseintrag. Optional, wenn nur einer existiert."
+        },
+        "duration": {
+          "name": "Dauer",
+          "description": "Dauer in Minuten. Ohne Dauer dauert die Pause bis zur Fortsetzung."
+        }
+      }
+    },
+    "resume": {
+      "name": "Fortsetzen",
+      "description": "Beendet einen Boost oder eine Pause und kehrt zur automatischen Regelung zurück.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Eintrag",
+          "description": "Der Lüftungseintrag. Optional, wenn nur einer existiert."
+        }
+      }
+    }
+  },
+  "common": {
+    "logbook_switched_to": "auf {mode} umgeschaltet ({details})",
+    "logbook_back_to": "zurück zu {mode} ({details})",
+    "logbook_until": "bis {time}",
+    "logbook_source_button": "Taste",
+    "logbook_source_service": "Aktion",
+    "logbook_source_voice": "Sprache",
+    "logbook_source_notification": "Benachrichtigung",
+    "logbook_source_external": "am Gerät",
+    "logbook_trigger_startup": "Start",
+    "logbook_trigger_command": "Befehl",
+    "logbook_trigger_timeout": "Zeit abgelaufen",
+    "logbook_trigger_timeout_while_offline": "offline abgelaufen",
+    "logbook_trigger_warning": "Warnung",
+    "logbook_trigger_warning_ended": "Warnung beendet",
+    "logbook_trigger_override": "übersteuert",
+    "logbook_trigger_detector_start": "erkannt",
+    "logbook_trigger_detector_end": "Erkennung beendet",
+    "logbook_trigger_inputs_lost": "Eingänge verloren",
+    "logbook_trigger_inputs_restored": "Eingänge wieder gültig",
+    "logbook_trigger_control_switch": "Regelungsschalter"
   }
 }

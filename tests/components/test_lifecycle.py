@@ -8,9 +8,11 @@ from freezegun.api import FrozenDateTimeFactory
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
+from homeassistant.setup import async_setup_component
 from homeassistant.util.async_ import get_scheduled_timer_handles
 import pytest
 
+from custom_components.better_home_ventilation import PLATFORMS
 from custom_components.better_home_ventilation.const import (
     CONF_CO2_SENSORS,
     CONF_ENTITY_ID,
@@ -143,6 +145,9 @@ async def test_c6_unload_removes_listeners_and_timers(
     hass: HomeAssistant, unit: MockUnit, freezer: FrozenDateTimeFactory
 ) -> None:
     """Unload cancels subscriptions, debounce, scheduled and verification timers."""
+    # The entity components stay loaded after an unload; set them up first.
+    for platform in PLATFORMS:
+        assert await async_setup_component(hass, platform, {})
     listeners_before = hass.bus.async_listeners()
     handles_before = _active_handles(hass)
     entry = await setup_entry(hass)

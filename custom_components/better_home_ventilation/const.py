@@ -72,6 +72,37 @@ MODEL: Final = "Demand controller"
 EVENT_MODE_CHANGED: Final = ENGINE_EVENT_MODE_CHANGED
 EVENT_READINESS_CORRECTED: Final = "better_home_ventilation_readiness_corrected"
 
+# --- Entities (docs/spec/04-interface.md#entities) --------------------------
+#: Keys of the 0.1 entities per platform; ``unique_id = f"{entry_id}_{key}"``.
+ENTITY_KEYS: Final[dict[str, tuple[str, ...]]] = {
+    "binary_sensor": ("problem",),
+    "button": ("boost", "pause", "resume"),
+    "number": ("boost_level",),
+    "select": ("profile", "boost_duration", "pause_duration"),
+    "sensor": ("setpoint", "reason", "mode", "ends_at"),
+    "switch": ("control",),
+}
+
+#: Options of the ``boost_duration`` select (minutes).
+BOOST_DURATION_OPTIONS: Final = ("15", "30", "60", "120")
+#: Options of the ``pause_duration`` select and their duration in hours.
+PAUSE_DURATION_HOURS: Final[dict[str, int | None]] = {
+    "1h": 1,
+    "4h": 4,
+    "8h": 8,
+    "indefinite": None,
+}
+#: Initial option of the ``pause_duration`` select.
+PAUSE_DURATION_DEFAULT: Final = "1h"
+
+# --- Services (docs/spec/04-interface.md#services) ----------------------------
+SERVICE_BOOST: Final = "boost"
+SERVICE_PAUSE: Final = "pause"
+SERVICE_RESUME: Final = "resume"
+ATTR_CONFIG_ENTRY_ID: Final = "config_entry_id"
+ATTR_DURATION: Final = "duration"
+ATTR_LEVEL: Final = "level"
+
 # --- Config subentries (docs/spec/01-configuration.md) -----------------------
 SUBENTRY_READINESS_CONDITION: Final = "readiness_condition"
 
@@ -84,6 +115,10 @@ __all__ = [
     "ACTUATOR_UNITS",
     "ACTUATOR_UNIT_FLOW",
     "ACTUATOR_UNIT_PERCENT",
+    "ATTR_CONFIG_ENTRY_ID",
+    "ATTR_DURATION",
+    "ATTR_LEVEL",
+    "BOOST_DURATION_OPTIONS",
     "CONF_ACTUATOR",
     "CONF_ACTUATOR_MAX",
     "CONF_ACTUATOR_MIN",
@@ -131,6 +166,7 @@ __all__ = [
     "DEFAULTS",
     "DEFAULT_NAME",
     "DOMAIN",
+    "ENTITY_KEYS",
     "EVENT_MODE_CHANGED",
     "EVENT_READINESS_CORRECTED",
     "MANUFACTURER",
@@ -138,6 +174,11 @@ __all__ = [
     "OFF_STATES",
     "OFF_STATE_OFF",
     "OFF_STATE_ON",
+    "PAUSE_DURATION_DEFAULT",
+    "PAUSE_DURATION_HOURS",
+    "SERVICE_BOOST",
+    "SERVICE_PAUSE",
+    "SERVICE_RESUME",
     "SUBENTRY_READINESS_CONDITION",
     "defaults_for_max_flow",
 ]
