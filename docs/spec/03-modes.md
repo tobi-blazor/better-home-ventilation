@@ -241,7 +241,7 @@ One rule for all off states (`off`, `safety_off`):
   - expired `Boost`/`Pause`/`AutoBoost`/`RestartPending` are ended with trigger `timeout_while_offline` (logged once).
   - `safety.active` is **not** trusted: it is rebuilt from the current warning source states after startup. `overridden` incident keys are kept only if an active warning with the same incident key exists again after startup.
   - If the store is missing (first start): start with defaults, nothing else.
-  - If the store is corrupt or has an unknown future version: start with defaults, log a warning, raise repair issue `state_reset`.
+  - If the store is corrupt or has an unknown future version: start with defaults, log a warning, raise repair issue `state_reset`. "Corrupt" means content that cannot be read as a controller state; a file that is not valid JSON is handled by `Store` itself (renamed to `*.corrupt.<time>`, core repair `storage_corruption`, loaded as missing), and a future major version raises `UnsupportedStorageVersionError` (HA core `helpers/storage.py`, checked on 2026.4.0 and 2026.10.1).
 - Migration: `Store` with `minor_version`; any format change bumps the version and adds a migration function with a test.
 
 ## Mode change events
