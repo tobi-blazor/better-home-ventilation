@@ -1,3 +1,378 @@
 {
-  "title": "Better Home Ventilation"
+  "title": "Better Home Ventilation",
+  "config": {
+    "abort": {
+      "already_configured": "Dieser Aktor wird bereits von einem anderen Better-Home-Ventilation-Eintrag gesteuert."
+    },
+    "error": {
+      "actuator_not_found": "Die Aktor-Entität existiert nicht.",
+      "duplicate_sensor": "Ein Sensor ist sowohl als CO₂- als auch als Feuchtesensor ausgewählt.",
+      "max_flow_required": "Bitte den maximalen Volumenstrom eingeben. Er kann nur aus dem Aktor übernommen werden, wenn dieser eine Zahl-Entität in m³/h mit einem Maximum zwischen 10 und 2000 ist.",
+      "no_inputs": "Bitte mindestens einen CO₂- oder Feuchtesensor auswählen.",
+      "select_mapping": "Bitte für mindestens zwei Optionen einen Volumenstrom eingeben, jeweils mit unterschiedlichem Wert.",
+      "select_options": "Die Auswahl-Entität braucht mindestens zwei Optionen.",
+      "sensor_not_found": "Mindestens einer der ausgewählten Sensoren existiert nicht."
+    },
+    "step": {
+      "user": {
+        "title": "Lüftungssteuerung erstellen",
+        "description": "Steuert ein zentrales Lüftungsgerät anhand von CO₂- und Feuchtesensoren in den Räumen. Wähle die Entität, die den Volumenstrom des Geräts einstellt; alles Weitere lässt sich später in den Optionen ändern.",
+        "data": {
+          "name": "Name",
+          "actuator": "Aktor",
+          "max_flow": "Maximaler Volumenstrom"
+        },
+        "data_description": {
+          "name": "Name des Lüftungsgeräts, verwendet für das Gerät und seine Entitäten.",
+          "actuator": "Die Entität, die den Volumenstrom des Geräts einstellt: eine Zahl (m³/h oder %), ein Ventilator (Prozent) oder eine Auswahl (Stufen).",
+          "max_flow": "Nenn-Maximalvolumenstrom des Geräts in m³/h. Leer lassen, um das Maximum des Aktors zu übernehmen, wenn er eine Zahl-Entität in m³/h ist. Daraus werden die Standardwerte für Mindest-, Ersatz-, Ruhe- und Boost-Volumenstrom berechnet."
+        }
+      },
+      "actuator": {
+        "title": "Aktor-Zuordnung",
+        "description": "Lege fest, wie die Werte des Aktors mit dem Volumenstrom zusammenhängen.",
+        "data": {
+          "actuator_unit": "Einheit des Aktors"
+        },
+        "data_description": {
+          "actuator_unit": "Ob die Zahl-Entität einen Volumenstrom in m³/h oder einen Prozentsatz des maximalen Volumenstroms erwartet."
+        }
+      },
+      "inputs": {
+        "title": "Raumsensoren",
+        "description": "Wähle die Sensoren in den Räumen, in denen sich Menschen aufhalten. Mindestens ein CO₂- oder Feuchtesensor ist nötig.",
+        "data": {
+          "co2_sensors": "CO₂-Sensoren",
+          "humidity_sensors": "Feuchtesensoren"
+        },
+        "data_description": {
+          "co2_sensors": "CO₂-Sensoren in Wohn- und Schlafräumen. Der höchste gültige Wert bestimmt den CO₂-Bedarf.",
+          "humidity_sensors": "Nur Feuchtesensoren in Wohn- und Schlafräumen: keine Bäder, keine Räume mit Luftbefeuchter und kein Sensor im Abluftkanal."
+        }
+      }
+    }
+  },
+  "options": {
+    "error": {
+      "actuator_in_use": "Dieser Aktor wird bereits von einem anderen Better-Home-Ventilation-Eintrag gesteuert.",
+      "actuator_not_found": "Die Aktor-Entität existiert nicht.",
+      "co2_range": "Das CO₂-Ende muss höher als der CO₂-Beginn sein.",
+      "dryness_overlap": "Die Trockenheitsschwelle plus Hysterese muss unter dem Beginn der Feuchte-Rampe liegen.",
+      "duplicate_sensor": "Ein Sensor ist sowohl als CO₂- als auch als Feuchtesensor ausgewählt.",
+      "fallback_range": "Der Ersatz-Volumenstrom muss zwischen Mindest- und maximalem Volumenstrom liegen.",
+      "humidity_range": "Das Ende der Feuchte-Rampe muss höher als ihr Beginn sein.",
+      "level_range": "Die Boost-Stufe muss zwischen Mindest- und maximalem Volumenstrom liegen.",
+      "night_window": "Das Nachtfenster darf nicht zur selben Uhrzeit beginnen und enden.",
+      "no_inputs": "Bitte mindestens einen CO₂- oder Feuchtesensor auswählen.",
+      "quiet_range": "Der Ruhe-Volumenstrom muss zwischen Mindest- und maximalem Volumenstrom liegen.",
+      "select_mapping": "Bitte für mindestens zwei Optionen einen Volumenstrom eingeben, jeweils mit unterschiedlichem Wert.",
+      "select_options": "Die Auswahl-Entität braucht mindestens zwei Optionen.",
+      "sensor_not_found": "Mindestens einer der ausgewählten Sensoren existiert nicht."
+    },
+    "step": {
+      "init": {
+        "title": "Lüftungseinstellungen",
+        "description": "Wähle, welche Einstellungen du ändern möchtest. Beim Speichern werden sie sofort übernommen.",
+        "menu_options": {
+          "actuator": "Aktor",
+          "inputs": "Eingänge",
+          "control": "Regelung",
+          "boosts": "Boost"
+        },
+        "menu_option_descriptions": {
+          "actuator": "Aktor-Entität, maximaler Volumenstrom, Aus-Aktor und Wertebereich.",
+          "inputs": "CO₂- und Feuchtesensoren der Räume sowie Anwesenheits-Entitäten.",
+          "control": "CO₂- und Feuchte-Rampen, Volumenströme, Ruhe- und Abwesenheitsbegrenzung und wie ruhig das Gerät läuft.",
+          "boosts": "Standarddauer und -stufe eines manuellen Boosts."
+        }
+      },
+      "actuator": {
+        "title": "Aktor",
+        "description": "Die Volumenströme wurden beim Anlegen aus dem maximalen Volumenstrom berechnet und ändern sich nicht mit ihm (maximal {max_flow} m³/h, Minimum {min_flow} m³/h, Ersatz {fallback_flow} m³/h, Ruhebegrenzung {quiet_max_flow} m³/h, Boost {boost_default_level} m³/h). Passe sie bei Bedarf unter Regelung und Boost an.",
+        "data": {
+          "actuator": "Aktor",
+          "max_flow": "Maximaler Volumenstrom"
+        },
+        "data_description": {
+          "actuator": "Die Entität, die den Volumenstrom des Geräts einstellt: eine Zahl (m³/h oder %), ein Ventilator (Prozent) oder eine Auswahl (Stufen).",
+          "max_flow": "Nenn-Maximalvolumenstrom des Geräts in m³/h."
+        },
+        "sections": {
+          "off": {
+            "name": "Aus-Aktor",
+            "description": "Optionale Entität, die das Gerät stoppt. Ohne sie bedeutet Aus den niedrigsten Aktorwert.",
+            "data": {
+              "off_entity": "Aus-Aktor",
+              "off_state": "Gerät gestoppt bei"
+            },
+            "data_description": {
+              "off_entity": "Ein Schalter oder Eingabe-Boolean, der das Gerät stoppt (z. B. ein Standby-Schalter), oder ein Ventilator, der ausgeschaltet wird.",
+              "off_state": "Welcher Zustand des Aus-Aktors bedeutet, dass das Gerät steht. Ein Standby-Schalter stoppt das Gerät, wenn er an ist. Wird bei einem Ventilator ignoriert."
+            }
+          },
+          "range": {
+            "name": "Wertebereich",
+            "description": "Minimal- und Maximalwert des Aktors überschreiben. Leer lassen, um die Grenzen der Entität zu verwenden.",
+            "data": {
+              "actuator_min": "Aktor-Minimum",
+              "actuator_max": "Aktor-Maximum"
+            },
+            "data_description": {
+              "actuator_min": "Niedrigster Wert, der an den Aktor geschrieben wird, in seiner eigenen Einheit.",
+              "actuator_max": "Höchster Wert, der an den Aktor geschrieben wird, in seiner eigenen Einheit."
+            }
+          }
+        }
+      },
+      "actuator_mapping": {
+        "title": "Aktor-Zuordnung",
+        "description": "Lege fest, wie die Werte des Aktors mit dem Volumenstrom zusammenhängen.",
+        "data": {
+          "actuator_unit": "Einheit des Aktors"
+        },
+        "data_description": {
+          "actuator_unit": "Ob die Zahl-Entität einen Volumenstrom in m³/h oder einen Prozentsatz des maximalen Volumenstroms erwartet."
+        }
+      },
+      "inputs": {
+        "title": "Eingänge",
+        "description": "Sensoren und Entitäten, aus denen der Bedarf berechnet wird.",
+        "sections": {
+          "rooms": {
+            "name": "Raumsensoren",
+            "description": "Sensoren in den Räumen, in denen sich Menschen aufhalten. Mindestens ein CO₂- oder Feuchtesensor ist nötig.",
+            "data": {
+              "co2_sensors": "CO₂-Sensoren",
+              "humidity_sensors": "Feuchtesensoren"
+            },
+            "data_description": {
+              "co2_sensors": "CO₂-Sensoren in Wohn- und Schlafräumen. Der höchste gültige Wert bestimmt den CO₂-Bedarf.",
+              "humidity_sensors": "Nur Feuchtesensoren in Wohn- und Schlafräumen: keine Bäder, keine Räume mit Luftbefeuchter und kein Sensor im Abluftkanal."
+            }
+          },
+          "presence": {
+            "name": "Anwesenheit",
+            "description": "Entitäten, die anzeigen, ob jemand zu Hause ist; genutzt für die Abwesenheitsbegrenzung.",
+            "data": {
+              "presence_entities": "Anwesenheits-Entitäten"
+            },
+            "data_description": {
+              "presence_entities": "Personen, Geräte-Tracker, Zonen, binäre Sensoren oder Eingabe-Booleans. Abwesend heißt, dass keine davon zu Hause meldet; nicht verfügbare oder unbekannte Entitäten zählen als zu Hause."
+            }
+          }
+        }
+      },
+      "control": {
+        "title": "Regelung",
+        "description": "Wie aus den Raummesswerten ein Volumenstrom wird.",
+        "sections": {
+          "co2": {
+            "name": "CO₂-Rampe",
+            "description": "Der Volumenstrom steigt linear vom Mindestvolumenstrom beim Beginn bis zum maximalen Volumenstrom beim Ende, anhand des höchsten gültigen CO₂-Werts.",
+            "data": {
+              "co2_start": "CO₂-Beginn",
+              "co2_end": "CO₂-Ende"
+            },
+            "data_description": {
+              "co2_start": "CO₂-Wert, ab dem der Volumenstrom über den Mindestvolumenstrom steigt.",
+              "co2_end": "CO₂-Wert, bei dem der maximale Volumenstrom erreicht wird."
+            }
+          },
+          "flows": {
+            "name": "Volumenströme",
+            "description": "Grundwerte der automatischen Regelung.",
+            "data": {
+              "min_flow": "Mindestvolumenstrom",
+              "fallback_flow": "Ersatz-Volumenstrom"
+            },
+            "data_description": {
+              "min_flow": "Niedrigster Volumenstrom im Automatikbetrieb; hält einen Grundluftwechsel zum Feuchteschutz.",
+              "fallback_flow": "Volumenstrom, wenn CO₂-Sensoren eingerichtet sind, aber keiner einen gültigen Wert liefert."
+            }
+          },
+          "humidity": {
+            "name": "Feuchte",
+            "description": "Feuchte-Rampe und Trockenheitsschutz, anhand der Feuchtesensoren der Wohnräume.",
+            "data": {
+              "humidity_high_start": "Beginn Feuchte-Rampe",
+              "humidity_high_end": "Ende Feuchte-Rampe",
+              "dryness_threshold": "Trockenheitsschwelle",
+              "dryness_hysteresis": "Trockenheits-Hysterese",
+              "dryness_humidity_high_limit": "Feuchte-Rampe bei Trockenheit"
+            },
+            "data_description": {
+              "humidity_high_start": "Höchste Raumfeuchte, ab der der Volumenstrom über den Mindestvolumenstrom steigt.",
+              "humidity_high_end": "Höchste Raumfeuchte, bei der der maximale Volumenstrom erreicht wird.",
+              "dryness_threshold": "Liegt die mittlere Raumfeuchte darunter, gilt die Luft als trocken und der Volumenstrom wird auf den CO₂-Bedarf begrenzt.",
+              "dryness_hysteresis": "Trocken endet erst, wenn die mittlere Feuchte um diesen Wert über der Schwelle liegt, damit der Zustand nicht hin- und herspringt.",
+              "dryness_humidity_high_limit": "Wie lange die Feuchte-Rampe bei trockener Luft über dem CO₂-Bedarf liegen darf. 0 unterdrückt sie bei Trockenheit ganz."
+            }
+          },
+          "quiet": {
+            "name": "Ruhebegrenzung",
+            "description": "Begrenzt den Volumenstrom im Nachtfenster für wenig Geräusch. Das Profil Ruhe wendet sie den ganzen Tag an.",
+            "data": {
+              "night_enabled": "Ruhebegrenzung nachts",
+              "night_start": "Beginn der Nacht",
+              "night_end": "Ende der Nacht",
+              "quiet_max_flow": "Ruhe-Volumenstrom",
+              "quiet_humidity_override": "Feuchte-Ausnahme"
+            },
+            "data_description": {
+              "night_enabled": "Ruhebegrenzung im Nachtfenster anwenden. Das Profil Ruhe wendet sie unabhängig davon den ganzen Tag an.",
+              "night_start": "Beginn des Nachtfensters.",
+              "night_end": "Ende des Nachtfensters; es darf am nächsten Tag liegen.",
+              "quiet_max_flow": "Höchster Volumenstrom, solange die Ruhebegrenzung gilt. Boosts von Nutzern werden nicht begrenzt.",
+              "quiet_humidity_override": "Über dieser höchsten Raumfeuchte gilt die Ruhebegrenzung nicht."
+            }
+          },
+          "away": {
+            "name": "Abwesenheit",
+            "description": "Mindestvolumenstrom, solange niemand zu Hause ist, außer bei hoher Feuchte.",
+            "data": {
+              "away_enabled": "Abwesenheitsbegrenzung"
+            },
+            "data_description": {
+              "away_enabled": "Den Volumenstrom auf das Minimum senken, solange niemand zu Hause ist, außer bei hoher Feuchte. Ohne Anwesenheits-Entitäten hat es keine Wirkung. Ausgeschaltet gilt die Abwesenheitsbegrenzung in keinem Profil."
+            }
+          },
+          "shaping": {
+            "name": "Ausgangsglättung",
+            "description": "Wie ruhig das Gerät läuft: wie oft und wie stark sich der geschriebene Volumenstrom ändern darf.",
+            "data": {
+              "min_write_interval": "Mindestabstand zwischen Änderungen",
+              "max_step_up": "Größter Schritt nach oben",
+              "max_step_down": "Größter Schritt nach unten",
+              "deadband_up": "Totband nach oben",
+              "deadband_down": "Totband nach unten",
+              "flow_quantum": "Rasterung"
+            },
+            "data_description": {
+              "min_write_interval": "Mindestzeit zwischen zwei Änderungen des Volumenstroms. Mit dem Standardwert ändert er sich höchstens alle 5 Minuten. Boost und Pause wirken sofort.",
+              "max_step_up": "Größte Erhöhung pro Änderung. Mit dem Standardwert (12,5 % des maximalen Volumenstroms, 50 m³/h bei einem 400-m³/h-Gerät) steigt der Volumenstrom in Schritten von 50 m³/h.",
+              "max_step_down": "Größte Absenkung pro Änderung. Mit dem Standardwert (12,5 % des maximalen Volumenstroms, 50 m³/h bei einem 400-m³/h-Gerät) sinkt der Volumenstrom in Schritten von 50 m³/h.",
+              "deadband_up": "Der Volumenstrom wird nur erhöht, wenn das Ziel mindestens so viel über dem geschriebenen Wert liegt. Mit dem Standardwert werden Änderungen unter 10 m³/h ignoriert.",
+              "deadband_down": "Der Volumenstrom wird nur gesenkt, wenn das Ziel mindestens so viel unter dem geschriebenen Wert liegt. Mit dem Standardwert werden Absenkungen unter 20 m³/h ignoriert, damit das Gerät nicht pendelt.",
+              "flow_quantum": "Geschriebene Volumenströme werden auf Vielfache dieses Werts gerundet. Mit dem Standardwert auf 5 m³/h."
+            }
+          },
+          "advanced": {
+            "name": "Erweitert",
+            "description": "Technische Zeitparameter. Die Standardwerte passen für die meisten Installationen.",
+            "data": {
+              "evaluation_interval": "Auswertungsintervall",
+              "debounce": "Entprellzeit",
+              "stale_timeout": "Veraltet nach",
+              "startup_grace": "Wartezeit nach dem Start",
+              "problem_delay": "Verzögerung für Probleme"
+            },
+            "data_description": {
+              "evaluation_interval": "Die Regelung wird mindestens so oft ausgewertet, zusätzlich bei jeder Änderung eines Eingangs.",
+              "debounce": "Änderungen von Eingängen innerhalb dieser Zeit werden gemeinsam ausgewertet.",
+              "stale_timeout": "Ein Eingang, der so lange keinen Wert gemeldet hat, wird ignoriert.",
+              "startup_grace": "Nach dem Start von Home Assistant wird so lange nichts geschrieben, damit alle Eingänge laden können.",
+              "problem_delay": "Wie lange ein Problem bestehen muss, bevor der Problem-Sensor einschaltet."
+            }
+          }
+        }
+      },
+      "boosts": {
+        "title": "Boost",
+        "description": "Standardwerte für manuelle Boosts über Dashboard, Aktionen und Sprache.",
+        "sections": {
+          "manual": {
+            "name": "Manueller Boost",
+            "description": "Ein Boost erhöht den Volumenstrom für eine Dauer auf eine Stufe. Erneutes Auslösen verlängert ihn.",
+            "data": {
+              "boost_default_duration": "Standarddauer",
+              "boost_default_level": "Standardstufe",
+              "boost_max_duration": "Höchstdauer"
+            },
+            "data_description": {
+              "boost_default_duration": "Dauer eines Boosts, wenn keine angegeben ist.",
+              "boost_default_level": "Volumenstrom eines Boosts, wenn keine Stufe angegeben ist. Ist der automatische Bedarf höher, gilt dieser.",
+              "boost_max_duration": "Durch Verlängern dauert ein Boost nie länger als diese Zeit ab jetzt."
+            }
+          }
+        }
+      }
+    }
+  },
+  "config_subentries": {
+    "readiness_condition": {
+      "entry_type": "Bereitschaftsbedingung",
+      "initiate_flow": {
+        "user": "Bereitschaftsbedingung hinzufügen",
+        "reconfigure": "Bereitschaftsbedingung ändern"
+      },
+      "abort": {
+        "already_configured": "Für diese Entität gibt es bereits eine Bereitschaftsbedingung."
+      },
+      "error": {
+        "not_correctable": "Der Zustand dieser Entität kann nicht gesetzt werden, daher ist keine automatische Korrektur möglich."
+      },
+      "step": {
+        "user": {
+          "title": "Bereitschaftsbedingung hinzufügen",
+          "description": "Ein Entitätszustand, den das Gerät braucht, damit Schreibvorgänge auf den Aktor wirken, z. B. ein Steuermodus. Solange er nicht erfüllt ist, wird nicht geschrieben und ein Problem gemeldet.",
+          "data": {
+            "entity_id": "Entität"
+          },
+          "data_description": {
+            "entity_id": "Die Entität, deren Zustand passen muss, z. B. die Auswahl für den Steuermodus des Geräts."
+          }
+        },
+        "reconfigure": {
+          "title": "Bereitschaftsbedingung ändern",
+          "description": "Ein Entitätszustand, den das Gerät braucht, damit Schreibvorgänge auf den Aktor wirken, z. B. ein Steuermodus. Solange er nicht erfüllt ist, wird nicht geschrieben und ein Problem gemeldet.",
+          "data": {
+            "entity_id": "Entität"
+          },
+          "data_description": {
+            "entity_id": "Die Entität, deren Zustand passen muss, z. B. die Auswahl für den Steuermodus des Geräts."
+          }
+        },
+        "state": {
+          "title": "Erwarteter Zustand",
+          "description": "Welchen Zustand von {entity} das Gerät braucht.",
+          "data": {
+            "expected_state": "Erwarteter Zustand",
+            "auto_correct": "Automatisch korrigieren"
+          },
+          "data_description": {
+            "expected_state": "Auf den Aktor wird nur geschrieben, solange die Entität diesen Zustand hat.",
+            "auto_correct": "Die Entität vor dem Schreiben auf den erwarteten Zustand setzen, wenn sie abweicht. Nur für Entitäten möglich, deren Zustand gesetzt werden kann."
+          }
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "control_disabled": {
+      "message": "Die Regelung ist ausgeschaltet. Schalte sie ein, um die Lüftung zu verstärken oder zu pausieren."
+    },
+    "level_out_of_range": {
+      "message": "Die Boost-Stufe muss zwischen dem minimalen und dem maximalen Volumenstrom liegen."
+    }
+  },
+  "selector": {
+    "actuator_unit": {
+      "options": {
+        "flow": "Volumenstrom (m³/h)",
+        "percent": "Prozent des maximalen Volumenstroms (%)"
+      }
+    },
+    "binary_state": {
+      "options": {
+        "on": "An",
+        "off": "Aus"
+      }
+    },
+    "off_state": {
+      "options": {
+        "on": "An (z. B. ein Standby-Schalter)",
+        "off": "Aus (z. B. ein Netzschalter)"
+      }
+    }
+  }
 }

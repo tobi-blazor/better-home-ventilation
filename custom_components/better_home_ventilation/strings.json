@@ -1,3 +1,378 @@
 {
-  "title": "Better Home Ventilation"
+  "title": "Better Home Ventilation",
+  "config": {
+    "abort": {
+      "already_configured": "This actuator is already controlled by another Better Home Ventilation entry."
+    },
+    "error": {
+      "actuator_not_found": "The actuator entity does not exist.",
+      "duplicate_sensor": "A sensor is used both as CO₂ and as humidity sensor.",
+      "max_flow_required": "Enter the max flow. It can only be taken from the actuator if it is a number entity in m³/h with a maximum between 10 and 2000.",
+      "no_inputs": "Select at least one CO₂ or humidity sensor.",
+      "select_mapping": "Enter a flow for at least two options, each with a different flow.",
+      "select_options": "The select entity needs at least two options.",
+      "sensor_not_found": "At least one of the selected sensors does not exist."
+    },
+    "step": {
+      "user": {
+        "title": "Create ventilation control",
+        "description": "Controls one central ventilation unit from room CO₂ and humidity sensors. Choose the entity that sets the unit's flow; everything else can be changed later in the options.",
+        "data": {
+          "name": "Name",
+          "actuator": "Actuator",
+          "max_flow": "Max flow"
+        },
+        "data_description": {
+          "name": "Name of the ventilation unit, used for the device and its entities.",
+          "actuator": "The entity that sets the unit's flow: a number (m³/h or %), a fan (percentage) or a select (stages).",
+          "max_flow": "Nominal maximum flow of the unit in m³/h. Leave empty to use the actuator's maximum if it is a number entity in m³/h. Default flows (minimum, fallback, quiet limit, boost) are calculated from it."
+        }
+      },
+      "actuator": {
+        "title": "Actuator mapping",
+        "description": "Tell the integration how the actuator's values relate to the flow.",
+        "data": {
+          "actuator_unit": "Actuator unit"
+        },
+        "data_description": {
+          "actuator_unit": "Whether the number entity takes a flow in m³/h or a percentage of the max flow."
+        }
+      },
+      "inputs": {
+        "title": "Room sensors",
+        "description": "Select the sensors in the rooms where people are. At least one CO₂ or humidity sensor is needed.",
+        "data": {
+          "co2_sensors": "CO₂ sensors",
+          "humidity_sensors": "Humidity sensors"
+        },
+        "data_description": {
+          "co2_sensors": "CO₂ sensors in living and sleeping rooms. The highest valid value drives the CO₂ demand.",
+          "humidity_sensors": "Humidity sensors in living and sleeping rooms only: no bathrooms, no rooms with a humidifier and no sensor in the extract duct."
+        }
+      }
+    }
+  },
+  "options": {
+    "error": {
+      "actuator_in_use": "This actuator is already controlled by another Better Home Ventilation entry.",
+      "actuator_not_found": "The actuator entity does not exist.",
+      "co2_range": "The CO₂ end must be higher than the CO₂ start.",
+      "dryness_overlap": "The dryness threshold plus its hysteresis must be below the humidity-high start.",
+      "duplicate_sensor": "A sensor is used both as CO₂ and as humidity sensor.",
+      "fallback_range": "The fallback flow must be between the minimum flow and the max flow.",
+      "humidity_range": "The humidity-high end must be higher than the humidity-high start.",
+      "level_range": "The boost level must be between the minimum flow and the max flow.",
+      "night_window": "The night window must not start and end at the same time.",
+      "no_inputs": "Select at least one CO₂ or humidity sensor.",
+      "quiet_range": "The quiet max flow must be between the minimum flow and the max flow.",
+      "select_mapping": "Enter a flow for at least two options, each with a different flow.",
+      "select_options": "The select entity needs at least two options.",
+      "sensor_not_found": "At least one of the selected sensors does not exist."
+    },
+    "step": {
+      "init": {
+        "title": "Ventilation settings",
+        "description": "Choose which settings to change. Saving applies them right away.",
+        "menu_options": {
+          "actuator": "Actuator",
+          "inputs": "Inputs",
+          "control": "Control",
+          "boosts": "Boosts"
+        },
+        "menu_option_descriptions": {
+          "actuator": "Actuator entity, max flow, off actuator and the native range.",
+          "inputs": "Room CO₂ and humidity sensors and presence entities.",
+          "control": "CO₂ and humidity ramps, flows, quiet and away limits and how calmly the unit runs.",
+          "boosts": "Default duration and level of a manual boost."
+        }
+      },
+      "actuator": {
+        "title": "Actuator",
+        "description": "Flow values were calculated from the max flow when the entry was created and do not follow a change of it (max flow {max_flow} m³/h, minimum {min_flow} m³/h, fallback {fallback_flow} m³/h, quiet limit {quiet_max_flow} m³/h, boost {boost_default_level} m³/h). Adjust them in the control and boost settings if needed.",
+        "data": {
+          "actuator": "Actuator",
+          "max_flow": "Max flow"
+        },
+        "data_description": {
+          "actuator": "The entity that sets the unit's flow: a number (m³/h or %), a fan (percentage) or a select (stages).",
+          "max_flow": "Nominal maximum flow of the unit in m³/h."
+        },
+        "sections": {
+          "off": {
+            "name": "Off actuator",
+            "description": "Optional entity that stops the unit. Without it, off means the lowest actuator value.",
+            "data": {
+              "off_entity": "Off actuator",
+              "off_state": "Unit stopped when"
+            },
+            "data_description": {
+              "off_entity": "A switch or input boolean that stops the unit (e.g. a standby switch), or a fan that is turned off.",
+              "off_state": "Which state of the off actuator means the unit is stopped. A standby switch stops the unit when it is on. Ignored for a fan."
+            }
+          },
+          "range": {
+            "name": "Native range",
+            "description": "Override the minimum and maximum value of the actuator. Leave empty to use the entity's own limits.",
+            "data": {
+              "actuator_min": "Actuator minimum",
+              "actuator_max": "Actuator maximum"
+            },
+            "data_description": {
+              "actuator_min": "Lowest value written to the actuator, in its own unit.",
+              "actuator_max": "Highest value written to the actuator, in its own unit."
+            }
+          }
+        }
+      },
+      "actuator_mapping": {
+        "title": "Actuator mapping",
+        "description": "Tell the integration how the actuator's values relate to the flow.",
+        "data": {
+          "actuator_unit": "Actuator unit"
+        },
+        "data_description": {
+          "actuator_unit": "Whether the number entity takes a flow in m³/h or a percentage of the max flow."
+        }
+      },
+      "inputs": {
+        "title": "Inputs",
+        "description": "Sensors and entities the demand is calculated from.",
+        "sections": {
+          "rooms": {
+            "name": "Room sensors",
+            "description": "Sensors in the rooms where people are. At least one CO₂ or humidity sensor is needed.",
+            "data": {
+              "co2_sensors": "CO₂ sensors",
+              "humidity_sensors": "Humidity sensors"
+            },
+            "data_description": {
+              "co2_sensors": "CO₂ sensors in living and sleeping rooms. The highest valid value drives the CO₂ demand.",
+              "humidity_sensors": "Humidity sensors in living and sleeping rooms only: no bathrooms, no rooms with a humidifier and no sensor in the extract duct."
+            }
+          },
+          "presence": {
+            "name": "Presence",
+            "description": "Entities that tell whether someone is home, used by the away limit.",
+            "data": {
+              "presence_entities": "Presence entities"
+            },
+            "data_description": {
+              "presence_entities": "Persons, device trackers, zones, binary sensors or input booleans. Away means none of them is home; unavailable or unknown entities count as home."
+            }
+          }
+        }
+      },
+      "control": {
+        "title": "Control",
+        "description": "How room measurements become a flow.",
+        "sections": {
+          "co2": {
+            "name": "CO₂ ramp",
+            "description": "The flow rises linearly from the minimum flow at the start to the max flow at the end, using the highest valid CO₂ value.",
+            "data": {
+              "co2_start": "CO₂ start",
+              "co2_end": "CO₂ end"
+            },
+            "data_description": {
+              "co2_start": "CO₂ value at which the flow starts to rise above the minimum flow.",
+              "co2_end": "CO₂ value at which the max flow is reached."
+            }
+          },
+          "flows": {
+            "name": "Flows",
+            "description": "Base flows of the automatic control.",
+            "data": {
+              "min_flow": "Minimum flow",
+              "fallback_flow": "Fallback flow"
+            },
+            "data_description": {
+              "min_flow": "Lowest flow in automatic mode; keeps a basic air exchange for moisture protection.",
+              "fallback_flow": "Flow used when CO₂ sensors are configured but none of them has a valid value."
+            }
+          },
+          "humidity": {
+            "name": "Humidity",
+            "description": "Humidity-high ramp and dryness protection, based on the living-area humidity sensors.",
+            "data": {
+              "humidity_high_start": "Humidity-high start",
+              "humidity_high_end": "Humidity-high end",
+              "dryness_threshold": "Dryness threshold",
+              "dryness_hysteresis": "Dryness hysteresis",
+              "dryness_humidity_high_limit": "Humidity-high time while dry"
+            },
+            "data_description": {
+              "humidity_high_start": "Highest room humidity at which the flow starts to rise above the minimum flow.",
+              "humidity_high_end": "Highest room humidity at which the max flow is reached.",
+              "dryness_threshold": "When the mean room humidity is below this value, the air counts as dry and the flow is limited to the CO₂ demand.",
+              "dryness_hysteresis": "Dry ends only when the mean humidity is this much above the threshold, so the state does not flap.",
+              "dryness_humidity_high_limit": "How long the humidity-high ramp may exceed the CO₂ demand while the air is dry. 0 suppresses it completely while dry."
+            }
+          },
+          "quiet": {
+            "name": "Quiet limit",
+            "description": "Caps the flow for low noise in the night window. The quiet profile applies it all day.",
+            "data": {
+              "night_enabled": "Quiet limit at night",
+              "night_start": "Night start",
+              "night_end": "Night end",
+              "quiet_max_flow": "Quiet max flow",
+              "quiet_humidity_override": "Humidity override"
+            },
+            "data_description": {
+              "night_enabled": "Apply the quiet limit in the night window. The quiet profile applies it all day regardless.",
+              "night_start": "Start of the night window.",
+              "night_end": "End of the night window; it may be on the next day.",
+              "quiet_max_flow": "Maximum flow while the quiet limit applies. User boosts are not limited.",
+              "quiet_humidity_override": "Above this highest room humidity the quiet limit does not apply."
+            }
+          },
+          "away": {
+            "name": "Away",
+            "description": "Minimum flow while nobody is home, unless the humidity is high.",
+            "data": {
+              "away_enabled": "Away limit"
+            },
+            "data_description": {
+              "away_enabled": "Reduce the flow to the minimum while nobody is home, unless the humidity is high. Without presence entities it has no effect. Turning it off disables the away limit in every profile."
+            }
+          },
+          "shaping": {
+            "name": "Output shaping",
+            "description": "How calmly the unit runs: how often and how far the written flow may change.",
+            "data": {
+              "min_write_interval": "Minimum write interval",
+              "max_step_up": "Maximum step up",
+              "max_step_down": "Maximum step down",
+              "deadband_up": "Dead band up",
+              "deadband_down": "Dead band down",
+              "flow_quantum": "Flow step"
+            },
+            "data_description": {
+              "min_write_interval": "Minimum time between two changes of the flow. With the default the flow changes at most once every 5 minutes. Boosts and pauses act at once.",
+              "max_step_up": "Largest increase per change. With the default (12.5 % of the max flow, 50 m³/h for a 400 m³/h unit) the flow rises in steps of 50 m³/h.",
+              "max_step_down": "Largest decrease per change. With the default (12.5 % of the max flow, 50 m³/h for a 400 m³/h unit) the flow falls in steps of 50 m³/h.",
+              "deadband_up": "The flow is only raised when the target is at least this much above the written flow. With the default, changes below 10 m³/h are ignored.",
+              "deadband_down": "The flow is only lowered when the target is at least this much below the written flow. With the default, decreases below 20 m³/h are ignored, so the unit does not flap.",
+              "flow_quantum": "Written flows are rounded to multiples of this value. With the default, to 5 m³/h."
+            }
+          },
+          "advanced": {
+            "name": "Advanced",
+            "description": "Technical timing parameters. The defaults fit most installations.",
+            "data": {
+              "evaluation_interval": "Evaluation interval",
+              "debounce": "Debounce",
+              "stale_timeout": "Stale timeout",
+              "startup_grace": "Startup grace",
+              "problem_delay": "Problem delay"
+            },
+            "data_description": {
+              "evaluation_interval": "The control is evaluated at least this often, in addition to every input change.",
+              "debounce": "Input changes within this time are evaluated together.",
+              "stale_timeout": "An input that has not reported a value for this long is ignored.",
+              "startup_grace": "After Home Assistant starts, nothing is written for this long so that all inputs can load.",
+              "problem_delay": "How long a problem must persist before the problem sensor turns on."
+            }
+          }
+        }
+      },
+      "boosts": {
+        "title": "Boosts",
+        "description": "Defaults of manual boosts from the dashboard, services and voice.",
+        "sections": {
+          "manual": {
+            "name": "Manual boost",
+            "description": "A boost raises the flow to a level for a duration. Triggering it again extends it.",
+            "data": {
+              "boost_default_duration": "Default duration",
+              "boost_default_level": "Default level",
+              "boost_max_duration": "Maximum duration"
+            },
+            "data_description": {
+              "boost_default_duration": "Duration of a boost when none is given.",
+              "boost_default_level": "Flow of a boost when no level is given. The automatic demand still wins if it is higher.",
+              "boost_max_duration": "Extending a boost never makes it last longer than this from now."
+            }
+          }
+        }
+      }
+    }
+  },
+  "config_subentries": {
+    "readiness_condition": {
+      "entry_type": "Readiness condition",
+      "initiate_flow": {
+        "user": "Add readiness condition",
+        "reconfigure": "Reconfigure readiness condition"
+      },
+      "abort": {
+        "already_configured": "This entity already has a readiness condition."
+      },
+      "error": {
+        "not_correctable": "The state of this entity cannot be set, so it cannot be corrected automatically."
+      },
+      "step": {
+        "user": {
+          "title": "Add readiness condition",
+          "description": "An entity state the unit needs before writes to the actuator have an effect, e.g. a control mode. While it is not met, writes are suspended and a problem is reported.",
+          "data": {
+            "entity_id": "Entity"
+          },
+          "data_description": {
+            "entity_id": "The entity whose state must match, e.g. the control mode select of the unit."
+          }
+        },
+        "reconfigure": {
+          "title": "Reconfigure readiness condition",
+          "description": "An entity state the unit needs before writes to the actuator have an effect, e.g. a control mode. While it is not met, writes are suspended and a problem is reported.",
+          "data": {
+            "entity_id": "Entity"
+          },
+          "data_description": {
+            "entity_id": "The entity whose state must match, e.g. the control mode select of the unit."
+          }
+        },
+        "state": {
+          "title": "Expected state",
+          "description": "Which state of {entity} the unit needs.",
+          "data": {
+            "expected_state": "Expected state",
+            "auto_correct": "Correct automatically"
+          },
+          "data_description": {
+            "expected_state": "Writes to the actuator only happen while the entity has this state.",
+            "auto_correct": "Set the entity to the expected state before writing when it differs. Only possible for entities whose state can be set."
+          }
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "control_disabled": {
+      "message": "Control is switched off. Switch it on to boost or pause the ventilation."
+    },
+    "level_out_of_range": {
+      "message": "The boost level must be between the min flow and the max flow."
+    }
+  },
+  "selector": {
+    "actuator_unit": {
+      "options": {
+        "flow": "Flow (m³/h)",
+        "percent": "Percentage of the max flow (%)"
+      }
+    },
+    "binary_state": {
+      "options": {
+        "on": "On",
+        "off": "Off"
+      }
+    },
+    "off_state": {
+      "options": {
+        "on": "On (e.g. a standby switch)",
+        "off": "Off (e.g. a power switch)"
+      }
+    }
+  }
 }

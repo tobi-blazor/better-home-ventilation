@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Final
 
+from .engine.models import EVENT_MODE_CHANGED as ENGINE_EVENT_MODE_CHANGED
 from .engine.options import (
     ACTUATOR_UNIT_FLOW,
     ACTUATOR_UNIT_PERCENT,
@@ -63,6 +64,22 @@ from .engine.options import (
 
 DOMAIN: Final = "better_home_ventilation"
 
+# --- Device (docs/spec/04-interface.md#device) --------------------------------
+MANUFACTURER: Final = "Better Home Ventilation"
+MODEL: Final = "Demand controller"
+
+# --- Events (docs/spec/04-interface.md#events) --------------------------------
+EVENT_MODE_CHANGED: Final = ENGINE_EVENT_MODE_CHANGED
+EVENT_READINESS_CORRECTED: Final = "better_home_ventilation_readiness_corrected"
+
+# --- Config subentries (docs/spec/01-configuration.md) -----------------------
+SUBENTRY_READINESS_CONDITION: Final = "readiness_condition"
+
+# Keys of a readiness condition subentry's data.
+CONF_ENTITY_ID: Final = "entity_id"
+CONF_EXPECTED_STATE: Final = "expected_state"
+CONF_AUTO_CORRECT: Final = "auto_correct"
+
 __all__ = [
     "ACTUATOR_UNITS",
     "ACTUATOR_UNIT_FLOW",
@@ -71,6 +88,7 @@ __all__ = [
     "CONF_ACTUATOR_MAX",
     "CONF_ACTUATOR_MIN",
     "CONF_ACTUATOR_UNIT",
+    "CONF_AUTO_CORRECT",
     "CONF_AWAY_ENABLED",
     "CONF_BOOST_DEFAULT_DURATION",
     "CONF_BOOST_DEFAULT_LEVEL",
@@ -84,7 +102,9 @@ __all__ = [
     "CONF_DRYNESS_HUMIDITY_HIGH_LIMIT",
     "CONF_DRYNESS_HYSTERESIS",
     "CONF_DRYNESS_THRESHOLD",
+    "CONF_ENTITY_ID",
     "CONF_EVALUATION_INTERVAL",
+    "CONF_EXPECTED_STATE",
     "CONF_FALLBACK_FLOW",
     "CONF_FLOW_QUANTUM",
     "CONF_HUMIDITY_HIGH_END",
@@ -111,8 +131,13 @@ __all__ = [
     "DEFAULTS",
     "DEFAULT_NAME",
     "DOMAIN",
+    "EVENT_MODE_CHANGED",
+    "EVENT_READINESS_CORRECTED",
+    "MANUFACTURER",
+    "MODEL",
     "OFF_STATES",
     "OFF_STATE_OFF",
     "OFF_STATE_ON",
+    "SUBENTRY_READINESS_CONDITION",
     "defaults_for_max_flow",
 ]
