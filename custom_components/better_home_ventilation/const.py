@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Final
 
+from .engine.models import EVENT_MODE_CHANGED as ENGINE_EVENT_MODE_CHANGED
 from .engine.options import (
     ACTUATOR_UNIT_FLOW,
     ACTUATOR_UNIT_PERCENT,
@@ -62,6 +63,14 @@ from .engine.options import (
 )
 
 DOMAIN: Final = "better_home_ventilation"
+
+# --- Device (docs/spec/04-interface.md#device) --------------------------------
+MANUFACTURER: Final = "Better Home Ventilation"
+MODEL: Final = "Demand controller"
+
+# --- Events (docs/spec/04-interface.md#events) --------------------------------
+EVENT_MODE_CHANGED: Final = ENGINE_EVENT_MODE_CHANGED
+EVENT_READINESS_CORRECTED: Final = "better_home_ventilation_readiness_corrected"
 
 # --- Config subentries (docs/spec/01-configuration.md) -----------------------
 SUBENTRY_READINESS_CONDITION: Final = "readiness_condition"
@@ -122,6 +131,10 @@ __all__ = [
     "DEFAULTS",
     "DEFAULT_NAME",
     "DOMAIN",
+    "EVENT_MODE_CHANGED",
+    "EVENT_READINESS_CORRECTED",
+    "MANUFACTURER",
+    "MODEL",
     "OFF_STATES",
     "OFF_STATE_OFF",
     "OFF_STATE_ON",

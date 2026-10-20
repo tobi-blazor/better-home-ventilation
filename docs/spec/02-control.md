@@ -218,10 +218,10 @@ Logging follows the quality rule `log-when-unavailable`: one `info` message when
 ## Writing
 
 - Service calls use `blocking=True` with a timeout of 10 s and carry a context created by the integration (`Context()`), so the logbook attributes the change to Better Home Ventilation.
-- **Verification:** 30 s after a write the actuator value is compared with the written value (tolerance: one actuator step or 5 m³/h, whichever is larger). On mismatch: one retry. On a second mismatch: problem `write_mismatch`, no further retries until the target changes.
+- **Verification:** 30 s after a write the actuator value is compared with the written value (tolerance: one actuator step or 5 m³/h, whichever is larger; a `select` must show the written option). On mismatch: one retry. On a second mismatch: problem `write_mismatch`, no further retries until the target changes. The problem clears when the actuator shows the written value or a write with a different value is verified; a later write of the same value is sent but not retried.
 - An external change of the actuator (state change with a context that is not ours) is accepted as the new `current`. The next write follows the normal shaping rules. Pausing control after manual changes is backlog BHV-94.
 - An external change of the **off actuator** (a change between the stopped and the running state with a context that is not ours, e.g. standby set at the unit for a filter change) is a command with source `external`: a stop becomes `pause()` without duration, a start becomes `resume()`. The same applies to a `fan` actuator without off actuator: an external `off` is a stop, an external `on` is a start. Changes from or to `unavailable`/`unknown` are not commands (e.g. a restart of the device). While control is disabled external changes are ignored. During `safety_off`: see [Q11](README.md#open-questions).
-- Exceptions from service calls are caught and logged (`warning` once, then `debug` while the error persists), the evaluation continues and problem `write_failed` is raised.
+- Exceptions from service calls are caught and logged (`warning` once, then `debug` while the error persists), the evaluation continues and problem `write_failed` is raised. This covers every service call of the integration (actuator, off actuator, readiness corrections); the next successful call clears it.
 
 ## Decision record
 
