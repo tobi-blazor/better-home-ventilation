@@ -103,7 +103,7 @@ Constructed headlines are marked as such in the fixture. Real messages that were
 |---|---|
 | C1 | config flow happy path for `number` (flow), `number` (%), `number` (unknown unit), `fan`, `select`; entry has `data == {}` and all defaults in `options` |
 | C2 | config flow errors: `actuator_not_found`, `select_options`, `select_mapping`, `no_inputs`; abort `already_configured` for an actuator used by another entry |
-| C3 | options flow: each menu step, every validation error key from [01-configuration.md](01-configuration.md#validation-rules), section input flattened, suggested values shown, `shaping` section shown without advanced mode, `advanced` section hidden without advanced mode and its values kept, entry reloaded after save |
+| C3 | options flow: each menu step, every validation error key from [01-configuration.md](01-configuration.md#validation-rules) (errors of fields inside a section under the section key), section input flattened, cleared optional fields removed, suggested values shown, `shaping` and `advanced` sections always shown and collapsed (no advanced mode: `show_advanced_options` is deprecated since HA 2026.10, breaks in 2027.6), `away_enabled` without presence entities accepted, entry reloaded after save |
 | C4 | readiness subentries: add (select entity → options dropdown), reconfigure, delete, duplicate entity `already_configured`, `not_correctable`; auto-correct calls `select.select_option`; problem after 3 failures |
 | C4a | entity rename of a configured sensor updates `options` and reloads; removal raises `missing_entity` repair |
 | C4b | `async_migrate_entry`: every migration step, unknown future version fails cleanly |
