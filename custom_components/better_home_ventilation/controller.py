@@ -176,6 +176,13 @@ class VentilationController:
         )
         self._logged_unavailable: set[str] = set()
         self._logged_not_met: set[str] = set()
+        #: Values of the parameter entities (``boost_duration``, ``boost_level``,
+        #: ``pause_duration``); set by those entities, used by buttons and
+        #: services. None until the entity is added (options defaults apply).
+        self.boost_duration: timedelta | None = None
+        self.boost_level: float | None = None
+        #: Duration of the pause button; None = indefinite.
+        self.pause_duration: timedelta | None = None
 
     # --- Public API ----------------------------------------------------------
 
@@ -227,7 +234,18 @@ class VentilationController:
                 translation_domain=DOMAIN, translation_key=err.code
             ) from err
         self._async_save_if_changed()
-        await self.async_request_evaluation()
+        if self.started:
+            await self.async_request_evaluation()
+        else:
+            # Before Home Assistant has started there is no evaluation yet;
+            # the entities still show the new control switch and profile.
+            self._async_notify()
+
+    @callback
+    def _async_notify(self) -> None:
+        """Call every listener (entities write their state)."""
+        for update_callback in list(self._listeners):
+            update_callback()
 
     # --- Lifecycle -------------------------------------------------------------
 
@@ -468,8 +486,7 @@ class VentilationController:
         self._async_save_if_changed()
         self._log_availability(snapshot)
         await self._async_apply(effects)
-        for update_callback in list(self._listeners):
-            update_callback()
+        self._async_notify()
 
     async def _async_apply(self, effects: Iterable[Effect]) -> None:
         """Execute the effects in order; schedule or cancel the next evaluation."""

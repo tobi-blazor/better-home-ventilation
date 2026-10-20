@@ -1,6 +1,8 @@
 rules:
   # Bronze
-  action-setup: todo
+  action-setup:
+    status: done
+    comment: Services are registered in async_setup and resolve the entry per call.
   appropriate-polling:
     status: exempt
     comment: No polling. The integration is event driven (state changes, timers); iot_class is calculated.
@@ -21,9 +23,9 @@ rules:
   docs-triggers:
     status: exempt
     comment: The integration does not provide triggers.
-  entity-event-setup: todo
-  entity-unique-id: todo
-  has-entity-name: todo
+  entity-event-setup: done
+  entity-unique-id: done
+  has-entity-name: done
   runtime-data: done
   test-before-configure: done
   test-before-setup:
@@ -32,14 +34,16 @@ rules:
   unique-config-entry: done
 
   # Silver
-  action-exceptions: todo
+  action-exceptions: done
   config-entry-unloading: done
   docs-configuration-parameters: todo
   docs-installation-parameters: todo
-  entity-unavailable: todo
+  entity-unavailable:
+    status: exempt
+    comment: Entities are calculated by the controller and stay available while the entry is loaded; failed inputs and an unavailable actuator are shown in attributes and the problem sensor.
   integration-owner: done
   log-when-unavailable: done
-  parallel-updates: todo
+  parallel-updates: done
   reauthentication-flow:
     status: exempt
     comment: No authentication; the integration only uses entities of the same Home Assistant instance.
@@ -64,12 +68,14 @@ rules:
   dynamic-devices:
     status: exempt
     comment: Exactly one device per config entry, created with the entry.
-  entity-category: todo
-  entity-device-class: todo
-  entity-disabled-by-default: todo
-  entity-translations: todo
-  exception-translations: todo
-  icon-translations: todo
+  entity-category: done
+  entity-device-class: done
+  entity-disabled-by-default:
+    status: exempt
+    comment: Every entity is used in daily operation or for diagnosis; none is noisy enough to be disabled by default.
+  entity-translations: done
+  exception-translations: done
+  icon-translations: done
   reconfiguration-flow:
     status: exempt
     comment: entry.data is empty; every setting, including the actuator, is changed in the options flow (helper pattern).

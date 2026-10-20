@@ -74,6 +74,7 @@ def test_e16_bhv20_boost_immediately_without_step_limit() -> None:
         "trigger": "command",
         "source": "button",
         "warning": None,
+        "ends_at": (T0 + timedelta(minutes=30)).isoformat(),
     }
 
 
