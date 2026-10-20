@@ -245,6 +245,32 @@ async def test_actuator_errors(
     assert suggested(result["data_schema"], CONF_ACTUATOR) == actuator
 
 
+@pytest.mark.parametrize(
+    ("actuator", "off_entity", "error"),
+    [
+        (NUMBER_FLOW, "switch.missing_standby", "off_entity_not_found"),
+        (FAN, FAN, "off_entity_is_actuator"),
+    ],
+)
+async def test_actuator_off_entity_errors(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    actuator: str,
+    off_entity: str,
+    error: str,
+) -> None:
+    """The off actuator must exist and differ from the actuator (BHV-02)."""
+    result = await _open(hass, entry, "actuator")
+
+    result = await _submit(
+        hass, result, **{CONF_ACTUATOR: actuator, CONF_OFF_ENTITY: off_entity}
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"off": error}
+    assert CONF_OFF_ENTITY not in entry.options
+
+
 async def test_actuator_change_to_percent_number(
     hass: HomeAssistant, entry: MockConfigEntry
 ) -> None:

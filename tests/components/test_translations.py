@@ -42,6 +42,8 @@ CONFIG_ERRORS = {
     "duplicate_sensor",
     "max_flow_required",
     "no_inputs",
+    "off_entity_is_actuator",
+    "off_entity_not_found",
     "select_mapping",
     "select_options",
     "sensor_not_found",
@@ -57,6 +59,8 @@ OPTIONS_ERRORS = {
     "level_range",
     "night_window",
     "no_inputs",
+    "off_entity_is_actuator",
+    "off_entity_not_found",
     "quiet_range",
     "select_mapping",
     "select_options",
@@ -201,6 +205,17 @@ def test_menu_errors_and_aborts_are_translated(language: str) -> None:
     assert readiness["initiate_flow"]["reconfigure"]
     assert readiness["abort"]["already_configured"]
     assert readiness["error"]["not_correctable"]
+
+
+@pytest.mark.parametrize("language", list(FILES))
+def test_off_actuator_texts_match(language: str) -> None:
+    """The off actuator reads the same at setup and in the options (BHV-02)."""
+    strings = _load(language)
+    setup = strings["config"]["step"]["user"]["sections"]["off"]
+    options = strings["options"]["step"]["actuator"]["sections"]["off"]
+    assert setup == options
+    for error in ("off_entity_is_actuator", "off_entity_not_found"):
+        assert strings["config"]["error"][error] == strings["options"]["error"][error]
 
 
 def test_translation_files_match() -> None:

@@ -239,6 +239,11 @@ def _entity_selector(
     return selector.EntitySelector(config)
 
 
+def _section(fields: Mapping[Any, Any], *, collapsed: bool = False) -> section:
+    """Return a section with ``fields``."""
+    return section(vol.Schema(dict(fields)), {"collapsed": collapsed})
+
+
 DURATION_SELECTOR: Final = selector.DurationSelector()
 TIME_SELECTOR: Final = selector.TimeSelector()
 BOOLEAN_SELECTOR: Final = selector.BooleanSelector()
@@ -252,6 +257,20 @@ HUMIDITY_SENSORS_SELECTOR: Final = _entity_selector(
     "sensor", device_class="humidity", multiple=True
 )
 
+#: Fields of the section `off` (BHV-02), in the config step `user` and the
+#: options step `actuator`.
+OFF_FIELDS: Final = {
+    vol.Optional(CONF_OFF_ENTITY): _entity_selector(OFF_ENTITY_DOMAINS),
+    vol.Required(CONF_OFF_STATE, default=OFF_STATE_ON): selector.SelectSelector(
+        selector.SelectSelectorConfig(
+            options=list(OFF_STATES),
+            translation_key=CONF_OFF_STATE,
+            mode=selector.SelectSelectorMode.LIST,
+        )
+    ),
+}
+OFF_KEYS: Final = (CONF_OFF_ENTITY, CONF_OFF_STATE)
+
 # --- Config flow schemas --------------------------------------------------------
 
 USER_SCHEMA: Final = vol.Schema(
@@ -261,6 +280,9 @@ USER_SCHEMA: Final = vol.Schema(
         # Optional: left empty, the actuator's `max` is used if its unit is m³/h,
         # otherwise `max_flow_required` (docs/spec/01-configuration.md).
         vol.Optional(CONF_MAX_FLOW): MAX_FLOW_SELECTOR,
+        # Collapsed, so the first setup stays short. An omitted section means
+        # no off actuator (the default `off_state` comes from DEFAULTS).
+        vol.Optional(SECTION_OFF): _section(OFF_FIELDS, collapsed=True),
     }
 )
 
@@ -471,6 +493,22 @@ def _validate_inputs(hass: HomeAssistant, values: Mapping[str, Any]) -> dict[str
     return errors
 
 
+def _validate_off(hass: HomeAssistant, values: Mapping[str, Any]) -> dict[str, str]:
+    """Validate the off actuator (BHV-02); errors per field.
+
+    ``values`` are flattened and contain the actuator. Without an off actuator
+    there is nothing to check.
+    """
+    off_entity = values.get(CONF_OFF_ENTITY)
+    if not off_entity:
+        return {}
+    if off_entity == values.get(CONF_ACTUATOR):
+        return {CONF_OFF_ENTITY: "off_entity_is_actuator"}
+    if not _entity_exists(hass, off_entity):
+        return {CONF_OFF_ENTITY: "off_entity_not_found"}
+    return {}
+
+
 def _validate_control(values: Mapping[str, Any]) -> dict[str, str]:
     """Cross-field validation of the `control` step; errors per field.
 
@@ -599,11 +637,6 @@ def _form_errors(field_errors: Mapping[str, str], schema: vol.Schema) -> dict[st
     return {fields.get(key) or key: error for key, error in field_errors.items()}
 
 
-def _section(fields: Mapping[Any, Any], *, collapsed: bool = False) -> section:
-    """Return a section with ``fields``."""
-    return section(vol.Schema(dict(fields)), {"collapsed": collapsed})
-
-
 # --- Config flow --------------------------------------------------------------------
 
 
@@ -636,20 +669,30 @@ class BetterHomeVentilationConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Ask for the name, the actuator and the max flow (BHV-01)."""
+        """Ask for the name, the actuator, the max flow and the off actuator.
+
+        BHV-01, BHV-02: the off actuator is optional; without it, off means the
+        lowest actuator value, which some units do not take as a stop.
+        """
         errors: dict[str, str] = {}
         if user_input is not None:
             actuator = user_input[CONF_ACTUATOR]
             self._async_abort_entries_match({CONF_ACTUATOR: actuator})
+            values = _flatten(user_input)
+            errors = _form_errors(_validate_off(self.hass, values), USER_SCHEMA)
             info = _check_actuator(self.hass, actuator)
             if isinstance(info, str):
                 errors[CONF_ACTUATOR] = info
             elif (max_flow := _max_flow(user_input, info)) is None:
                 errors[CONF_MAX_FLOW] = "max_flow_required"
-            else:
+            elif not errors:
                 self._title = user_input[CONF_NAME]
                 self._actuator = info
-                self._options = {CONF_ACTUATOR: actuator, CONF_MAX_FLOW: max_flow}
+                self._options = {
+                    CONF_ACTUATOR: actuator,
+                    CONF_MAX_FLOW: max_flow,
+                    **{key: values[key] for key in OFF_KEYS if key in values},
+                }
                 if info.kind in MAPPING_KINDS:
                     return await self.async_step_actuator()
                 self._options.update(_auto_actuator_options(info.kind))
@@ -714,20 +757,7 @@ def _actuator_options_schema() -> vol.Schema:
         {
             vol.Required(CONF_ACTUATOR): ACTUATOR_SELECTOR,
             vol.Required(CONF_MAX_FLOW): MAX_FLOW_SELECTOR,
-            vol.Required(SECTION_OFF): _section(
-                {
-                    vol.Optional(CONF_OFF_ENTITY): _entity_selector(OFF_ENTITY_DOMAINS),
-                    vol.Required(
-                        CONF_OFF_STATE, default=OFF_STATE_ON
-                    ): selector.SelectSelector(
-                        selector.SelectSelectorConfig(
-                            options=list(OFF_STATES),
-                            translation_key=CONF_OFF_STATE,
-                            mode=selector.SelectSelectorMode.LIST,
-                        )
-                    ),
-                }
-            ),
+            vol.Required(SECTION_OFF): _section(OFF_FIELDS),
             vol.Required(SECTION_RANGE): _section(
                 {
                     vol.Optional(CONF_ACTUATOR_MIN): _number_selector(
@@ -873,12 +903,13 @@ class BetterHomeVentilationOptionsFlow(OptionsFlow):
         if user_input is not None:
             merged = _merge_options(options, schema, user_input)
             actuator = merged[CONF_ACTUATOR]
+            errors = _form_errors(_validate_off(self.hass, merged), schema)
             info = _check_actuator(self.hass, actuator)
             if isinstance(info, str):
                 errors[CONF_ACTUATOR] = info
             elif self._actuator_in_use(actuator):
                 errors[CONF_ACTUATOR] = "actuator_in_use"
-            else:
+            elif not errors:
                 self._pending = _without_mapping(merged)
                 self._actuator = info
                 # Also shown when such an actuator is kept, so its mapping can

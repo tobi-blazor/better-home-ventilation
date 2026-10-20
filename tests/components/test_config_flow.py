@@ -19,10 +19,14 @@ from custom_components.better_home_ventilation.const import (
     CONF_HUMIDITY_SENSORS,
     CONF_MAX_FLOW,
     CONF_NAME,
+    CONF_OFF_ENTITY,
+    CONF_OFF_STATE,
     CONF_PRESENCE_ENTITIES,
     CONF_SELECT_MAPPING,
     DEFAULTS,
     DOMAIN,
+    OFF_STATE_OFF,
+    OFF_STATE_ON,
     defaults_for_max_flow,
 )
 
@@ -37,8 +41,10 @@ from .common import (
     SELECT_SINGLE,
     SELECT_STAGES,
     STAGE_OPTIONS,
+    STANDBY_SWITCH,
     mock_entry,
     schema_fields,
+    sections,
 )
 
 pytestmark = pytest.mark.usefixtures("entities")
@@ -304,3 +310,115 @@ async def test_user_form_keeps_input_after_error(hass: HomeAssistant) -> None:
     fields = schema_fields(result["data_schema"])
     assert fields[CONF_ACTUATOR][1].description == {"suggested_value": "number.missing"}
     assert fields[CONF_MAX_FLOW][1].description == {"suggested_value": 300}
+
+
+# --- Off actuator (BHV-02) ------------------------------------------------------------
+
+
+async def test_bhv02_user_form_has_collapsed_off_section(hass: HomeAssistant) -> None:
+    """The off actuator is offered at setup in a collapsed section."""
+    result = await _start(hass)
+
+    schema = result["data_schema"]
+    assert sections(schema)["off"].options == {"collapsed": True}
+    fields = schema_fields(schema)
+    assert fields[CONF_OFF_ENTITY][0] == "off"
+    assert fields[CONF_OFF_STATE][0] == "off"
+    assert fields[CONF_OFF_STATE][1].default() == OFF_STATE_ON
+
+
+@pytest.mark.parametrize("off_state", [OFF_STATE_ON, OFF_STATE_OFF])
+async def test_bhv02_off_actuator_at_setup(hass: HomeAssistant, off_state: str) -> None:
+    """An off actuator chosen at setup is stored flat in the options."""
+    flow_id, result = await _user(
+        hass,
+        NUMBER_FLOW,
+        off={CONF_OFF_ENTITY: STANDBY_SWITCH, CONF_OFF_STATE: off_state},
+    )
+    assert result["step_id"] == "inputs"
+
+    result = await _inputs(hass, flow_id)
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    options = dict(result["options"])
+    assert options[CONF_OFF_ENTITY] == STANDBY_SWITCH
+    assert options[CONF_OFF_STATE] == off_state
+    assert "off" not in options
+
+
+async def test_bhv02_off_actuator_kept_through_mapping_step(
+    hass: HomeAssistant,
+) -> None:
+    """An off actuator entered with a select actuator survives the mapping step."""
+    flow_id, _ = await _user(
+        hass, SELECT_STAGES, **{CONF_MAX_FLOW: 400, "off": {CONF_OFF_ENTITY: FAN}}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        flow_id, {"Stage 1": 100, "Stage 3": 300}
+    )
+    assert result["step_id"] == "inputs"
+
+    options = _assert_created(await _inputs(hass, flow_id), 400)
+    assert options[CONF_OFF_ENTITY] == FAN
+    assert options[CONF_OFF_STATE] == OFF_STATE_ON
+
+
+@pytest.mark.parametrize("off", [None, {}, {CONF_OFF_STATE: OFF_STATE_ON}])
+async def test_bhv02_no_off_actuator_at_setup(
+    hass: HomeAssistant, off: dict[str, str] | None
+) -> None:
+    """Without an off actuator the key is absent (off = lowest actuator value)."""
+    extra: dict[str, Any] = {} if off is None else {"off": off}
+    flow_id, _ = await _user(hass, NUMBER_FLOW, **extra)
+
+    options = _assert_created(await _inputs(hass, flow_id), 400)
+    assert CONF_OFF_ENTITY not in options
+    assert options[CONF_OFF_STATE] == OFF_STATE_ON
+    assert "off" not in options
+
+
+@pytest.mark.parametrize(
+    ("actuator", "off_entity", "error"),
+    [
+        (NUMBER_FLOW, "switch.missing_standby", "off_entity_not_found"),
+        (FAN, FAN, "off_entity_is_actuator"),
+    ],
+)
+async def test_bhv02_off_actuator_errors(
+    hass: HomeAssistant, actuator: str, off_entity: str, error: str
+) -> None:
+    """The off actuator must exist and differ from the actuator."""
+    flow_id, result = await _user(
+        hass, actuator, **{CONF_MAX_FLOW: 400, "off": {CONF_OFF_ENTITY: off_entity}}
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "user"
+    assert result["errors"] == {"off": error}
+    fields = schema_fields(result["data_schema"])
+    assert fields[CONF_OFF_ENTITY][1].description == {"suggested_value": off_entity}
+
+    result = await hass.config_entries.flow.async_configure(
+        flow_id,
+        {
+            CONF_NAME: "Ventilation",
+            CONF_ACTUATOR: actuator,
+            CONF_MAX_FLOW: 400,
+            "off": {CONF_OFF_ENTITY: STANDBY_SWITCH},
+        },
+    )
+    assert result["step_id"] == "inputs"
+
+
+async def test_bhv02_off_and_actuator_errors_together(hass: HomeAssistant) -> None:
+    """Errors of the actuator and of the off actuator are shown at once."""
+    _, result = await _user(
+        hass,
+        "number.missing",
+        **{CONF_MAX_FLOW: 400, "off": {CONF_OFF_ENTITY: "switch.missing_standby"}},
+    )
+
+    assert result["errors"] == {
+        CONF_ACTUATOR: "actuator_not_found",
+        "off": "off_entity_not_found",
+    }

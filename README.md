@@ -76,7 +76,7 @@ Because the safety shutdown is missing, **0.1 is meant for test runs** on a real
 | `fan` with percentage | percentage of the max flow (at least one step above 0) |
 | `select` with stages | you assign a flow to each stage; the lowest stage that reaches the flow is chosen, with hysteresis when stepping down |
 
-- Optional: an **off actuator** that stops the unit, such as a standby `switch` or `input_boolean` (you choose which state means "stopped"), or a `fan` that is turned off. Without one, "off" means the lowest actuator value.
+- Optional: an **off actuator** that stops the unit, such as a standby `switch` or `input_boolean` (you choose which state means "stopped"), or a `fan` that is turned off. Without one, "off" means the lowest actuator value, which some units do not take as a stop; such units need an off actuator.
 - At least one room **CO₂ sensor** (device class `carbon_dioxide`) or room **humidity sensor** (device class `humidity`).
 - Optional: presence entities (persons, device trackers, zones, binary sensors, input booleans) for the away limit.
 
@@ -114,7 +114,16 @@ While the repository is private, HACS may not be able to install it (not verifie
 | `actuator` | Actuator | – (required) | The entity that sets the unit's flow: a `number` (m³/h or %), a `fan` (percentage) or a `select` (stages). |
 | `max_flow` | Max flow | the actuator's maximum | Nominal maximum flow of the unit in m³/h (10–2000). Leave empty to use the actuator's maximum if it is a `number` in m³/h. The default flows (minimum, fallback, quiet limit, boost level, steps) are calculated from it. |
 
-Errors: the actuator does not exist; a `select` has fewer than two options; the max flow cannot be taken from the actuator and must be entered; the actuator is already controlled by another entry.
+Section **Off actuator** (collapsed, optional; the same fields as in the options, see [Actuator](#actuator)):
+
+| Key | UI name | Default | Meaning |
+|---|---|---|---|
+| `off_entity` | Off actuator | none | A `switch` or `input_boolean` that stops the unit (e.g. a standby switch), or a `fan` that is turned off. Leave empty only if the unit stops at its lowest value. |
+| `off_state` | Unit stopped when | On | Which state of the off actuator means "stopped": "On (e.g. a standby switch)" or "Off (e.g. a power switch)". Ignored for a `fan`. |
+
+Without an off actuator, off and pause set the unit to its lowest value (0 %, the actuator minimum or the lowest stage). **Some units do not stop at their lowest value** and keep running, for example a unit that ignores flows below its own minimum. If your unit has a standby switch or a power switch in Home Assistant, choose it here (see [FAQ](#pause-does-not-stop-the-unit)).
+
+Errors: the actuator does not exist; a `select` has fewer than two options; the max flow cannot be taken from the actuator and must be entered; the actuator is already controlled by another entry; the off actuator does not exist or is the actuator itself.
 
 ### Step 2: Actuator mapping
 
@@ -134,7 +143,7 @@ A `number` in m³/h or %, and a `fan`, skip this step.
 
 At least one CO₂ or humidity sensor is required, and a sensor cannot be in both lists.
 
-The entry is created with all other settings at their defaults. The off actuator, presence entities and all tuning are set afterwards in the options.
+The entry is created with all other settings at their defaults. Presence entities and all tuning are set afterwards in the options; the off actuator can also be added or changed there.
 
 ### Changing the settings later
 
@@ -157,8 +166,10 @@ Section **Off actuator**:
 
 | Key | UI name | Default | Meaning |
 |---|---|---|---|
-| `off_entity` | Off actuator | none | A `switch` or `input_boolean` that stops the unit (e.g. a standby switch), or a `fan` that is turned off. Without it, off means the lowest actuator value. |
+| `off_entity` | Off actuator | from step 1 | A `switch` or `input_boolean` that stops the unit (e.g. a standby switch), or a `fan` that is turned off. Without it, off means the lowest actuator value, which some units do not take as a stop ([FAQ](#pause-does-not-stop-the-unit)). |
 | `off_state` | Unit stopped when | On | Which state of the off actuator means "stopped": "On (e.g. a standby switch)" or "Off (e.g. a power switch)". Ignored for a `fan`. |
+
+Errors: the off actuator does not exist or is the actuator itself.
 
 Section **Native range** (collapsed):
 
@@ -519,6 +530,14 @@ Failed, stale or implausible values are ignored, never read as 0. If one of seve
 
 A sensor that is removed from Home Assistant counts as invalid; a repair issue for it comes in 0.2. A renamed sensor (new entity id) is followed automatically.
 
+### Pause does not stop the unit
+
+Without an off actuator, a pause (and every other "off") writes the lowest actuator value: 0 % for a `fan`, the lowest value of a `number` (**Actuator minimum** if set, else its `min` attribute, else 0), the lowest mapped stage for a `select`. The setpoint attribute `off_method` is then `minimum`. Many units do not stop at that value: they ignore flows below their own minimum (for example 50 m³/h) and keep running.
+
+Fix: configure an **off actuator**, at setup in the section **Off actuator** or later in **Configure → Actuator**. Choose the entity that really stops the unit, for example a standby switch such as `switch.ventilation_standby`, and set **Unit stopped when** to the state that means stopped (On for a standby switch, Off for a power switch). A pause then switches that entity and writes no flow value; resuming switches it back and writes the setpoint again.
+
+If the unit has no such entity, the lowest value is all the integration can do. Raising **Actuator minimum** does not help: it only moves the lowest written value.
+
 ### Stopping the unit at the unit counts as a pause
 
 If the off actuator (or a `fan` actuator without an off actuator) is switched to "stopped" by anyone other than the integration, for example at the unit's panel or in its app before a filter change, the integration takes it as a **pause until resumed** (logbook: "at the unit"). Starting the unit there again ends the pause. Changes from or to `unavailable` (for example when the unit restarts) are not commands, and while the **Control** switch is off such changes are ignored. A pause has no reminder in 0.1, so remember to resume.
@@ -532,7 +551,7 @@ Only one controller may write to the unit. If an existing automation, blueprint 
 ### Other limitations
 
 - One actuator per entry; multi-zone systems with dampers are not supported.
-- A pause without an off actuator writes the lowest actuator value, which may not stop the unit completely (`off_method: minimum`).
+- A pause without an off actuator writes the lowest actuator value, which may not stop the unit completely (`off_method: minimum`, see [Pause does not stop the unit](#pause-does-not-stop-the-unit)).
 - Changing the max flow does not change the flows derived from it; adjust them in **Control** and **Boosts**.
 - The logbook text is in the server language, not in each user's language.
 

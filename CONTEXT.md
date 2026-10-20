@@ -22,7 +22,7 @@ The entity that sets the unit's flow (a `number`, `fan` or `select`).
 _Avoid_: fan entity, control entity
 
 **Off actuator**:
-An optional entity that stops the unit (e.g. a standby switch).
+An optional entity that stops the unit (e.g. a standby switch), chosen at setup or in the options. Without it, off means the lowest actuator value, which some units do not take as a stop.
 
 **Readiness condition**:
 An entity state the unit needs before writes to the actuator have an effect (e.g. a control mode).

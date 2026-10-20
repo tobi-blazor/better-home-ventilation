@@ -29,3 +29,12 @@ First version, for test runs on a real installation. The safety shutdown on haza
 - Mode changes fire `better_home_ventilation_mode_changed` and appear in the logbook of the device (for example "switched to Boost (button, until 18:30)").
 - Renamed sensors and actuators are followed in the settings and readiness conditions automatically.
 - User documentation in the README (setup, every option, profiles, calculation, entities, actions, limitations, troubleshooting, removal) and an example dashboard in `examples/dashboard.yaml`.
+
+### Changed
+
+- The off actuator and the state that means "stopped" can be chosen during setup (collapsed section **Off actuator** in the first step), not only later in the options.
+- The setup and option texts of the off actuator explain that without one the unit is set to its lowest value, which some units do not take as a stop, and that such units need an off actuator.
+
+### Fixed
+
+- Pause did not stop units that keep running at their lowest value, because the off actuator could not be set during setup. An off actuator that does not exist or is the actuator itself is now rejected in the setup and in the options.
