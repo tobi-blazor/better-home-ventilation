@@ -126,8 +126,8 @@ def _boost(
 ) -> ControllerState:
     """Start, extend or change a boost (BHV-20).
 
-    SPEC-GAP: ``boost_max_duration`` also caps a new boost, not only an
-    extension (the service accepts up to 720 min).
+    ``boost_max_duration`` also caps a new boost, not only an extension
+    (03-modes.md, commands; the service accepts up to 720 min).
     """
     if not state.control_enabled:
         raise CommandRejected(CONTROL_DISABLED)

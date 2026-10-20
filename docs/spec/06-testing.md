@@ -141,6 +141,6 @@ Use before going live: replay a winter month and compare the shares of `co2` vs.
 - [ ] Test warning (a template `binary_sensor` toggled by hand as warning source): unit off, notification with actions arrives, "Keep ventilating" lifts it, a second test warning (toggled again, so a new incident) shuts down again
 - [ ] Warning ends: restart question arrives; without answer the unit restarts after the timeout
 - [ ] Disconnect a CO₂ sensor: it is ignored; with no valid CO₂ sensor, fallback flow and problem notification after `problem_delay`
-- [ ] Set the unit's control mode to a wrong value by hand: readiness auto-correction restores it (if configured), event and logbook entry appear
+- [ ] Set the unit's control mode to a wrong value by hand: readiness auto-correction restores it (if configured), the `better_home_ventilation_readiness_corrected` event fires and the logbook shows the state change of the readiness entity
 - [ ] Setpoint, reason and mode are recorded in history; logbook shows every mode change with its trigger
 - [ ] Four weeks of heating season: writes per day, reason shares and humidity percentiles are plausible (replay or history)

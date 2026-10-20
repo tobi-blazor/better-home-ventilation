@@ -41,7 +41,7 @@ Goal: no open question blocks phase 0.1.
   - [x] `pause_reminder_after` and `off_notice_after` moved to the `notifications` step (0.2)
   - [x] `actual_flow_sensor` removed (no behavior until BHV-91)
   - [x] `problem_delay` moved to the `control` step, section `advanced` (0.1)
-  - [x] Shaping parameters always visible in the options flow (section `shaping`), technical timing parameters in `advanced` (advanced mode only), decided 2026-10-16
+  - [x] Shaping parameters always visible in the options flow (section `shaping`), technical timing parameters in `advanced` (collapsed, always shown since HA deprecated advanced mode in flows), decided 2026-10-16
   - [x] E39 split into E39 (0.1) and E39a (0.2)
   - [x] Control switch off also blocks readiness corrections (BHV-03)
 - [x] Q4: minimum HA version 2026.4, Python 3.14, `import voluptuous as vol`, no schema compatibility module ([05-architecture.md](spec/05-architecture.md#compatibility))
@@ -58,15 +58,15 @@ Done when: the spec has no known contradiction for 0.1, Q4 is answered with sour
 
 Goal: an empty integration that loads, passes all checks and has CI.
 
-- [ ] `pyproject.toml`: ruff (format + lint, `flake8-tidy-imports` banning `homeassistant` in `engine/`), mypy (`--strict` for `engine/`), pytest, coverage
-- [ ] Dev environment in WSL (Ubuntu): `uv`, Python 3.14, virtual environment; documented in the README (development section)
-- [ ] `requirements_test.txt` with `pytest-homeassistant-custom-component` pinned to the development HA version (`0.13.372` for HA 2026.10.1; CI minimum job `0.13.321` for HA 2026.4.0)
-- [ ] `custom_components/better_home_ventilation/`: `manifest.json` (version `0.1.0`), `__init__.py` (`CONFIG_SCHEMA` config-entry-only, empty setup), `const.py` (`DOMAIN`), `strings.json`, `translations/en.json`, `translations/de.json`
-- [ ] `quality_scale.yaml` with every rule as `todo` or `exempt` with comment
-- [ ] `hacs.json` with the minimum HA version
-- [ ] `engine/__init__.py` (empty) and test C15 (engine imports without `homeassistant`)
-- [ ] GitHub Actions: `lint.yml`, `test.yml` (HA 2026.4 and latest), `validate.yml` (hassfest, HACS; checks that need a public repository ignored for now), `release.yml`
-- [ ] `CHANGELOG.md` (Keep a Changelog, section `Unreleased`)
+- [x] `pyproject.toml`: ruff (format + lint, `flake8-tidy-imports` banning `homeassistant` in `engine/`), mypy (`--strict` for `engine/`), pytest, coverage
+- [x] Dev environment in WSL (Ubuntu): `uv`, Python 3.14, virtual environment; documented in the README (development section)
+- [x] `requirements_test.txt` with `pytest-homeassistant-custom-component` pinned to the development HA version (`0.13.372` for HA 2026.10.1; CI minimum job `0.13.321` for HA 2026.4.0)
+- [x] `custom_components/better_home_ventilation/`: `manifest.json` (version `0.1.0`), `__init__.py` (`CONFIG_SCHEMA` config-entry-only, empty setup), `const.py` (`DOMAIN`), `strings.json`, `translations/en.json`, `translations/de.json`
+- [x] `quality_scale.yaml` with every rule as `todo` or `exempt` with comment
+- [x] `hacs.json` with the minimum HA version
+- [x] `engine/__init__.py` (empty) and test C15 (engine imports without `homeassistant`)
+- [x] GitHub Actions: `lint.yml`, `test.yml` (HA 2026.4 and latest), `validate.yml` (hassfest, HACS; checks that need a public repository ignored for now), `release.yml`
+- [x] `CHANGELOG.md` (Keep a Changelog, section `Unreleased`)
 
 Done when: CI is green on `main`, hassfest passes.
 
@@ -74,17 +74,17 @@ Done when: CI is green on `main`, hassfest passes.
 
 Goal: the complete 0.1 control logic as a pure, tested engine. Spec: [02-control.md](spec/02-control.md), [03-modes.md](spec/03-modes.md).
 
-- [ ] `models.py`: `Options` (from the options dict), `InputValue`, `Snapshot`, `ControllerState` (0.1 fields only), `Decision`, effects (`WriteFlow`, `TurnOff`, `TurnOn`, `CorrectReadiness`, `FireEvent`, `ScheduleAt`) as frozen dataclasses
-- [ ] `validity.py`: unavailable/unknown/empty, non-finite, `last_reported` staleness, plausibility ranges, presence evaluation (fail-safe home) – BHV-18, E3, E5
-- [ ] `demand.py`: `ramp`, CO₂ and humidity ramps, dryness protection with hysteresis and time limit, combining, fallback, reason order – BHV-10…13, 19, E1, E2, E4, E6–E8
-- [ ] `demand.py`: limits away and quiet (night window across midnight, humidity override), fallback wins over away, `limits` list – BHV-14, 15, E9–E12, E48, E49, E53
-- [ ] `demand.py`: profiles `balanced`, `air_quality`, `quiet`, `winter` (which limits apply, CO₂ ramp from its midpoint while dry) – BHV-26, E43–E46
-- [ ] `modes.py`: mode resolution for `disabled`, `off`, `boost`, `fallback`, `automatic`; setpoint per mode; `apply_command` for `boost`, `pause`, `resume`, control switch; timer expiry; `ScheduleAt` effects – BHV-20, 21, 03, E16–E22, E32
-- [ ] `shaping.py`: quantisation, bypass, `min_write_interval`, step limits, asymmetric dead band, `write_blocked_by` – BHV-16, E13–E15
-- [ ] `mapping.py`: number (flow/percent), fan, select with stage hysteresis, off as lowest value – BHV-01, E41, E42
-- [ ] `evaluate()`: startup grace, off/on sequencing, `Decision` with contributions and inputs, `mode_changed` event effect with trigger
-- [ ] `serialize.py`: `ControllerState` ↔ dict, ISO UTC datetimes, expired timers ended with `timeout_while_offline` – BHV-50, E38
-- [ ] E39 (no WriteFlow during startup grace); E47, E50 (profile change and boost commands bypass shaping); E51 (control switch rejects and ends boost/pause); E52, E57 (external stop/start of the off actuator or fan); E54 (boost uses the demand before the quiet limit); E55 (switching the unit on again after `disabled`); E56 (readiness corrected in every evaluation)
+- [x] `models.py`: `Options` (from the options dict), `InputValue`, `Snapshot`, `ControllerState` (0.1 fields only), `Decision`, effects (`WriteFlow`, `TurnOff`, `TurnOn`, `CorrectReadiness`, `FireEvent`, `ScheduleAt`) as frozen dataclasses
+- [x] `validity.py`: unavailable/unknown/empty, non-finite, `last_reported` staleness, plausibility ranges, presence evaluation (fail-safe home) – BHV-18, E3, E5
+- [x] `demand.py`: `ramp`, CO₂ and humidity ramps, dryness protection with hysteresis and time limit, combining, fallback, reason order – BHV-10…13, 19, E1, E2, E4, E6–E8
+- [x] `demand.py`: limits away and quiet (night window across midnight, humidity override), fallback wins over away, `limits` list – BHV-14, 15, E9–E12, E48, E49, E53
+- [x] `demand.py`: profiles `balanced`, `air_quality`, `quiet`, `winter` (which limits apply, CO₂ ramp from its midpoint while dry) – BHV-26, E43–E46
+- [x] `modes.py`: mode resolution for `disabled`, `off`, `boost`, `fallback`, `automatic`; setpoint per mode; `apply_command` for `boost`, `pause`, `resume`, control switch; timer expiry; `ScheduleAt` effects – BHV-20, 21, 03, E16–E22, E32
+- [x] `shaping.py`: quantisation, bypass, `min_write_interval`, step limits, asymmetric dead band, `write_blocked_by` – BHV-16, E13–E15
+- [x] `mapping.py`: number (flow/percent), fan, select with stage hysteresis, off as lowest value – BHV-01, E41, E42
+- [x] `evaluate()`: startup grace, off/on sequencing, `Decision` with contributions and inputs, `mode_changed` event effect with trigger
+- [x] `serialize.py`: `ControllerState` ↔ dict, ISO UTC datetimes, expired timers ended with `timeout_while_offline` – BHV-50, E38
+- [x] E39 (no WriteFlow during startup grace); E47, E50 (profile change and boost commands bypass shaping); E51 (control switch rejects and ends boost/pause); E52, E57 (external stop/start of the off actuator or fan); E54 (boost uses the demand before the quiet limit); E55 (switching the unit on again after `disabled`); E56 (readiness corrected in every evaluation)
 
 Done when: all 0.1 engine scenarios pass, ≥ 95 % coverage of `engine/`, `mypy --strict` clean.
 
@@ -92,16 +92,16 @@ Done when: all 0.1 engine scenarios pass, ≥ 95 % coverage of `engine/`, `mypy 
 
 Goal: the entry can be created and every 0.1 option can be changed. Spec: [01-configuration.md](spec/01-configuration.md).
 
-- [ ] `const.py`: all 0.1 option keys, defaults, defaults relative to max flow (rounded to 5 m³/h)
-- [ ] Config flow `user` → `actuator` (only when needed) → `inputs`; `data={}`, all defaults in `options`; `_async_abort_entries_match` on the actuator
-- [ ] Config flow validation: `actuator_not_found`, `select_options`, `select_mapping`, `no_inputs`, `already_configured`
-- [ ] Options flow (plain `OptionsFlow`): menu, steps `actuator` (+ `actuator_mapping`), `inputs`, `control` (sections `shaping` always shown, `advanced` with `problem_delay` only in advanced mode, `quiet` with `quiet_max_flow`), `boosts` (section `manual` only); sections, collapsed sections, `advanced` only in advanced mode, flattening, duration ↔ seconds, `add_suggested_values_to_schema`, max-flow hint
-- [ ] Cross-field validation from the [validation rules](spec/01-configuration.md#validation-rules) that apply to 0.1
-- [ ] `ReadinessConditionFlow`: `user`, `state` (selector depends on domain), `reconfigure`, title, `unique_id` = entity id, `not_correctable`
-- [ ] One update listener that reloads on every change of options or subentries; subentry flows use `async_update_and_abort`, never `async_update_reload_and_abort` ([ADR 0001](adr/0001-update-listener-instead-of-options-flow-with-reload.md))
-- [ ] `async_migrate_entry` (`VERSION 1`, `MINOR_VERSION 1`, rejects unknown future versions)
-- [ ] `strings.json`, `en`, `de`: every field with `data_description`, sections, menu options, selector options, errors
-- [ ] Tests C1, C2, C3, C4 (flow part), C4b, C4c; 100 % coverage of `config_flow.py`
+- [x] `const.py`: all 0.1 option keys, defaults, defaults relative to max flow (rounded to 5 m³/h)
+- [x] Config flow `user` → `actuator` (only when needed) → `inputs`; `data={}`, all defaults in `options`; `_async_abort_entries_match` on the actuator
+- [x] Config flow validation: `actuator_not_found`, `select_options`, `select_mapping`, `no_inputs`, `already_configured`
+- [x] Options flow (plain `OptionsFlow`): menu, steps `actuator` (+ `actuator_mapping`), `inputs`, `control` (sections `shaping` and `advanced` with `problem_delay` always shown and collapsed, `quiet` with `quiet_max_flow`), `boosts` (section `manual` only); sections, collapsed sections, no advanced mode (deprecated in HA 2026.10, see [01-configuration.md](spec/01-configuration.md#principles)), flattening, duration ↔ seconds, `add_suggested_values_to_schema`, max-flow hint
+- [x] Cross-field validation from the [validation rules](spec/01-configuration.md#validation-rules) that apply to 0.1
+- [x] `ReadinessConditionFlow`: `user`, `state` (selector depends on domain), `reconfigure`, title, `unique_id` = entity id, `not_correctable`
+- [x] One update listener that reloads on every change of options or subentries; subentry flows use `async_update_and_abort`, never `async_update_reload_and_abort` ([ADR 0001](adr/0001-update-listener-instead-of-options-flow-with-reload.md))
+- [x] `async_migrate_entry` (`VERSION 1`, `MINOR_VERSION 1`, rejects unknown future versions)
+- [x] `strings.json`, `en`, `de`: every field with `data_description`, sections, menu options, selector options, errors
+- [x] Tests C1, C2, C3, C4 (flow part), C4b, C4c; 100 % coverage of `config_flow.py`
 
 Done when: all flow tests pass, the entry can be created and edited in a dev instance in `en` and `de`.
 
@@ -109,19 +109,19 @@ Done when: all flow tests pass, the entry can be created and edited in a dev ins
 
 Goal: the engine runs in Home Assistant and controls a unit. Spec: [02-control.md](spec/02-control.md), [05-architecture.md](spec/05-architecture.md).
 
-- [ ] `__init__.py`: `async_setup_entry` with `runtime_data`, `async_unload_entry`, `async_remove_entry` (delete store); no `ConfigEntryNotReady` for missing sources
-- [ ] `controller.py`: state subscriptions for all configured entities, `Debouncer`, periodic timer, `asyncio.Lock` with exactly one follow-up run, start via `async_at_started` – BHV-17
-- [ ] Snapshot building from the state machine (staleness from `last_reported`)
-- [ ] Effect execution and timer scheduling with `async_track_point_in_utc_time`
-- [ ] `Store` load/save (`async_delay_save`), expiry on load, corrupt or future store → defaults and warning – BHV-50
-- [ ] `actuator.py`: adapters number/fan/select and off actuator, `blocking=True`, 10 s timeout, own `Context`; verification after 30 s, one retry, `write_mismatch`; `write_failed`; external changes accepted as `current` – BHV-01, 02
-- [ ] Write gate in the order control switch → availability → readiness; control switch off blocks writes and readiness corrections – BHV-03
-- [ ] External stop/start of the off actuator (foreign context, valid states only) passed to the engine as `pause`/`resume` with source `external`
-- [ ] Availability check and readiness: comparison, auto-correct (max. once per 60 s, 3 attempts, retry every 5 min), event `readiness_corrected` effect, problems `actuator_unavailable`/`not_ready`, `log-when-unavailable` – BHV-04, 05
-- [ ] Problem tracking with `problem_delay`, problems cleared automatically
-- [ ] Entity renames followed in `options` and subentries; the update listener reloads (removal repair follows in M10)
-- [ ] Decision log (last 100 decisions in memory)
-- [ ] Tests C4 (auto-correct, problem after 3 failures), C4a (rename), C6, C8, C9
+- [x] `__init__.py`: `async_setup_entry` with `runtime_data`, `async_unload_entry`, `async_remove_entry` (delete store); no `ConfigEntryNotReady` for missing sources
+- [x] `controller.py`: state subscriptions for all configured entities, `Debouncer`, periodic timer, `asyncio.Lock` with exactly one follow-up run, start via `async_at_started` – BHV-17
+- [x] Snapshot building from the state machine (staleness from `last_reported`)
+- [x] Effect execution and timer scheduling with `async_track_point_in_utc_time`
+- [x] `Store` load/save (`async_delay_save`), expiry on load, corrupt or future store → defaults and warning – BHV-50
+- [x] `actuator.py`: adapters number/fan/select and off actuator, `blocking=True`, 10 s timeout, own `Context`; verification after 30 s, one retry, `write_mismatch`; `write_failed`; external changes accepted as `current` – BHV-01, 02
+- [x] Write gate in the order control switch → availability → readiness; control switch off blocks writes and readiness corrections – BHV-03
+- [x] External stop/start of the off actuator (foreign context, valid states only) passed to the engine as `pause`/`resume` with source `external`
+- [x] Availability check and readiness: comparison, auto-correct (max. once per 60 s, 3 attempts, retry every 5 min), event `readiness_corrected` effect, problems `actuator_unavailable`/`not_ready`, `log-when-unavailable` – BHV-04, 05
+- [x] Problem tracking with `problem_delay`, problems cleared automatically
+- [x] Entity renames followed in `options` and subentries; the update listener reloads (removal repair follows in M10)
+- [x] Decision log (last 100 decisions in memory)
+- [x] Tests C4 (auto-correct, problem after 3 failures), C4a (rename), C6, C8, C9
 
 Done when: in a dev instance with template/`input_number` stand-ins the unit is controlled according to CO₂ and humidity, and survives restarts.
 
@@ -129,20 +129,20 @@ Done when: in a dev instance with template/`input_number` stand-ins the unit is 
 
 Goal: everything from [04-interface.md](spec/04-interface.md) marked 0.1.
 
-- [ ] `entity.py`: base class, device info (`DeviceEntryType.SERVICE`), `has_entity_name`, `translation_key`, `unique_id`, push updates
-- [ ] `sensor.py`: `setpoint` (all attributes, `_unrecorded_attributes`), `reason`, `mode`, `ends_at` – BHV-51, 23
-- [ ] `button.py`: `boost`, `pause`, `resume`
-- [ ] `switch.py`: `control` (state in the store) – BHV-03
-- [ ] `select.py`: `boost_duration`, `pause_duration` (`RestoreEntity`); `number.py`: `boost_level` (`RestoreNumber`)
-- [ ] `binary_sensor.py`: `problem` (diagnostic)
-- [ ] `select.py`: `profile` (state in the store, translated options and state icons) – BHV-26
-- [ ] `ServiceValidationError` `control_disabled` for boost/pause from services and buttons while control is off
-- [ ] `PARALLEL_UPDATES = 0` everywhere; `icons.json` (default and per state); entity translations `en`/`de`
-- [ ] Removing entities of unconfigured features from the entity registry during setup
-- [ ] Services `boost`, `pause`, `resume` in `async_setup`, `services.yaml`, entry resolution, translated `ServiceValidationError`s – BHV-22
-- [ ] Events `mode_changed` and `readiness_corrected` fired on the bus – BHV-52
-- [ ] `logbook.py`: translated messages for `mode_changed`, linked to the `mode` sensor
-- [ ] Tests C5, C7, C12
+- [x] `entity.py`: base class, device info (`DeviceEntryType.SERVICE`), `has_entity_name`, `translation_key`, `unique_id`, push updates
+- [x] `sensor.py`: `setpoint` (all attributes, `_unrecorded_attributes`), `reason`, `mode`, `ends_at` – BHV-51, 23
+- [x] `button.py`: `boost`, `pause`, `resume`
+- [x] `switch.py`: `control` (state in the store) – BHV-03
+- [x] `select.py`: `boost_duration`, `pause_duration` (`RestoreEntity`); `number.py`: `boost_level` (`RestoreNumber`)
+- [x] `binary_sensor.py`: `problem` (diagnostic)
+- [x] `select.py`: `profile` (state in the store, translated options and state icons) – BHV-26
+- [x] `ServiceValidationError` `control_disabled` for boost/pause from services and buttons while control is off
+- [x] `PARALLEL_UPDATES = 0` everywhere; `icons.json` (default and per state); entity translations `en`/`de`
+- [x] Removing entities of unconfigured features from the entity registry during setup
+- [x] Services `boost`, `pause`, `resume` in `async_setup`, `services.yaml`, entry resolution, translated `ServiceValidationError`s – BHV-22
+- [x] Events `mode_changed` and `readiness_corrected` fired on the bus – BHV-52
+- [x] `logbook.py`: translated messages for `mode_changed`, linked to the `mode` sensor
+- [x] Tests C5, C7, C12
 
 Done when: all 0.1 entities appear with correct names in `en` and `de`, services and logbook work, ≥ 90 % overall coverage.
 
@@ -150,12 +150,14 @@ Done when: all 0.1 entities appear with correct names in `en` and `de`, services
 
 Goal: 0.1 works on a real installation in test runs. Everyday operation stays with the existing automation until 0.2, because the safety shutdown is required before going live.
 
-- [ ] `quality_scale.yaml` updated
-- [ ] README: installation (manual copy or HACS custom repository, verify Q10), configuration walkthrough, every field, limitations (no extract-duct IAQ, pets and away)
-- [ ] `examples/dashboard.yaml` with built-in cards only
+- [x] `quality_scale.yaml` updated (docs rules)
+- [x] README: installation (manual copy or HACS custom repository), configuration walkthrough, every field, limitations (no extract-duct IAQ, pets and away)
+- [ ] Verify Q10 (HACS install from the private repository) during the test run; record the answer in the spec and the README
+- [x] `examples/dashboard.yaml` with built-in cards only
 - [ ] Test run: install, disable the old automation for the duration of the test (otherwise two controllers write), the integration writes to the unit directly; re-enable the automation afterwards
 - [ ] Acceptance items for 0.1 from [06-testing.md](spec/06-testing.md#acceptance-checklist-real-installation): boost via button, pause and restart, CO₂ sensor disconnected, readiness correction, history and logbook
-- [ ] `CHANGELOG.md`, tag `v0.1.0`, GitHub release
+- [x] `CHANGELOG.md`: user-facing list of the 0.1 changes under `Unreleased`
+- [ ] Version header `[0.1.0]` in `CHANGELOG.md`, tag `v0.1.0`, GitHub release
 
 Done when: the 0.1 acceptance items pass in a test run of several days, including every profile.
 

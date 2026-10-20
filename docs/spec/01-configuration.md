@@ -107,8 +107,6 @@ Changing the actuator to one used by another entry: error `actuator_in_use`. Cha
 | `quiet` | `quiet_max_flow` | `NumberSelector(m³/h)` | 62.5 % of max | quiet limit (night and quiet profile) |
 | `quiet` | `quiet_humidity_override` | `NumberSelector(40–100, %)` | 65 | above this living humidity maximum the quiet limit does not apply |
 | `away` | `away_enabled` | `BooleanSelector` | true | BHV-15, disables the away limit in every profile; without `presence_entities` it has no effect (the away limit needs presence entities, [02-control.md](02-control.md#profiles)) |
-
-The profile ([02-control.md](02-control.md#profiles)) is not an option: it is chosen in daily use with the `profile` select entity.
 | `shaping` (collapsed, always shown) | `min_write_interval` | `DurationSelector` | 5 min | BHV-16 |
 | `shaping` | `max_step_up`, `max_step_down` | `NumberSelector(m³/h)` | 12.5 % of max | |
 | `shaping` | `deadband_up`, `deadband_down` | `NumberSelector(0–100, m³/h)` | 10, 20 | |
@@ -118,6 +116,8 @@ The profile ([02-control.md](02-control.md#profiles)) is not an option: it is ch
 | `advanced` | `stale_timeout` | `DurationSelector` | 30 min | BHV-18 |
 | `advanced` | `startup_grace` | `DurationSelector` | 1 min | |
 | `advanced` | `problem_delay` | `DurationSelector` | 10 min | time a problem must persist before the `problem` sensor turns on (and, from 0.2, before a notification) |
+
+The profile ([02-control.md](02-control.md#profiles)) is not an option: it is chosen in daily use with the `profile` select entity.
 
 The `data_description` of each shaping field explains its effect with the default values (e.g. "at most one change every 5 minutes").
 
