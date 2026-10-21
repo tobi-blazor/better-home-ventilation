@@ -347,9 +347,10 @@ class ActuatorSnapshot:
       (= ``percentage_step``) are the attributes.
     - ``select``: ``state`` is the current option.
 
-    ``foreign_change`` is True if the last state change had a context that was
-    not created by the integration (used for an external stop/start of a
-    ``fan`` actuator without off actuator).
+    ``foreign_change`` is True if the last state change was not the
+    integration's own (neither its context nor a late confirmation of its last
+    command, docs/spec/02-control.md#writing; used for an external stop/start
+    of a ``fan`` actuator without off actuator).
     """
 
     state: str | None
@@ -362,7 +363,10 @@ class ActuatorSnapshot:
 
 @dataclass(frozen=True, kw_only=True)
 class OffActuatorSnapshot:
-    """State of the off actuator and whether its last change was external."""
+    """State of the off actuator and whether its last change was external.
+
+    ``foreign_change`` follows the same rule as for the actuator.
+    """
 
     state: str | None
     foreign_change: bool = False

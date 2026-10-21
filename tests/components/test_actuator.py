@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import timedelta
 import logging
 
+from freezegun.api import FrozenDateTimeFactory
 from homeassistant.core import Context, HomeAssistant, State
 import pytest
 
 from custom_components.better_home_ventilation.actuator import (
+    CONFIRM_WINDOW,
     MIN_TOLERANCE,
     ActuatorWriter,
     _correction_service,
@@ -20,9 +23,17 @@ from custom_components.better_home_ventilation.actuator import (
 from custom_components.better_home_ventilation.engine.models import (
     CorrectReadiness,
     Options,
+    WriteFlow,
 )
 
-from .common import FAN, NUMBER_FLOW, NUMBER_PERCENT, MockUnit, entry_options
+from .common import (
+    FAN,
+    NUMBER_FLOW,
+    NUMBER_PERCENT,
+    STANDBY_SWITCH,
+    MockUnit,
+    entry_options,
+)
 
 
 def options(**overrides: object) -> Options:
@@ -151,3 +162,133 @@ async def test_own_context(hass: HomeAssistant, unit: MockUnit) -> None:
     assert writer.is_own(call.context)
     assert not writer.is_own(Context())
     assert not writer.is_own(None)
+
+
+# --- Late confirmation (BHV-02, BHV-21) ------------------------------------------
+
+
+def standby_writer(hass: HomeAssistant) -> ActuatorWriter:
+    """Return a writer with a standby switch as off actuator (`on` = stopped)."""
+    return ActuatorWriter(
+        hass,
+        options(off_entity=STANDBY_SWITCH, off_state="on"),
+        asyncio.Lock(),
+        lambda: None,
+    )
+
+
+def report(hass: HomeAssistant, value: str) -> State:
+    """Set the standby switch with a new (foreign) context, like a poll."""
+    hass.states.async_set(STANDBY_SWITCH, value, context=Context())
+    state = hass.states.get(STANDBY_SWITCH)
+    assert state is not None
+    return state
+
+
+async def test_late_confirmation_inside_the_window_is_own_once(
+    hass: HomeAssistant, unit: MockUnit, freezer: FrozenDateTimeFactory
+) -> None:
+    """The commanded state with a new context inside the window is own, once."""
+    unit.ignore.add(STANDBY_SWITCH)
+    hass.states.async_set(STANDBY_SWITCH, "off")
+    writer = standby_writer(hass)
+    assert await writer.async_turn_off(STANDBY_SWITCH)  # stop: switch on
+
+    freezer.tick(CONFIRM_WINDOW - timedelta(seconds=1))
+    unavailable = report(hass, "unavailable")
+    writer.observe_change(unavailable)
+    assert not writer.is_own(unavailable.context)
+    confirmed = report(hass, "on")
+    writer.observe_change(confirmed)
+    assert writer.is_own(confirmed.context)
+
+    # The expectation is used up: the same state again is someone else's.
+    for value in ("off", "on"):
+        state = report(hass, value)
+        writer.observe_change(state)
+        assert not writer.is_own(state.context)
+
+
+async def test_late_confirmation_after_the_window_is_foreign(
+    hass: HomeAssistant, unit: MockUnit, freezer: FrozenDateTimeFactory
+) -> None:
+    """After the window the commanded state is an external change."""
+    unit.ignore.add(STANDBY_SWITCH)
+    hass.states.async_set(STANDBY_SWITCH, "on")
+    writer = standby_writer(hass)
+    assert await writer.async_turn_on(STANDBY_SWITCH)  # start: switch off
+
+    freezer.tick(CONFIRM_WINDOW + timedelta(seconds=1))
+    state = report(hass, "off")
+    writer.observe_change(state)
+    assert not writer.is_own(state.context)
+
+
+async def test_own_context_ends_the_expectation(
+    hass: HomeAssistant, unit: MockUnit
+) -> None:
+    """A confirmation with the own context ends the expectation as well."""
+    hass.states.async_set(STANDBY_SWITCH, "off")
+    writer = standby_writer(hass)
+    assert await writer.async_turn_off(STANDBY_SWITCH)  # MockUnit echoes the context
+    own = hass.states.get(STANDBY_SWITCH)
+    assert own is not None
+    writer.observe_change(own)
+    assert writer.is_own(own.context)
+
+    for value in ("off", "on"):
+        state = report(hass, value)
+        writer.observe_change(state)
+        assert not writer.is_own(state.context)
+
+
+async def test_no_expectation_for_a_state_already_shown(
+    hass: HomeAssistant, unit: MockUnit
+) -> None:
+    """A command for a state the entity already shows expects nothing."""
+    unit.ignore.add(STANDBY_SWITCH)
+    hass.states.async_set(STANDBY_SWITCH, "on")
+    writer = standby_writer(hass)
+    assert await writer.async_turn_off(STANDBY_SWITCH)
+
+    for value in ("off", "on"):
+        state = report(hass, value)
+        writer.observe_change(state)
+        assert not writer.is_own(state.context)
+
+
+async def test_newer_command_replaces_the_expectation(
+    hass: HomeAssistant, unit: MockUnit
+) -> None:
+    """Only the value of the last command counts as its confirmation."""
+    unit.ignore.add(NUMBER_FLOW)
+    hass.states.async_set(NUMBER_FLOW, "100", {"step": 1})
+    writer = ActuatorWriter(hass, options(), asyncio.Lock(), lambda: None)
+    assert await writer.async_write(WriteFlow(flow=80, native=80.0))
+    assert await writer.async_write(WriteFlow(flow=200, native=200.0))
+    writer.async_cancel()
+
+    for value, own in (("80", False), ("200", True)):
+        hass.states.async_set(NUMBER_FLOW, value, {"step": 1}, context=Context())
+        state = hass.states.get(NUMBER_FLOW)
+        assert state is not None
+        writer.observe_change(state)
+        assert writer.is_own(state.context) is own
+
+
+async def test_late_write_confirmation_uses_the_tolerance(
+    hass: HomeAssistant, unit: MockUnit
+) -> None:
+    """A write is confirmed by its value within the verification tolerance."""
+    unit.ignore.add(NUMBER_FLOW)
+    hass.states.async_set(NUMBER_FLOW, "100", {"step": 1})
+    writer = ActuatorWriter(hass, options(), asyncio.Lock(), lambda: None)
+    assert await writer.async_write(WriteFlow(flow=80, native=80.0))
+    writer.async_cancel()
+
+    for value, own in (("120", False), ("unknown", False), ("83", True)):
+        hass.states.async_set(NUMBER_FLOW, value, {"step": 1}, context=Context())
+        state = hass.states.get(NUMBER_FLOW)
+        assert state is not None
+        writer.observe_change(state)
+        assert writer.is_own(state.context) is own

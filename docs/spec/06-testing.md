@@ -113,6 +113,7 @@ Constructed headlines are marked as such in the fixture. Real messages that were
 | C6 | unload removes listeners and timers (no lingering timers: `hass` fixture check) |
 | C7 | services: entry resolution with one and two entries, error translations |
 | C8 | actuator write with context, verification retry, `write_mismatch` |
+| C8a | late confirmation with a new context (device confirms after 20 s and 45 s): a timed pause stays timed, a late start is no command, a late write is own without `write_mismatch`; a stop at the unit after the confirmation, another value, `unavailable` and the commanded state after the window stay external |
 | C9 | restart: boost active → reload entry → `ends_at` unchanged, boost continues |
 | C10 | notifications: `notify.mobile_app_x` called with actions and tag; firing `mobile_app_notification_action` with `BHV_<entry8>_KEEP_VENTILATING` overrides |
 | C11 | no notify services → `persistent_notification` created |
