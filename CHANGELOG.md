@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The profile select shows a short description with each profile (e.g. "Quiet – limited all day"), so the choice is clear in the dropdown.
+
 ## [0.1.0] - 2026-10-21
 
 First version, for test runs on a real installation. The safety shutdown on hazard warnings is not included yet (planned for 0.2), so this version is not meant for unattended everyday operation.

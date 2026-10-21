@@ -428,10 +428,10 @@
       "profile": {
         "name": "Profil",
         "state": {
-          "balanced": "Ausgewogen",
-          "air_quality": "Luftqualität",
-          "quiet": "Leise",
-          "winter": "Winter"
+          "balanced": "Ausgewogen – nach Bedarf, nachts leiser",
+          "air_quality": "Luftqualität – nach Bedarf, auch nachts",
+          "quiet": "Leise – ganztägig gedrosselt",
+          "winter": "Winter – schont trockene Luft"
         }
       },
       "boost_duration": {

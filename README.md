@@ -292,6 +292,8 @@ How it works:
 
 The profile decides which limits apply and how CO₂ counts while the air is dry. It is chosen with the **Profile** select, takes effect at once (without step limits), is kept across restarts and can be changed while control is off. Profiles have no settings of their own; they use the options above.
 
+The select shows each profile with a short description, e.g. "Quiet – limited all day" (German: "Leise – ganztägig gedrosselt").
+
 | Profile | Quiet limit | Away limit | CO₂ while the air is dry |
 |---|---|---|---|
 | **Balanced** (default) | in the night window | yes | full CO₂ ramp |
