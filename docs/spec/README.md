@@ -61,7 +61,7 @@ The domain terms (unit, flow, contribution, demand, target, setpoint, mode, paus
 | ID | Verb | Requirement | Phase |
 |---|---|---|---|
 | BHV-01 | must | One config entry controls one unit through one actuator: `number` (m³/h or %), `fan` (percentage) or `select` (stages mapped to flows) | 0.1 |
-| BHV-02 | should | Optional off actuator: `switch`/`input_boolean` with configurable polarity, or `fan.turn_off`. Without off actuator, "off" means the lowest possible actuator value | 0.1 |
+| BHV-02 | should | Optional off actuator: `switch`/`input_boolean` with configurable polarity, or `fan.turn_off`, selectable at setup and in the options. Without off actuator, "off" means the lowest possible actuator value, which some units do not take as a stop | 0.1 |
 | BHV-03 | must | A **control switch** disables all writes (hands-off), including readiness corrections. Entities keep calculating | 0.1 |
 | BHV-04 | must | **Readiness conditions:** entity + expected state, optionally auto-corrected before writing. If not met, writes are suspended and a problem is reported | 0.1 |
 | BHV-05 | must | Actuator availability is monitored; unavailable actuator suspends writes and raises a problem | 0.1 |

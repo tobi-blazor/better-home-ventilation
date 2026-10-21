@@ -101,8 +101,9 @@ Constructed headlines are marked as such in the fixture. Real messages that were
 
 | # | Test |
 |---|---|
-| C1 | config flow happy path for `number` (flow), `number` (%), `number` (unknown unit), `fan`, `select`; entry has `data == {}` and all defaults in `options` |
-| C2 | config flow errors: `actuator_not_found`, `select_options`, `select_mapping`, `no_inputs`; abort `already_configured` for an actuator used by another entry |
+| C1 | config flow happy path for `number` (flow), `number` (%), `number` (unknown unit), `fan`, `select`; entry has `data == {}` and all defaults in `options`; with an off actuator in the collapsed section `off` (`off_entity`, `off_state` stored flat, also through the mapping step) and without one (section omitted or empty: `off_entity` absent, `off_state` default) |
+| C1a | end to end: an entry created by the config flow with an off switch (`off_state` = `on`) pauses by switching it on and writes no minimum flow; without an off actuator a pause writes the lowest actuator value |
+| C2 | config flow errors: `actuator_not_found`, `select_options`, `select_mapping`, `no_inputs`, `off_entity_not_found`, `off_entity_is_actuator` (on the section `off`, shown together with actuator errors); abort `already_configured` for an actuator used by another entry |
 | C3 | options flow: each menu step, every validation error key from [01-configuration.md](01-configuration.md#validation-rules) (errors of fields inside a section under the section key), section input flattened, cleared optional fields removed, suggested values shown, `shaping` and `advanced` sections always shown and collapsed (no advanced mode: `show_advanced_options` is deprecated since HA 2026.10, breaks in 2027.6), `away_enabled` without presence entities accepted, entry reloaded after save |
 | C4 | readiness subentries: add (select entity → options dropdown), reconfigure, delete, duplicate entity `already_configured`, `not_correctable`; auto-correct calls `select.select_option`; problem after 3 failures |
 | C4a | entity rename of a configured sensor updates `options` and reloads; removal raises `missing_entity` repair |

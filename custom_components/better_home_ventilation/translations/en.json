@@ -9,6 +9,8 @@
       "duplicate_sensor": "A sensor is used both as CO₂ and as humidity sensor.",
       "max_flow_required": "Enter the max flow. It can only be taken from the actuator if it is a number entity in m³/h with a maximum between 10 and 2000.",
       "no_inputs": "Select at least one CO₂ or humidity sensor.",
+      "off_entity_is_actuator": "The off actuator must be a different entity than the actuator.",
+      "off_entity_not_found": "The off actuator entity does not exist.",
       "select_mapping": "Enter a flow for at least two options, each with a different flow.",
       "select_options": "The select entity needs at least two options.",
       "sensor_not_found": "At least one of the selected sensors does not exist."
@@ -26,6 +28,20 @@
           "name": "Name of the ventilation unit, used for the device and its entities.",
           "actuator": "The entity that sets the unit's flow: a number (m³/h or %), a fan (percentage) or a select (stages).",
           "max_flow": "Nominal maximum flow of the unit in m³/h. Leave empty to use the actuator's maximum if it is a number entity in m³/h. Default flows (minimum, fallback, quiet limit, boost) are calculated from it."
+        },
+        "sections": {
+          "off": {
+            "name": "Off actuator",
+            "description": "Optional entity that stops the unit for off and pause. Without it, the unit is set to its lowest value (0 %, actuator minimum or lowest stage). Some units do not stop at their lowest value and keep running; select an off actuator for them.",
+            "data": {
+              "off_entity": "Off actuator",
+              "off_state": "Unit stopped when"
+            },
+            "data_description": {
+              "off_entity": "A switch or input boolean that stops the unit (e.g. a standby switch), or a fan that is turned off. Leave empty only if the unit stops at its lowest value: some units do not accept it as a stop and keep running.",
+              "off_state": "Which state of the off actuator means the unit is stopped: on for a standby switch (on = stopped), off for a power switch (off = stopped). Ignored for a fan."
+            }
+          }
         }
       },
       "actuator": {
@@ -64,6 +80,8 @@
       "level_range": "The boost level must be between the minimum flow and the max flow.",
       "night_window": "The night window must not start and end at the same time.",
       "no_inputs": "Select at least one CO₂ or humidity sensor.",
+      "off_entity_is_actuator": "The off actuator must be a different entity than the actuator.",
+      "off_entity_not_found": "The off actuator entity does not exist.",
       "quiet_range": "The quiet max flow must be between the minimum flow and the max flow.",
       "select_mapping": "Enter a flow for at least two options, each with a different flow.",
       "select_options": "The select entity needs at least two options.",
@@ -100,14 +118,14 @@
         "sections": {
           "off": {
             "name": "Off actuator",
-            "description": "Optional entity that stops the unit. Without it, off means the lowest actuator value.",
+            "description": "Optional entity that stops the unit for off and pause. Without it, the unit is set to its lowest value (0 %, actuator minimum or lowest stage). Some units do not stop at their lowest value and keep running; select an off actuator for them.",
             "data": {
               "off_entity": "Off actuator",
               "off_state": "Unit stopped when"
             },
             "data_description": {
-              "off_entity": "A switch or input boolean that stops the unit (e.g. a standby switch), or a fan that is turned off.",
-              "off_state": "Which state of the off actuator means the unit is stopped. A standby switch stops the unit when it is on. Ignored for a fan."
+              "off_entity": "A switch or input boolean that stops the unit (e.g. a standby switch), or a fan that is turned off. Leave empty only if the unit stops at its lowest value: some units do not accept it as a stop and keep running.",
+              "off_state": "Which state of the off actuator means the unit is stopped: on for a standby switch (on = stopped), off for a power switch (off = stopped). Ignored for a fan."
             }
           },
           "range": {

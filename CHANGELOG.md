@@ -33,3 +33,11 @@ First version, for test runs on a real installation. The safety shutdown on haza
 ### Fixed
 
 - A unit that reports a command only on its next poll (for example an ESPHome Modbus device) no longer turns a timed pause into a pause until resumed: reaching the state or value the integration has just commanded within 60 s counts as the integration's own change, not as a stop, start or flow change at the unit.
+### Changed
+
+- The off actuator and the state that means "stopped" can be chosen during setup (collapsed section **Off actuator** in the first step), not only later in the options.
+- The setup and option texts of the off actuator explain that without one the unit is set to its lowest value, which some units do not take as a stop, and that such units need an off actuator.
+
+### Fixed
+
+- Pause did not stop units that keep running at their lowest value, because the off actuator could not be set during setup. An off actuator that does not exist or is the actuator itself is now rejected in the setup and in the options.
