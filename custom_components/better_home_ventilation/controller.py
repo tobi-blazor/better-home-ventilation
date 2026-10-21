@@ -384,8 +384,13 @@ class VentilationController:
         self._debouncer.async_schedule_call()
 
     @callback
-    def _async_unit_changed(self, _event: Event[EventStateChangedData]) -> None:
-        """Evaluate immediately on actuator, off actuator and readiness changes."""
+    def _async_unit_changed(self, event: Event[EventStateChangedData]) -> None:
+        """Evaluate immediately on actuator, off actuator and readiness changes.
+
+        A late confirmation of a command is adopted as own first, so the
+        evaluation does not take it as an external change (02-control.md#writing).
+        """
+        self._writer.observe_change(event.data["new_state"])
         self._async_request_soon()
 
     async def _async_periodic(self, _now: datetime) -> None:

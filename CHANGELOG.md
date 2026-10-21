@@ -29,3 +29,7 @@ First version, for test runs on a real installation. The safety shutdown on haza
 - Mode changes fire `better_home_ventilation_mode_changed` and appear in the logbook of the device (for example "switched to Boost (button, until 18:30)").
 - Renamed sensors and actuators are followed in the settings and readiness conditions automatically.
 - User documentation in the README (setup, every option, profiles, calculation, entities, actions, limitations, troubleshooting, removal) and an example dashboard in `examples/dashboard.yaml`.
+
+### Fixed
+
+- A unit that reports a command only on its next poll (for example an ESPHome Modbus device) no longer turns a timed pause into a pause until resumed: reaching the state or value the integration has just commanded within 60 s counts as the integration's own change, not as a stop, start or flow change at the unit.

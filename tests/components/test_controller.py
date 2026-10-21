@@ -531,6 +531,139 @@ async def test_fan_as_off_actuator(
     assert len(unit.calls_for("fan", "turn_on")) == 1
 
 
+# --- Late confirmation (slow pollers, BHV-02, BHV-21) -------------------------------
+
+
+@pytest.mark.parametrize("delay", [20, 45])
+@pytest.mark.usefixtures("entities")
+async def test_bhv21_late_confirmed_stop_keeps_the_timed_pause(
+    hass: HomeAssistant, unit: MockUnit, freezer: FrozenDateTimeFactory, delay: int
+) -> None:
+    """A stop confirmed on the next poll (new context) is own: the pause stays timed."""
+    events = async_capture_events(hass, EVENT_MODE_CHANGED)
+    unit.delay[STANDBY_SWITCH] = delay
+    entry = await setup_entry(hass, off_entity=STANDBY_SWITCH, off_state="on")
+    controller = controller_of(entry)
+    await advance(hass, freezer, 61)
+
+    await controller.async_command(
+        PauseCommand(source=Source.BUTTON, duration=timedelta(hours=1))
+    )
+    manual = controller.state.manual
+    assert isinstance(manual, Pause)
+    until = manual.until
+    assert until is not None
+    assert hass.states.get(STANDBY_SWITCH).state == "off"  # type: ignore[union-attr]
+
+    await advance(hass, freezer, delay)
+    state = hass.states.get(STANDBY_SWITCH)
+    assert state is not None
+    assert state.state == "on"
+    assert controller._writer.is_own(state.context)
+    manual = controller.state.manual
+    assert isinstance(manual, Pause)
+    assert manual.source is Source.BUTTON
+    assert manual.until == until
+    decision = controller.current_decision
+    assert decision is not None
+    assert decision.mode is Mode.OFF
+    assert decision.ends_at == until
+    assert controller.state.stopped_by_integration
+    assert [event.data["source"] for event in events] == ["button"]
+
+
+@pytest.mark.usefixtures("entities")
+async def test_bhv21_late_confirmed_start_then_stop_at_the_unit(
+    hass: HomeAssistant, unit: MockUnit, freezer: FrozenDateTimeFactory
+) -> None:
+    """A late start is own; a stop at the unit inside the window is still external."""
+    unit.delay[STANDBY_SWITCH] = 30
+    entry = await setup_entry(hass, off_entity=STANDBY_SWITCH, off_state="on")
+    controller = controller_of(entry)
+    await advance(hass, freezer, 61)
+    await controller.async_command(PauseCommand(source=Source.SERVICE))
+    await advance(hass, freezer, 30)
+    events = async_capture_events(hass, EVENT_MODE_CHANGED)
+
+    await controller.async_command(ResumeCommand(source=Source.SERVICE))
+    assert len(unit.calls_for("switch", "turn_off")) == 1
+    await advance(hass, freezer, 30)
+    state = hass.states.get(STANDBY_SWITCH)
+    assert state is not None
+    assert state.state == "off"
+    assert controller._writer.is_own(state.context)
+    assert not controller.state.stopped_by_integration
+    assert controller.current_decision.mode is Mode.AUTOMATIC  # type: ignore[union-attr]
+    assert [event.data["source"] for event in events] == ["service"]
+
+    # The expectation ended with the confirmation: this stop is the user's.
+    await advance(hass, freezer, 10)
+    hass.states.async_set(STANDBY_SWITCH, "on")
+    await hass.async_block_till_done()
+    manual = controller.state.manual
+    assert isinstance(manual, Pause)
+    assert manual.source is Source.EXTERNAL
+    assert manual.until is None
+    assert events[-1].data["source"] == "external"
+
+
+@pytest.mark.usefixtures("entities")
+async def test_bhv21_late_confirmed_fan_off_keeps_the_timed_pause(
+    hass: HomeAssistant, unit: MockUnit, freezer: FrozenDateTimeFactory
+) -> None:
+    """A `fan` actuator without off actuator that reports `off` late is own."""
+    hass.states.async_set(FAN, "on", {"percentage": 50, "percentage_step": 1})
+    unit.delay[FAN] = 20
+    entry = await setup_entry(hass, actuator=FAN)
+    controller = controller_of(entry)
+    await advance(hass, freezer, 61)
+
+    await controller.async_command(
+        PauseCommand(source=Source.BUTTON, duration=timedelta(minutes=30))
+    )
+    await advance(hass, freezer, 20)
+    state = hass.states.get(FAN)
+    assert state is not None
+    assert state.state == "off"
+    assert controller._writer.is_own(state.context)
+    manual = controller.state.manual
+    assert isinstance(manual, Pause)
+    assert manual.source is Source.BUTTON
+    assert manual.until is not None
+
+
+@pytest.mark.parametrize(("delay", "writes"), [(20, 1), (45, 2)])
+@pytest.mark.usefixtures("entities")
+async def test_bhv02_late_confirmed_write_is_own_without_mismatch(
+    hass: HomeAssistant,
+    unit: MockUnit,
+    freezer: FrozenDateTimeFactory,
+    delay: int,
+    writes: int,
+) -> None:
+    """A write confirmed late is own; within the window it never ends in a mismatch.
+
+    Confirmed after the 30 s verification, the value is written once more and
+    the retry verification finds it.
+    """
+    unit.delay[NUMBER_FLOW] = delay
+    entry = await setup_entry(hass)
+    controller = controller_of(entry)
+    await advance(hass, freezer, 60)
+    assert len(unit.calls_for("number", "set_value")) == 1
+
+    for _ in range(12):  # 60 s in steps of 5 s: verification and retry
+        await advance(hass, freezer, 5)
+
+    state = hass.states.get(NUMBER_FLOW)
+    assert state is not None
+    assert state.state == "80.0"
+    assert controller._writer.is_own(state.context)
+    assert len(unit.calls_for("number", "set_value")) == writes
+    assert not controller._writer.problems
+    assert ("write_mismatch", None) not in problem_keys(controller)
+
+
 # --- Commands -------------------------------------------------------------------------
 
 

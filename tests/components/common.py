@@ -7,10 +7,17 @@ import inspect
 from typing import Any, ClassVar
 
 from freezegun.api import FrozenDateTimeFactory
-from homeassistant.core import HomeAssistant, Service, ServiceCall
+from homeassistant.core import (
+    CALLBACK_TYPE,
+    HomeAssistant,
+    Service,
+    ServiceCall,
+    callback,
+)
 from homeassistant.data_entry_flow import section
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.event import async_call_later
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
@@ -95,6 +102,9 @@ class MockUnit:
     Every handled call sets the entity state with the caller's context, like a
     real entity does. Entities in ``ignore`` accept calls without changing
     their state; calls for entities in ``fail`` raise ``HomeAssistantError``.
+    Entities in ``delay`` take a call at once but report it only after the
+    given number of seconds and with a new context, like a device that is
+    polled (for example an ESPHome Modbus device).
     """
 
     SERVICES: ClassVar[tuple[tuple[str, str], ...]] = (
@@ -121,6 +131,10 @@ class MockUnit:
         self.calls: list[ServiceCall] = []
         self.ignore: set[str] = set()
         self.fail: set[str] = set()
+        self.delay: dict[str, float] = {}
+        self._pending: list[CALLBACK_TYPE] = []
+        # State of delayed entities on the device, before HA learns it.
+        self._device: dict[str, tuple[str, dict[str, Any]]] = {}
         self._originals: dict[tuple[str, str], Service] = {}
         for domain, service in self.SERVICES:
             if original := hass.services.async_services_for_domain(domain).get(service):
@@ -135,6 +149,13 @@ class MockUnit:
         )
         if inspect.isawaitable(result):
             await result
+
+    @callback
+    def async_cancel(self) -> None:
+        """Cancel the delayed confirmations that are still pending."""
+        pending, self._pending = self._pending, []
+        for unsub in pending:
+            unsub()
 
     def calls_for(self, domain: str, service: str) -> list[ServiceCall]:
         """Return the calls of one service."""
@@ -173,6 +194,16 @@ class MockUnit:
             new_state = "on" if call.data["percentage"] else "off"
         else:
             new_state = "on" if call.service == "turn_on" else "off"
+        if (delay := self.delay.get(entity_id)) is not None:
+            self._device[entity_id] = (new_state, attributes)
+
+            @callback
+            def confirm(_now: Any) -> None:
+                # The poll reports what the device shows now, with a new context.
+                self.hass.states.async_set(entity_id, *self._device[entity_id])
+
+            self._pending.append(async_call_later(self.hass, delay, confirm))
+            return
         self.hass.states.async_set(
             entity_id, new_state, attributes, context=call.context
         )

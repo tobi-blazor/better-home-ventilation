@@ -201,10 +201,10 @@ def detect_external_command(
     """Turn an external stop/start of the unit into ``pause()``/``resume()``.
 
     docs/spec/02-control.md#writing: a change between the stopped and the
-    running state with a foreign context is a command with source
-    ``external``. Changes from or to ``unavailable``/``unknown`` and the first
-    observation after startup are not commands; while control is disabled
-    external changes are ignored. Also clears ``stopped_by_integration`` once
+    running state that is not the integration's own (``foreign_change``) is a
+    command with source ``external``. Changes from or to
+    ``unavailable``/``unknown`` and the first observation after startup are
+    not commands; while control is disabled external changes are ignored. Also clears ``stopped_by_integration`` once
     the unit is seen running.
     """
     running = unit_running(options, snapshot)

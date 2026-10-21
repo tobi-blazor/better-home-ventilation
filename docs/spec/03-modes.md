@@ -61,7 +61,7 @@ Between `off` and `boost` the last command wins, because both live in the single
 
 ## Commands
 
-Commands come from buttons, services, intents, notification actions and the unit itself (external stop/start of the off actuator, [02-control.md](02-control.md#writing)). Each command carries a `source` (`button`, `service`, `voice`, `notification`, `external`) for the logbook.
+Commands come from buttons, services, intents, notification actions and the unit itself (external stop/start of the off actuator; a late confirmation of the integration's own stop or start is not one, [02-control.md](02-control.md#writing)). Each command carries a `source` (`button`, `service`, `voice`, `notification`, `external`) for the logbook.
 
 | Command | Effect |
 |---|---|

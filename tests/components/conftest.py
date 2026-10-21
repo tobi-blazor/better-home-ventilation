@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
+
 from homeassistant.core import HomeAssistant
 from homeassistant.setup import async_setup_component
 import pytest
@@ -70,15 +72,18 @@ def entities(hass: HomeAssistant) -> None:
 
 
 @pytest.fixture
-async def unit(hass: HomeAssistant) -> MockUnit:
+async def unit(hass: HomeAssistant) -> AsyncGenerator[MockUnit]:
     """Register service handlers that stand in for the unit's entities.
 
     The entity components of the integration's own platforms are set up first,
-    so their services stay available for the integration's entities.
+    so their services stay available for the integration's entities. Delayed
+    confirmations still pending at the end of a test are cancelled.
     """
     for domain in ("number", "select", "switch"):
         assert await async_setup_component(hass, domain, {})
-    return MockUnit(hass)
+    mock_unit = MockUnit(hass)
+    yield mock_unit
+    mock_unit.async_cancel()
 
 
 @pytest.fixture

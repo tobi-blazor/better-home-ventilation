@@ -2,9 +2,11 @@
 
 docs/spec/02-control.md#writing: every service call uses ``blocking=True``, a
 timeout of 10 s and a context created by the integration, so own state changes
-can be told apart from external ones. 30 s after a write the actuator value is
-compared with the written value; one retry, then problem ``write_mismatch``.
-Failed service calls raise problem ``write_failed``.
+can be told apart from external ones. A device that confirms a command only on
+its next poll reports it with a new context; reaching the commanded state
+within :data:`CONFIRM_WINDOW` therefore also counts as own. 30 s after a write
+the actuator value is compared with the written value; one retry, then problem
+``write_mismatch``. Failed service calls raise problem ``write_failed``.
 
 The pure part of the mapping (flow <-> native value) lives in
 ``engine/mapping.py``; this module only talks to Home Assistant.
@@ -15,6 +17,7 @@ from __future__ import annotations
 import asyncio
 from collections import deque
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 import logging
 import math
@@ -30,6 +33,7 @@ from homeassistant.core import (
 )
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.event import async_call_later
+from homeassistant.util import dt as dt_util
 import voluptuous as vol
 
 from .engine.mapping import Native, current_native, native_to_flow
@@ -56,6 +60,11 @@ VERIFY_DELAY: Final = timedelta(seconds=30)
 MIN_TOLERANCE: Final = 5.0
 #: Number of own context ids remembered to recognise own state changes.
 CONTEXT_HISTORY: Final = 64
+#: Time after a command in which reaching the commanded state counts as own,
+#: whatever the context (devices that confirm only on their next poll). It
+#: covers the verification and the retry verification (2 x ``VERIFY_DELAY``),
+#: so a write confirmed within the window never ends in ``write_mismatch``.
+CONFIRM_WINDOW: Final = 2 * VERIFY_DELAY
 
 _SERVICE_ERRORS: Final = (HomeAssistantError, TimeoutError, vol.Invalid, ValueError)
 
@@ -161,11 +170,20 @@ def _correction_service(effect: CorrectReadiness) -> tuple[str, str, dict[str, A
     return domain, service, {"entity_id": entity_id}
 
 
+@dataclass(frozen=True, slots=True)
+class _Expected:
+    """The state a command of the writer is expected to bring, and until when."""
+
+    matches: Callable[[State], bool]
+    until: datetime
+
+
 class ActuatorWriter:
     """Writes to the actuator, the off actuator and readiness entities.
 
-    Keeps the ids of the contexts it created (to recognise own state changes),
-    verifies writes and reports ``write_failed`` and ``write_mismatch``.
+    Keeps the ids of the contexts it created and the state each command is
+    expected to bring (to recognise own state changes), verifies writes and
+    reports ``write_failed`` and ``write_mismatch``.
     ``lock`` is the evaluation lock of the controller: a verification retry is
     a write and must not overlap an evaluation. ``on_problem_change`` is called
     (outside the lock) when the verification changes the reported problems.
@@ -184,6 +202,7 @@ class ActuatorWriter:
         self._lock = lock
         self._on_problem_change = on_problem_change
         self._contexts: deque[str] = deque(maxlen=CONTEXT_HISTORY)
+        self._expected: dict[str, _Expected] = {}
         self._failed = False
         self._mismatch = False
         # Last write and its verification state.
@@ -210,8 +229,34 @@ class ActuatorWriter:
         return frozenset(problems)
 
     def is_own(self, context: Context | None) -> bool:
-        """Return True if a state change was caused by a call of this writer."""
+        """Return True if a state change was caused by a call of this writer.
+
+        Own are the contexts of the writer's service calls and the contexts of
+        late confirmations adopted by :meth:`observe_change`.
+        """
         return context is not None and context.id in self._contexts
+
+    @callback
+    def observe_change(self, state: State | None) -> None:
+        """Adopt a late confirmation of a command as own (BHV-02, BHV-21).
+
+        Called for every state change of the actuator and the off actuator.
+        If the entity reaches the state its last command expects within
+        :data:`CONFIRM_WINDOW`, the context of that state change is remembered
+        as own, whatever it is. The expectation ends with the first state that
+        meets it (own context or not) or with the window; any other state
+        stays foreign. ``unavailable``/``unknown`` never confirm a command.
+        """
+        if state is None or (expected := self._expected.get(state.entity_id)) is None:
+            return
+        if state.last_updated > expected.until:
+            del self._expected[state.entity_id]
+            return
+        if is_unavailable(state.state) or not expected.matches(state):
+            return
+        del self._expected[state.entity_id]
+        if state.context.id not in self._contexts:
+            self._contexts.append(state.context.id)
 
     @callback
     def observe(self, actuator: ActuatorSnapshot) -> None:
@@ -242,8 +287,7 @@ class ActuatorWriter:
             self._mismatch = False
         self._written = effect
         self._retried = self._exhausted is not None
-        domain, service, data = _write_service(self._options, effect.native)
-        ok = await self._async_call(domain, service, data)
+        ok = await self._async_write_native(effect)
         if ok:
             self._verify_unsub = async_call_later(
                 self._hass, VERIFY_DELAY, self._verify_job
@@ -252,13 +296,11 @@ class ActuatorWriter:
 
     async def async_turn_off(self, entity_id: str) -> bool:
         """Stop the unit with the off actuator."""
-        domain, service = _off_service(self._options, entity_id, stop=True)
-        return await self._async_call(domain, service, {"entity_id": entity_id})
+        return await self._async_switch(entity_id, stop=True)
 
     async def async_turn_on(self, entity_id: str) -> bool:
         """Start the unit with the off actuator."""
-        domain, service = _off_service(self._options, entity_id, stop=False)
-        return await self._async_call(domain, service, {"entity_id": entity_id})
+        return await self._async_switch(entity_id, stop=False)
 
     async def async_correct(self, effect: CorrectReadiness) -> bool:
         """Set a readiness entity to its expected state (BHV-04)."""
@@ -274,6 +316,38 @@ class ActuatorWriter:
         return await self._async_call(domain, service, data)
 
     # --- Internals -----------------------------------------------------------------
+
+    @callback
+    def _expect(self, entity_id: str, matches: Callable[[State], bool]) -> None:
+        """Expect the state a command brings, unless the entity already shows it.
+
+        A newer command for the same entity replaces the expectation.
+        """
+        state = self._hass.states.get(entity_id)
+        if state is not None and not is_unavailable(state.state) and matches(state):
+            self._expected.pop(entity_id, None)
+            return
+        self._expected[entity_id] = _Expected(
+            matches=matches, until=dt_util.utcnow() + CONFIRM_WINDOW
+        )
+
+    async def _async_switch(self, entity_id: str, *, stop: bool) -> bool:
+        """Switch the off actuator to the stopped (``stop``) or running state."""
+        domain, service = _off_service(self._options, entity_id, stop=stop)
+        expected = "on" if service == "turn_on" else "off"
+        self._expect(entity_id, lambda state: state.state == expected)
+        return await self._async_call(domain, service, {"entity_id": entity_id})
+
+    async def _async_write_native(self, effect: WriteFlow) -> bool:
+        """Send the native value of a write to the actuator."""
+        options = self._options
+
+        def matches(state: State) -> bool:
+            return self._matches(effect, actuator_snapshot(options, state))
+
+        self._expect(options.actuator, matches)
+        domain, service, data = _write_service(options, effect.native)
+        return await self._async_call(domain, service, data)
 
     def _matches(self, written: WriteFlow, actuator: ActuatorSnapshot) -> bool:
         """Compare the actuator value with the last written value."""
@@ -309,8 +383,7 @@ class ActuatorWriter:
                     written.native,
                 )
                 self._retried = True
-                domain, service, data = _write_service(self._options, written.native)
-                if await self._async_call(domain, service, data):
+                if await self._async_write_native(written):
                     self._verify_unsub = async_call_later(
                         self._hass, VERIFY_DELAY, self._verify_job
                     )

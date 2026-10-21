@@ -523,6 +523,8 @@ A sensor that is removed from Home Assistant counts as invalid; a repair issue f
 
 If the off actuator (or a `fan` actuator without an off actuator) is switched to "stopped" by anyone other than the integration, for example at the unit's panel or in its app before a filter change, the integration takes it as a **pause until resumed** (logbook: "at the unit"). Starting the unit there again ends the pause. Changes from or to `unavailable` (for example when the unit restarts) are not commands, and while the **Control** switch is off such changes are ignored. A pause has no reminder in 0.1, so remember to resume.
 
+Many devices report a command only on their next poll (for example an ESPHome Modbus device every 30 s). If the unit reaches the state the integration has just switched it to within 60 s, that is the integration's own change, not a stop or start at the unit: a pause for one hour stays a pause for one hour.
+
 A changed flow value at the unit is not a pause: it is taken as the current flow, and the next write follows the normal shaping rules.
 
 ### Running two controllers
