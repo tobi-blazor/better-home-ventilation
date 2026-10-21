@@ -31,15 +31,19 @@ The design follows the Home Assistant developer documentation and the patterns o
 
 ### Step `user`
 
-| Field | Selector | Required | Default |
-|---|---|---|---|
-| `name` | `TextSelector` | yes | "Ventilation" |
-| `actuator` | `EntitySelector(domain=["number", "fan", "select"])` | yes | – |
-| `max_flow` | `NumberSelector(min=10, max=2000, step=5, unit="m³/h", mode=box)` | optional in the form | `max` attribute of a `number` actuator if its unit is m³/h |
+| Section | Field | Selector | Required | Default |
+|---|---|---|---|---|
+| – | `name` | `TextSelector` | yes | "Ventilation" |
+| – | `actuator` | `EntitySelector(domain=["number", "fan", "select"])` | yes | – |
+| – | `max_flow` | `NumberSelector(min=10, max=2000, step=5, unit="m³/h", mode=box)` | optional in the form | `max` attribute of a `number` actuator if its unit is m³/h |
+| `off` (collapsed) | `off_entity` | `EntitySelector(domain=["switch","input_boolean","fan"])` | no | – |
+| `off` (collapsed) | `off_state` | `SelectSelector(["on","off"], translation_key="off_state")` | yes | `on` |
 
 The default of `max_flow` cannot be shown before the actuator is chosen in the same form, so the field is optional: left empty, the `max` attribute (state, else registry capabilities) of a `number` actuator in m³/h is used if it is between 10 and 2000; otherwise the error `max_flow_required` asks for a value.
 
-Validation: actuator has a state or an entity registry entry (`actuator_not_found`); `select` has at least two options (`select_options`); actuator not used by another entry (abort `already_configured`); `max_flow_required`.
+The section `off` has the same fields, selectors, defaults, texts and validation as the section `off` of the options step [`actuator`](#actuator) (BHV-02). It is in this step because it belongs to the actuator, and the check that the off actuator is not the actuator itself needs both in the same form. It is collapsed and its marker is optional, so the first setup stays short and an omitted section means "no off actuator". `off_entity` and `off_state` are stored flat in `options`; without `off_entity` the key is absent and `off_state` keeps its default. The section description and the `data_description` of `off_entity` say that without an off actuator the unit is set to its lowest value, and that some units do not accept that as a stop and keep running, so they need an off actuator.
+
+Validation: actuator has a state or an entity registry entry (`actuator_not_found`); `select` has at least two options (`select_options`); actuator not used by another entry (abort `already_configured`); `max_flow_required`; off actuator exists (`off_entity_not_found`) and is not the actuator (`off_entity_is_actuator`), both reported on the section `off`. Errors of the actuator and of the off actuator are shown together.
 
 ### Step `actuator`
 
@@ -62,7 +66,7 @@ Shown only if needed:
 
 At least one of the two (`base: no_inputs`). `data_description` of `humidity_sensors` says: living and sleeping rooms only, no bathrooms, no rooms with a humidifier, no extract-duct sensor.
 
-All other options get their defaults (see [defaults](#defaults-relative-to-max-flow)). The off actuator, presence, boosts, safety and notifications are set afterwards in the options flow. This keeps the first setup short.
+All other options get their defaults (see [defaults](#defaults-relative-to-max-flow)). Presence, boosts, safety and notifications are set afterwards in the options flow; the off actuator can be set at setup (step `user`, section `off`) or later. This keeps the first setup short.
 
 ## Options flow
 
@@ -78,7 +82,7 @@ All other options get their defaults (see [defaults](#defaults-relative-to-max-f
 | `off` | `off_state` | `SelectSelector(["on","off"], translation_key="off_state")` | `on` |
 | `range` (collapsed) | `actuator_min`, `actuator_max` | `NumberSelector`, optional | entity attributes |
 
-`off_state` = which state of `off_entity` means "unit stopped" (a standby switch: `on`). Ignored for `fan`.
+`off_state` = which state of `off_entity` means "unit stopped" (a standby switch: `on`; a power switch: `off`). Ignored for `fan`. Without `off_entity`, off means the lowest actuator value ([02-control.md](02-control.md#off-and-on)); the texts say that some units do not stop there and need an off actuator. The off actuator must exist (`off_entity_not_found`) and must not be the actuator (`off_entity_is_actuator`); both errors are reported on the section `off`.
 
 Changing the actuator to one used by another entry: error `actuator_in_use`. Changing to a `select` or to a `number` with unknown unit continues to the step `actuator_mapping` (same fields as config step `actuator`). The step is also shown when such an actuator is kept, pre-filled with the stored mapping or unit, so the mapping can be edited.
 
@@ -230,6 +234,8 @@ Validation: `source_required`, `invalid_regex` (a `/…/` keyword that does not 
 | actuator exists (state or registry entry) | `actuator` | `actuator_not_found` |
 | actuator not used by another entry | `actuator` | abort `already_configured` (config flow), error `actuator_in_use` (options) |
 | `select` has ≥ 2 options; ≥ 2 mapped options with distinct flows | `actuator` / `base` | `select_options` / `select_mapping` |
+| off actuator exists (state or registry entry) | `off_entity` (reported on section `off`) | `off_entity_not_found` |
+| off actuator is not the actuator | `off_entity` (reported on section `off`) | `off_entity_is_actuator` |
 | at least one CO₂ or humidity sensor | `base` | `no_inputs` |
 | every CO₂ and humidity sensor exists (state or registry entry) | `co2_sensors` / `humidity_sensors` | `sensor_not_found` |
 | `co2_start < co2_end` | `co2_end` | `co2_range` |

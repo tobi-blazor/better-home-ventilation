@@ -1,4 +1,13 @@
 {
+  "config": {
+    "step": {
+      "user": {
+        "sections": {
+          "off": "mdi:power"
+        }
+      }
+    }
+  },
   "options": {
     "step": {
       "actuator": {

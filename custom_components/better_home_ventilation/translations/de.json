@@ -9,6 +9,8 @@
       "duplicate_sensor": "Ein Sensor ist sowohl als CO₂- als auch als Feuchtesensor ausgewählt.",
       "max_flow_required": "Bitte den maximalen Volumenstrom eingeben. Er kann nur aus dem Aktor übernommen werden, wenn dieser eine Zahl-Entität in m³/h mit einem Maximum zwischen 10 und 2000 ist.",
       "no_inputs": "Bitte mindestens einen CO₂- oder Feuchtesensor auswählen.",
+      "off_entity_is_actuator": "Der Aus-Aktor muss eine andere Entität als der Aktor sein.",
+      "off_entity_not_found": "Die Entität des Aus-Aktors existiert nicht.",
       "select_mapping": "Bitte für mindestens zwei Optionen einen Volumenstrom eingeben, jeweils mit unterschiedlichem Wert.",
       "select_options": "Die Auswahl-Entität braucht mindestens zwei Optionen.",
       "sensor_not_found": "Mindestens einer der ausgewählten Sensoren existiert nicht."
@@ -26,6 +28,20 @@
           "name": "Name des Lüftungsgeräts, verwendet für das Gerät und seine Entitäten.",
           "actuator": "Die Entität, die den Volumenstrom des Geräts einstellt: eine Zahl (m³/h oder %), ein Ventilator (Prozent) oder eine Auswahl (Stufen).",
           "max_flow": "Nenn-Maximalvolumenstrom des Geräts in m³/h. Leer lassen, um das Maximum des Aktors zu übernehmen, wenn er eine Zahl-Entität in m³/h ist. Daraus werden die Standardwerte für Mindest-, Ersatz-, Ruhe- und Boost-Volumenstrom berechnet."
+        },
+        "sections": {
+          "off": {
+            "name": "Aus-Aktor",
+            "description": "Optionale Entität, die das Gerät bei Aus und Pause stoppt. Ohne sie wird das Gerät auf seinen niedrigsten Wert gestellt (0 %, Aktor-Minimum oder niedrigste Stufe). Manche Geräte stoppen bei ihrem niedrigsten Wert nicht und laufen weiter; für sie einen Aus-Aktor wählen.",
+            "data": {
+              "off_entity": "Aus-Aktor",
+              "off_state": "Gerät gestoppt bei"
+            },
+            "data_description": {
+              "off_entity": "Ein Schalter oder Eingabe-Boolean, der das Gerät stoppt (z. B. ein Standby-Schalter), oder ein Ventilator, der ausgeschaltet wird. Nur leer lassen, wenn das Gerät bei seinem niedrigsten Wert stoppt: Manche Geräte akzeptieren ihn nicht als Stopp und laufen weiter.",
+              "off_state": "Welcher Zustand des Aus-Aktors bedeutet, dass das Gerät steht: An bei einem Standby-Schalter (an = gestoppt), Aus bei einem Netzschalter (aus = gestoppt). Wird bei einem Ventilator ignoriert."
+            }
+          }
         }
       },
       "actuator": {
@@ -64,6 +80,8 @@
       "level_range": "Die Boost-Stufe muss zwischen Mindest- und maximalem Volumenstrom liegen.",
       "night_window": "Das Nachtfenster darf nicht zur selben Uhrzeit beginnen und enden.",
       "no_inputs": "Bitte mindestens einen CO₂- oder Feuchtesensor auswählen.",
+      "off_entity_is_actuator": "Der Aus-Aktor muss eine andere Entität als der Aktor sein.",
+      "off_entity_not_found": "Die Entität des Aus-Aktors existiert nicht.",
       "quiet_range": "Der Ruhe-Volumenstrom muss zwischen Mindest- und maximalem Volumenstrom liegen.",
       "select_mapping": "Bitte für mindestens zwei Optionen einen Volumenstrom eingeben, jeweils mit unterschiedlichem Wert.",
       "select_options": "Die Auswahl-Entität braucht mindestens zwei Optionen.",
@@ -100,14 +118,14 @@
         "sections": {
           "off": {
             "name": "Aus-Aktor",
-            "description": "Optionale Entität, die das Gerät stoppt. Ohne sie bedeutet Aus den niedrigsten Aktorwert.",
+            "description": "Optionale Entität, die das Gerät bei Aus und Pause stoppt. Ohne sie wird das Gerät auf seinen niedrigsten Wert gestellt (0 %, Aktor-Minimum oder niedrigste Stufe). Manche Geräte stoppen bei ihrem niedrigsten Wert nicht und laufen weiter; für sie einen Aus-Aktor wählen.",
             "data": {
               "off_entity": "Aus-Aktor",
               "off_state": "Gerät gestoppt bei"
             },
             "data_description": {
-              "off_entity": "Ein Schalter oder Eingabe-Boolean, der das Gerät stoppt (z. B. ein Standby-Schalter), oder ein Ventilator, der ausgeschaltet wird.",
-              "off_state": "Welcher Zustand des Aus-Aktors bedeutet, dass das Gerät steht. Ein Standby-Schalter stoppt das Gerät, wenn er an ist. Wird bei einem Ventilator ignoriert."
+              "off_entity": "Ein Schalter oder Eingabe-Boolean, der das Gerät stoppt (z. B. ein Standby-Schalter), oder ein Ventilator, der ausgeschaltet wird. Nur leer lassen, wenn das Gerät bei seinem niedrigsten Wert stoppt: Manche Geräte akzeptieren ihn nicht als Stopp und laufen weiter.",
+              "off_state": "Welcher Zustand des Aus-Aktors bedeutet, dass das Gerät steht: An bei einem Standby-Schalter (an = gestoppt), Aus bei einem Netzschalter (aus = gestoppt). Wird bei einem Ventilator ignoriert."
             }
           },
           "range": {

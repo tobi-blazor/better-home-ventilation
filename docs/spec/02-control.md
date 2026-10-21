@@ -194,7 +194,8 @@ Internally everything is flow in m³/h. Conversion to the native actuator value:
 
 ## Off and on
 
-- **Off** (modes `off`, `safety_off`): if an off actuator is configured, set it to `off_state` (`switch.turn_on/turn_off`, `input_boolean.turn_on/turn_off`, `fan.turn_off`). Otherwise write the lowest actuator value (`actuator_min`, 0 %, lowest stage) and set attribute `off_method: minimum`.
+- **Off** (modes `off`, `safety_off`): if an off actuator is configured, set it to `off_state` (`switch.turn_on/turn_off`, `input_boolean.turn_on/turn_off`, `fan.turn_off`); no flow value is written. Otherwise write the lowest actuator value (`actuator_min`, 0 %, lowest stage) and set attribute `off_method: minimum`.
+- Not every unit stops at the lowest actuator value: some do not accept flows below their own minimum and keep running (seen in a test run: a `number` with `min` 0, a unit that ignores values below 50 m³/h). The integration cannot detect this. Such units need an off actuator; it can be chosen at setup or in the options ([01-configuration.md](01-configuration.md#step-user)), and the texts of both forms point this out.
 - **On**: in every running mode (`automatic`, `fallback`, `boost`, `shower`, `cooking`), if the off actuator is in the stopped state **and the integration stopped it** (`stopped_by_integration` in the controller state), first set it to the running state, then write the setpoint with `bypass`. This covers leaving an off mode and also returning from `disabled` after a pause had stopped the unit. A unit stopped at the unit itself is a pause ([writing](#writing)) and is not switched on.
 - `stopped_by_integration` is set when the integration switches the off actuator to the stopped state and cleared when it is running again (by the integration or externally).
 - Off and on are never rate limited.

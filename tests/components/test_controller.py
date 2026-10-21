@@ -12,7 +12,9 @@ import logging
 from typing import Any
 
 from freezegun.api import FrozenDateTimeFactory
+from homeassistant.config_entries import SOURCE_USER, ConfigEntry, ConfigEntryState
 from homeassistant.core import HomeAssistant
+from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import device_registry as dr
 import pytest
@@ -110,7 +112,7 @@ async def setup_entry(
     return entry
 
 
-def controller_of(entry: MockConfigEntry) -> VentilationController:
+def controller_of(entry: ConfigEntry) -> VentilationController:
     """Return the controller of a loaded entry."""
     controller = entry.runtime_data
     assert isinstance(controller, VentilationController)
@@ -495,6 +497,71 @@ async def test_pause_and_resume_switch_the_off_actuator(
     assert controller.current_decision.mode is Mode.AUTOMATIC  # type: ignore[union-attr]
     assert not controller.state.stopped_by_integration
     assert unit.calls_for("number", "set_value")[-1].data["value"] == 80.0
+
+
+async def _create_entry_with_flow(
+    hass: HomeAssistant, off: dict[str, str] | None
+) -> ConfigEntry:
+    """Create and load an entry through the config flow (number in m³/h)."""
+    flow = hass.config_entries.flow
+    result: Any = await flow.async_init(DOMAIN, context={"source": SOURCE_USER})
+    user_input: dict[str, Any] = {"name": "Ventilation", "actuator": NUMBER_FLOW}
+    if off is not None:
+        user_input["off"] = off
+    result = await flow.async_configure(result["flow_id"], user_input)
+    result = await flow.async_configure(
+        result["flow_id"], {"co2_sensors": [CO2_LIVING]}
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+    entry: ConfigEntry = result["result"]
+    assert entry.state is ConfigEntryState.LOADED
+    return entry
+
+
+@pytest.mark.usefixtures("entities")
+async def test_bhv02_pause_after_setup_with_off_actuator(
+    hass: HomeAssistant, unit: MockUnit, freezer: FrozenDateTimeFactory
+) -> None:
+    """An off actuator chosen at setup stops the unit; no minimum flow is written.
+
+    C1a, BHV-02, BHV-21: a unit that does not stop at its lowest value is stopped
+    with the standby switch (`off_state` = on).
+    """
+    entry = await _create_entry_with_flow(
+        hass, {"off_entity": STANDBY_SWITCH, "off_state": "on"}
+    )
+    controller = controller_of(entry)
+    await advance(hass, freezer, 61)
+    writes = len(unit.calls_for("number", "set_value"))
+
+    await hass.services.async_call(DOMAIN, "pause", {}, blocking=True)
+    await hass.async_block_till_done()
+
+    [stop] = unit.calls_for("switch", "turn_on")
+    assert stop.data == {"entity_id": STANDBY_SWITCH}
+    assert hass.states.get(STANDBY_SWITCH).state == "on"  # type: ignore[union-attr]
+    assert len(unit.calls_for("number", "set_value")) == writes
+    assert hass.states.get(NUMBER_FLOW).state != "0"  # type: ignore[union-attr]
+    assert controller.current_decision.mode is Mode.OFF  # type: ignore[union-attr]
+    assert controller.state.stopped_by_integration
+
+
+@pytest.mark.usefixtures("entities")
+async def test_bhv02_pause_after_setup_without_off_actuator(
+    hass: HomeAssistant, unit: MockUnit, freezer: FrozenDateTimeFactory
+) -> None:
+    """Without an off actuator a pause writes the lowest actuator value (C1a)."""
+    entry = await _create_entry_with_flow(hass, None)
+    controller = controller_of(entry)
+    await advance(hass, freezer, 61)
+
+    await hass.services.async_call(DOMAIN, "pause", {}, blocking=True)
+    await hass.async_block_till_done()
+
+    assert unit.calls_for("switch", "turn_on") == []
+    assert unit.calls_for("number", "set_value")[-1].data["value"] == 0
+    assert controller.current_decision.mode is Mode.OFF  # type: ignore[union-attr]
 
 
 @pytest.mark.usefixtures("entities")
