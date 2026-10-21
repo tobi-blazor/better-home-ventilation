@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-21
+
 First version, for test runs on a real installation. The safety shutdown on hazard warnings is not included yet (planned for 0.2), so this version is not meant for unattended everyday operation.
 
 ### Added
@@ -29,15 +31,8 @@ First version, for test runs on a real installation. The safety shutdown on haza
 - Mode changes fire `better_home_ventilation_mode_changed` and appear in the logbook of the device (for example "switched to Boost (button, until 18:30)").
 - Renamed sensors and actuators are followed in the settings and readiness conditions automatically.
 - User documentation in the README (setup, every option, profiles, calculation, entities, actions, limitations, troubleshooting, removal) and an example dashboard in `examples/dashboard.yaml`.
+- The off actuator and the state that means "stopped" can be chosen during setup or later in the options; without one the unit is set to its lowest value, which some units do not take as a stop. An off actuator that does not exist or is the actuator itself is rejected.
+- A unit that confirms a command only on its next poll (for example an ESPHome Modbus device) is handled: reaching the state or value the integration has just commanded within 60 s counts as the integration's own change, not as a stop, start or flow change at the unit.
 
-### Fixed
-
-- A unit that reports a command only on its next poll (for example an ESPHome Modbus device) no longer turns a timed pause into a pause until resumed: reaching the state or value the integration has just commanded within 60 s counts as the integration's own change, not as a stop, start or flow change at the unit.
-### Changed
-
-- The off actuator and the state that means "stopped" can be chosen during setup (collapsed section **Off actuator** in the first step), not only later in the options.
-- The setup and option texts of the off actuator explain that without one the unit is set to its lowest value, which some units do not take as a stop, and that such units need an off actuator.
-
-### Fixed
-
-- Pause did not stop units that keep running at their lowest value, because the off actuator could not be set during setup. An off actuator that does not exist or is the actuator itself is now rejected in the setup and in the options.
+[Unreleased]: https://github.com/tobi-blazor/better-home-ventilation/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/tobi-blazor/better-home-ventilation/releases/tag/v0.1.0
