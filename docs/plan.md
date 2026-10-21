@@ -23,11 +23,12 @@ Milestones and tasks for implementing the [specification](spec/README.md). The s
 | [M9](#m9-notifications) | 0.2 | phone notifications with actions, options steps `safety`/`notifications` | M7 | 3–4 |
 | [M10](#m10-diagnostics-repairs-voice-replay-release-020) | 0.2 | diagnostics, repairs, intents, replay tool, release 0.2.0 | M8, M9 | 3–5 |
 | [M11](#m11-automatic-boosts-release-030) | 0.3 | shower and cooking detection, release 0.3.0 | M10 | 4–6 |
-| [M12](#m12-release-10) | 1.0 | public repository, license, brands, HACS default | M11 | 2–4 |
-| | | | **total** | **≈ 46–64** |
+| [M12](#m12-summer-and-bypass-release-040) | 0.4 | season detection, bypass control, bypass boost, release 0.4.0 | M11 | 5–8 |
+| [M13](#m13-release-10) | 1.0 | public repository, license, brands, HACS default | M12 | 2–4 |
+| | | | **total** | **≈ 51–72** |
 
 ```text
-M0 → M1 ─┬─ M2 ─┬─ M4 → M5 → M6 → M7 ─┬─ M8 ─┬─ M10 → M11 → M12
+M0 → M1 ─┬─ M2 ─┬─ M4 → M5 → M6 → M7 ─┬─ M8 ─┬─ M10 → M11 → M12 → M13
          └─ M3 ─┘                      └─ M9 ─┘
 ```
 
@@ -50,7 +51,7 @@ Goal: no open question blocks phase 0.1.
 - [x] Inconsistencies U1–U6 from the control overview fixed 2026-10-16 (boost vs. quiet limit, switching on after `disabled`, readiness in every evaluation, fan without off actuator, humidity band wording, plan total)
 - [x] Edge cases and profiles decided 2026-10-16: profiles (BHV-26), quiet limit replaces night limit, fallback wins over away, boost commands and profile changes bypass shaping, control switch off rejects and ends boost/pause, external stop of the unit = pause
 - [ ] Initial commit of the specification (`docs: add specification`), push to the private GitHub repository
-- [ ] Optional: create GitHub milestones M1–M12 and one issue per task group from this plan
+- [ ] Optional: create GitHub milestones M1–M13 and one issue per task group from this plan
 
 Done when: the spec has no known contradiction for 0.1, Q4 is answered with sources, the spec is committed.
 
@@ -229,7 +230,17 @@ Spec: [03-modes.md](spec/03-modes.md#automatic-boosts).
 - [ ] Tests E33–E37 and component tests for the new options and entities
 - [ ] Real installation: tune `shower_rise` and `cooking_rise` with replay data, `CHANGELOG.md`, tag `v0.3.0`
 
-## M12 Release 1.0
+## M12 Summer and bypass, release 0.4.0
+
+Spec: [README.md](spec/README.md#summer-and-bypass) (BHV-60–64), decided 2026-10-21.
+
+- [ ] Grilling session for the details (Q12) and spec update: season threshold/hysteresis, sensors for the dew point check, bypass actuator mapping, bypass boost flow and night cap, interaction with profiles and the quiet limit
+- [ ] Engine: season resolution (entity or rolling outdoor mean with hysteresis), bypass decision with dew point check and lock, bypass boost contribution with night cap, reasons, tests
+- [ ] Options (new step or sections, migration with `MINOR_VERSION` bump), translations en/de
+- [ ] Glue: bypass actuator adapter (select/switch), entities for season and bypass, logbook
+- [ ] Real installation in summer: free cooling at night, no humid air in, `CHANGELOG.md`, tag `v0.4.0`
+
+## M13 Release 1.0
 
 - [ ] License (Q5, owner decision), `LICENSE` file
 - [ ] Repository public, description and topics, HACS validation without ignored checks

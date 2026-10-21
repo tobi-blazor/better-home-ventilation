@@ -99,6 +99,20 @@ Either of the modes `off` and `safety_off`.
 A condition that blocks or degrades control (e.g. actuator unavailable, invalid inputs), shown on the problem sensor; not a repair issue (a configuration the user must fix) and not a notification.
 _Avoid_: error, fault, alarm
 
+### Summer
+
+**Season**:
+Whether the integration runs in summer or winter operation; from an entity if configured, otherwise from the outdoor temperature.
+_Avoid_: mode (for the season), operating mode
+
+**Bypass**:
+The path that lets outdoor air past the heat exchanger, so it is not warmed by the extract air; opened by the integration for free cooling in summer.
+_Avoid_: summer bypass valve, bypass mode
+
+**Bypass boost**:
+The raised flow while the bypass is open for cooling, with its own cap at night.
+_Avoid_: cooling boost, night flush
+
 ### Safety
 
 **Warning source**:
