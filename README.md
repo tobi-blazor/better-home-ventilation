@@ -4,7 +4,7 @@ Demand-controlled ventilation for central home ventilation units (MVHR / HRV / E
 
 One integration instead of a pile of helpers, template sensors and automations: pick the entity that sets your unit's flow and your room sensors in a dialog, and Better Home Ventilation calculates the flow the unit should run at, writes it calmly to the unit and tells you why it chose that value.
 
-> **Status: 0.1 (unreleased), for test runs only.** Version 0.1 contains the demand control, profiles, boost and pause. It does **not** yet contain the safety shutdown on hazard warnings (smoke, fire, chemical release). Use 0.1 for supervised test runs, not for unattended everyday operation: keep your existing automation for daily use until 0.2. See [What 0.1 does not do yet](#what-01-does-not-do-yet).
+> **Status: 0.1.0, for test runs only.** Version 0.1 contains the demand control, profiles, boost and pause. It does **not** yet contain the safety shutdown on hazard warnings (smoke, fire, chemical release). Use 0.1 for supervised test runs, not for unattended everyday operation: keep your existing automation for daily use until 0.2. See [What 0.1 does not do yet](#what-01-does-not-do-yet).
 
 ## Contents
 
@@ -93,7 +93,7 @@ There is no YAML configuration. Everything is set up in the UI.
 3. Search for **Better Home Ventilation** in HACS and download it.
 4. Restart Home Assistant.
 
-While the repository is private, HACS may not be able to install it (not verified yet). In that case use the manual installation.
+If HACS reports a download error, use the manual installation. After an update, always restart Home Assistant: reloading the entry does not load new code.
 
 ### Manual
 

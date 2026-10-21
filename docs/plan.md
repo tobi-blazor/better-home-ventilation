@@ -157,7 +157,7 @@ Goal: 0.1 works on a real installation in test runs. Everyday operation stays wi
 - [ ] Test run: install, disable the old automation for the duration of the test (otherwise two controllers write), the integration writes to the unit directly; re-enable the automation afterwards
 - [ ] Acceptance items for 0.1 from [06-testing.md](spec/06-testing.md#acceptance-checklist-real-installation): boost via button, pause and restart, CO₂ sensor disconnected, readiness correction, history and logbook
 - [x] `CHANGELOG.md`: user-facing list of the 0.1 changes under `Unreleased`
-- [ ] Version header `[0.1.0]` in `CHANGELOG.md`, tag `v0.1.0`, GitHub release
+- [x] Version header `[0.1.0]` in `CHANGELOG.md`, tag `v0.1.0`, GitHub release (2026-10-21)
 
 Done when: the 0.1 acceptance items pass in a test run of several days, including every profile.
 
