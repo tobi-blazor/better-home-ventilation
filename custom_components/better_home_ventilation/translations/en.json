@@ -428,10 +428,10 @@
       "profile": {
         "name": "Profile",
         "state": {
-          "balanced": "Balanced",
-          "air_quality": "Air quality",
-          "quiet": "Quiet",
-          "winter": "Winter"
+          "balanced": "Balanced – by demand, quieter at night",
+          "air_quality": "Air quality – by demand, day and night",
+          "quiet": "Quiet – limited all day",
+          "winter": "Winter – spares dry air"
         }
       },
       "boost_duration": {
