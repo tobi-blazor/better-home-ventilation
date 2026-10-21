@@ -111,6 +111,18 @@ The domain terms (unit, flow, contribution, demand, target, setpoint, mode, paus
 | BHV-44 | should | Safety shutdown works even when the control switch is off (configurable) | 0.2 |
 | BHV-45 | should | **Details providers** per integration (NINA service, DWD/Environment Canada indexed attributes, generic attributes), selected automatically from the entity platform, extensible by a registry; unknown integrations fall back to generic attributes or no details | 0.2 |
 
+### Summer and bypass
+
+Decided 2026-10-21; details (thresholds, sensors, dew point calculation, entities) are specified in a grilling session before phase 0.4 ([Q12](#open-questions)).
+
+| ID | Verb | Requirement | Phase |
+|---|---|---|---|
+| BHV-60 | must | **Season:** summer or winter operation comes from an optional entity (on/off, or a state list, e.g. an own helper or a heat pump cooling mode) if configured; otherwise from the rolling daily mean of the outdoor temperature with a threshold and hysteresis | 0.4 |
+| BHV-61 | must | **Bypass control by the integration:** a bypass actuator (`select` with an option per position, or `switch`) is opened only in summer, when indoors is warmer than a target and the outdoor air is cooler **and** drier (outdoor dew point below indoor dew point); closed in winter. An optional lock entity (e.g. a dew point lock of a heat pump cooling) keeps it closed. The unit's own automatic bypass logic is not used | 0.4 |
+| BHV-62 | must | **Bypass boost:** can be switched on or off; while the bypass is open for cooling, the flow is raised to a configurable bypass boost flow | 0.4 |
+| BHV-63 | must | **Bypass boost at night:** an own cap for the night window, independent of the quiet limit (0 = no bypass boost at night) | 0.4 |
+| BHV-64 | should | Season, bypass position and its reason are visible as entities/attributes; bypass changes appear in the logbook | 0.4 |
+
 ### Robustness and traceability
 
 | ID | Verb | Requirement | Phase |
@@ -127,7 +139,7 @@ The domain terms (unit, flow, contribution, demand, target, setpoint, mode, paus
 
 | ID | Idea |
 |---|---|
-| BHV-90 | Bypass control with dew-point check (outside cooler **and** drier than inside) |
+| BHV-90 | ~~Bypass control with dew-point check~~ moved to phase 0.4 as BHV-60–64 |
 | BHV-91 | Filter and balance monitoring from actual supply/extract flow sensors |
 | BHV-92 | Fireplace mode (no extract surplus, boost only after confirmation) |
 | BHV-93 | Additional generic ramp inputs (e.g. PM2.5, room VOC) |
@@ -145,6 +157,7 @@ Outdoor air quality (smoke in the neighbourhood, PM above a threshold) is alread
 | 0.1 | actuator, demand control, profiles, shaping, validity, fallback, boost, pause, entities, services, persistence, logbook | test runs on a real installation (everyday operation needs the safety shutdown of 0.2) |
 | 0.2 | safety shutdown with notifications, override, confirmed restart, reminders, voice intents, diagnostics, repairs, replay tool | full operation, replacing a blueprint/automation |
 | 0.3 | shower and cooking detection | comfort |
+| 0.4 | summer operation: season detection, bypass control with dew point check, bypass boost with night cap | summer comfort, free cooling |
 | 1.0 | public repository, brands, HACS default listing, docs complete | other users |
 
 ### Scope of phase 0.1
@@ -185,3 +198,4 @@ To be verified during implementation. Each answer goes into the respective docum
 | Q9 | ~~Does adding/changing/removing a config subentry reload the entry by itself?~~ **Answered 2026-10-14:** no, it only fires update listeners; the integration reloads through one update listener ([ADR 0001](../adr/0001-update-listener-instead-of-options-flow-with-reload.md)) | [01-configuration.md](01-configuration.md#principles) |
 | Q10 | Can HACS install from a **private** GitHub repository (needed for testing before the repo is public)? Otherwise copy `custom_components/` manually | [05-architecture.md](05-architecture.md#ci-and-releases) |
 | Q11 | What does an external start of the unit (off actuator switched on by someone else) mean during `safety_off`: an override, or ignored and switched off again? Outside safety it ends the pause ([02-control.md](02-control.md#writing)). To decide in 0.2 | [03-modes.md](03-modes.md#safety-shutdown) |
+| Q12 | Details of the summer operation (BHV-60–64): temperature threshold and hysteresis for the season, which indoor/outdoor temperature and humidity sensors are needed for the dew point check, bypass actuator mapping, interaction with profiles (e.g. the winter profile in summer) and with the quiet limit; to be specified in a grilling session before 0.4 | README, 02-control, 01-configuration |
