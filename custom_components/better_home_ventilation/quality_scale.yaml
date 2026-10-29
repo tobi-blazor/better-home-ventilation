@@ -15,7 +15,7 @@ rules:
     comment: No external requirements; the manifest has an empty requirements list.
   docs-actions:
     status: done
-    comment: README "Actions" lists every action with its fields, defaults and errors.
+    comment: README "Actions" lists every action with its fields, defaults and errors, including override_safety.
   docs-conditions:
     status: exempt
     comment: The integration does not provide conditions.
@@ -46,7 +46,7 @@ rules:
   config-entry-unloading: done
   docs-configuration-parameters:
     status: done
-    comment: README "Options" documents every field of every options step with UI name, default and meaning, checked against strings.json.
+    comment: README "Options", "Readiness conditions" and "Warning sources" document every field of every options step and subentry flow with UI name, default and meaning, checked against strings.json.
   docs-installation-parameters:
     status: done
     comment: README "Setup" documents every field of the three config flow steps.
@@ -93,7 +93,7 @@ rules:
     comment: README "Use cases".
   dynamic-devices:
     status: exempt
-    comment: Exactly one device per config entry, created with the entry.
+    comment: Exactly one device per config entry, created with the entry. Entities added to a warning source device (for example a new NINA slot) are followed without a reload.
   entity-category: done
   entity-device-class: done
   entity-disabled-by-default:

@@ -181,13 +181,13 @@ Done when: all safety and reminder scenarios pass, migrations tested.
 
 Goal: warning sources can be configured and deliver warnings into the engine.
 
-- [ ] `WarningSourceFlow`: `user` (entity or device), `trigger` (only for sensor/select), `filters` with suggested keywords per provider and language, `reconfigure`; validation `source_required`, `invalid_regex`, `keyword_conflict`, `numeric_state`, `already_configured`
-- [ ] `warning_providers/`: registry, `nina` (`nina.get_details`, cache per `id`, 10 s timeout, fail-safe), `dwd`, `environment_canada`, `attributes`, `none`
-- [ ] Controller: subscriptions for sources, device sources expanded to all `binary_sensor`s (and updated on registry changes), problems `warning_source_unavailable`, `warning_details_failed`
-- [ ] Entities `safety_warning` and `safety_override`, created only with warning sources
-- [ ] Service `override_safety` with `no_active_warning`
-- [ ] Verify Q8 (Meteoalarm attributes) and record it in the spec
-- [ ] Tests C11a, C11b, C11c
+- [x] `WarningSourceFlow`: `user` (entity or device), `trigger` (only for sensor/select), `filters` with suggested keywords per provider and language, `reconfigure`; validation `source_required`, `invalid_regex`, `keyword_conflict`, `numeric_state`, `already_configured`
+- [x] `warning_providers/`: registry, `nina` (`nina.get_details`, cache per `id`, 10 s timeout, fail-safe), `dwd`, `environment_canada`, `attributes`, `none`
+- [x] Controller: subscriptions for sources, device sources expanded to all `binary_sensor`s (and updated on registry changes), problems `warning_source_unavailable`, `warning_details_failed`
+- [x] Entities `safety_warning` and `safety_override`, created only with warning sources
+- [x] Service `override_safety` with `no_active_warning`
+- [ ] Verify Q8 (Meteoalarm attributes) and record it in the spec (partly: the HA side is confirmed, the keys of `meteoalertapi` 0.3.1 are still to be checked)
+- [x] Tests C11a, C11b, C11c
 
 Done when: a template `binary_sensor` and a NINA entity work as sources in a dev instance.
 
@@ -211,7 +211,7 @@ Done when: on a phone, "Keep ventilating", "Restart now", "Keep off" and "Resume
 - [ ] `intent.py`: four intents with `description` and `slot_schema`; verify Q2 and Q3; `examples/custom_sentences/{en,de}/` – BHV-22 (voice), C16
 - [ ] `tools/replay.py` (standard library only), CSV input, report output – BHV-56
 - [ ] Replay a winter month of recorded data, check reason shares and writes per day
-- [ ] README: warning sources and NINA setup, gas detectors are not a suitable source, provider contract
+- [x] README: warning sources and NINA setup, gas detectors are not a suitable source, provider contract (done in M8)
 - [ ] Acceptance items for safety from [06-testing.md](spec/06-testing.md#acceptance-checklist-real-installation) with a template `binary_sensor` as test warning
 - [ ] Switch over for everyday operation: disable the old automation permanently
 - [ ] `quality_scale.yaml`, `CHANGELOG.md`, tag `v0.2.0`

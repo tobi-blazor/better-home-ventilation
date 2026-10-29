@@ -25,6 +25,7 @@ from custom_components.better_home_ventilation.const import (
     CONF_NAME,
     DOMAIN,
     SUBENTRY_READINESS_CONDITION,
+    SUBENTRY_WARNING_SOURCE,
 )
 
 from .common import CONTROL_MODE, NUMBER_FLOW, NUMBER_RAW, mock_entry, schema_fields
@@ -155,6 +156,53 @@ async def _walk_flows(hass: HomeAssistant) -> list[tuple[str, Any]]:
     subentry_id = next(iter(entry.subentries))
     result = await entry.start_subentry_reconfigure_flow(hass, subentry_id)
     shown.append(("readiness", result))
+    shown.extend(("warning", result) for result in await _walk_warning_flows(hass))
+    return shown
+
+
+async def _walk_warning_flows(hass: HomeAssistant) -> list[Any]:
+    """Open every warning source form (with and without filters)."""
+    hass.states.async_set("sensor.example_warning_level", "1")
+    hass.states.async_set("binary_sensor.example_alert", "off")
+    entry = mock_entry(actuator=NUMBER_FLOW)
+    entry.add_to_hass(hass)
+    subentries = hass.config_entries.subentries
+    shown: list[Any] = []
+    result: Any = await subentries.async_init(
+        (entry.entry_id, SUBENTRY_WARNING_SOURCE), context={"source": SOURCE_USER}
+    )
+    shown.append(result)
+    result = await subentries.async_configure(
+        result["flow_id"], {"source_entity": "sensor.example_warning_level"}
+    )
+    shown.append(result)  # trigger
+    result = await subentries.async_configure(
+        result["flow_id"], {"trigger": "numeric", "threshold": 1}
+    )
+    shown.append(result)  # filters with keywords
+    await subentries.async_configure(
+        result["flow_id"], {"details": "auto", "keywords": {}, "min_severity": "none"}
+    )
+    subentry_id = next(iter(entry.subentries))
+    result = await entry.start_subentry_reconfigure_flow(hass, subentry_id)
+    shown.append(result)
+    result = await subentries.async_configure(
+        result["flow_id"], {"source_entity": "sensor.example_warning_level"}
+    )
+    result = await subentries.async_configure(
+        result["flow_id"], {"trigger": "numeric", "threshold": 1}
+    )
+    result = await subentries.async_configure(
+        result["flow_id"], {"details": "none", "keywords": {}, "min_severity": "none"}
+    )
+    result = await entry.start_subentry_reconfigure_flow(hass, subentry_id)
+    result = await subentries.async_configure(
+        result["flow_id"], {"source_entity": "sensor.example_warning_level"}
+    )
+    result = await subentries.async_configure(
+        result["flow_id"], {"trigger": "numeric", "threshold": 1}
+    )
+    shown.append(result)  # filters without keywords (stored `none`)
     return shown
 
 
@@ -169,6 +217,7 @@ async def test_flows_are_translated(hass: HomeAssistant, language: str) -> None:
         "config": strings["config"]["step"],
         "options": strings["options"]["step"],
         "readiness": strings["config_subentries"][SUBENTRY_READINESS_CONDITION]["step"],
+        "warning": strings["config_subentries"][SUBENTRY_WARNING_SOURCE]["step"],
     }
 
     shown = await _walk_flows(hass)
@@ -182,6 +231,8 @@ async def test_flows_are_translated(hass: HomeAssistant, language: str) -> None:
         "actuator_mapping",
         "state",
         "reconfigure",
+        "trigger",
+        "filters",
     }
     for category, result in shown:
         _assert_form(strings, steps[category], result)
@@ -205,6 +256,27 @@ def test_menu_errors_and_aborts_are_translated(language: str) -> None:
     assert readiness["initiate_flow"]["reconfigure"]
     assert readiness["abort"]["already_configured"]
     assert readiness["error"]["not_correctable"]
+    warning = strings["config_subentries"][SUBENTRY_WARNING_SOURCE]
+    assert warning["entry_type"]
+    assert warning["initiate_flow"]["user"]
+    assert warning["initiate_flow"]["reconfigure"]
+    assert warning["abort"]["already_configured"]
+    assert set(warning["error"]) == {
+        "source_required",
+        "invalid_regex",
+        "keyword_conflict",
+        "numeric_state",
+        "threshold_required",
+        "states_required",
+    }
+    for provider in (
+        "nina",
+        "dwd_weather_warnings",
+        "environment_canada",
+        "attributes",
+        "none",
+    ):
+        assert strings["common"][f"provider_{provider}"]
 
 
 @pytest.mark.parametrize("language", list(FILES))
