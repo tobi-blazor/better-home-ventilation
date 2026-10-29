@@ -3,6 +3,10 @@
 Only the persisted fields of :class:`~.models.ControllerState` are stored;
 runtime bookkeeping starts fresh after a load. Datetimes are ISO strings in
 UTC.
+
+Versions: 1.1 = phase 0.1; 1.2 = phase 0.2 (safety, ``safety_restore``,
+``off_since``, ``last_reminder``). The minor bump is backwards compatible:
+0.1 reads 1.2 data and ignores the new keys.
 """
 
 from __future__ import annotations
@@ -12,12 +16,25 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any, Final
 
-from .models import Boost, ControllerState, Mode, Pause, Profile, Source, Trigger
+from .models import (
+    Boost,
+    ControllerState,
+    Mode,
+    Pause,
+    Profile,
+    RestartPending,
+    SafetyRestore,
+    SafetyState,
+    Severity,
+    Source,
+    Trigger,
+    WarningInfo,
+)
 
-#: Store version (``Store(version=...)``); a format change bumps it.
+#: Store version (``Store(version=...)``); an incompatible change bumps it.
 STORE_VERSION: Final = 1
-#: Store minor version (backwards compatible changes).
-STORE_MINOR_VERSION: Final = 1
+#: Store minor version (backwards compatible changes, see :func:`migrate_store_data`).
+STORE_MINOR_VERSION: Final = 2
 
 
 class _CorruptError(ValueError):
@@ -62,6 +79,50 @@ def _float(value: Any) -> float | None:
     return float(value)
 
 
+def _str(value: Any) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise _CorruptError("string")
+    return value
+
+
+def _required_str(value: Any) -> str:
+    text = _str(value)
+    if text is None:
+        raise _CorruptError("missing string")
+    return text
+
+
+def _warning_to_dict(warning: WarningInfo) -> dict[str, Any]:
+    return {
+        "source_id": warning.source_id,
+        "source_name": warning.source_name,
+        "entity_id": warning.entity_id,
+        "incident_key": warning.incident_key,
+        "headline": warning.headline,
+        "text": warning.text,
+        "recommended_actions": warning.recommended_actions,
+        "severity": str(warning.severity) if warning.severity is not None else None,
+        "sender": warning.sender,
+        "since": _dt_to_str(warning.since),
+        "details": warning.details,
+    }
+
+
+def _safety_to_dict(safety: SafetyState) -> dict[str, Any]:
+    restart = safety.restart_pending
+    return {
+        "active": {
+            key: _warning_to_dict(warning) for key, warning in safety.active.items()
+        },
+        "overridden": sorted(safety.overridden),
+        "restart_pending": (
+            {"deadline": _dt_to_str(restart.deadline)} if restart is not None else None
+        ),
+    }
+
+
 def state_to_dict(state: ControllerState) -> dict[str, Any]:
     """Serialise the persisted fields of the controller state."""
     manual: dict[str, Any] | None = None
@@ -80,12 +141,21 @@ def state_to_dict(state: ControllerState) -> dict[str, Any]:
             "started": _dt_to_str(state.manual.started),
             "source": str(state.manual.source),
         }
+    restore = state.safety_restore
     return {
         "control_enabled": state.control_enabled,
         "profile": str(state.profile),
         "manual": manual,
+        "safety": _safety_to_dict(state.safety),
+        "safety_restore": (
+            {"turn_on": restore.turn_on, "flow": restore.flow}
+            if restore is not None
+            else None
+        ),
         "dry_active": state.dry_active,
         "dry_humidity_high_since": _dt_to_str(state.dry_humidity_high_since),
+        "off_since": _dt_to_str(state.off_since),
+        "last_reminder": _dt_to_str(state.last_reminder),
         "stopped_by_integration": state.stopped_by_integration,
         "last_write": _dt_to_str(state.last_write),
         "last_written_flow": state.last_written_flow,
@@ -93,12 +163,43 @@ def state_to_dict(state: ControllerState) -> dict[str, Any]:
     }
 
 
+def migrate_store_data(major: int, minor: int, data: Any) -> Any:
+    """Migrate stored data from version ``major.minor`` to the current version.
+
+    Called by the glue's ``Store._async_migrate_func``. 1.1 -> 1.2 adds the
+    safety keys and sets ``off_since`` of a running pause to its start, so the
+    reminder of a pause that began under 0.1 counts from its real start.
+    Data of a newer minor version (a downgrade) is returned unchanged; data
+    that is not a mapping is left to :func:`state_from_dict` (reset).
+    """
+    if major != STORE_VERSION or minor >= STORE_MINOR_VERSION:
+        return data
+    if not isinstance(data, Mapping):
+        return data
+    # 1.1 -> 1.2 (the only step so far).
+    result = dict(data)
+    manual = result.get("manual")
+    if (
+        result.get("off_since") is None
+        and isinstance(manual, Mapping)
+        and manual.get("type") == "pause"
+    ):
+        result["off_since"] = manual.get("started")
+    result.setdefault(
+        "safety", {"active": {}, "overridden": [], "restart_pending": None}
+    )
+    result.setdefault("safety_restore", None)
+    result.setdefault("off_since", None)
+    result.setdefault("last_reminder", None)
+    return result
+
+
 @dataclass(frozen=True, kw_only=True)
 class LoadResult:
     """Loaded state; ``reset`` asks the glue for the ``state_reset`` repair.
 
-    ``expired`` names the manual command (``boost``/``pause``) that ended while
-    Home Assistant was offline, for one log message.
+    ``expired`` names what ended while Home Assistant was offline (``boost``,
+    ``pause``, ``restart wait``, joined with " and "), for one log message.
     """
 
     state: ControllerState
@@ -129,14 +230,71 @@ def _manual(data: Any) -> Boost | Pause | None:
     raise _CorruptError("manual type")
 
 
+def _warning(data: Any) -> WarningInfo:
+    if not isinstance(data, Mapping):
+        raise _CorruptError("warning")
+    severity = _str(data.get("severity"))
+    return WarningInfo(
+        source_id=_required_str(data.get("source_id")),
+        source_name=_str(data.get("source_name")) or "",
+        entity_id=_required_str(data.get("entity_id")),
+        incident_key=_required_str(data.get("incident_key")),
+        headline=_str(data.get("headline")),
+        text=_str(data.get("text")),
+        recommended_actions=_str(data.get("recommended_actions")),
+        severity=Severity(severity) if severity is not None else None,
+        sender=_str(data.get("sender")),
+        since=_required_dt(data.get("since")),
+        details=_bool(data.get("details"), default=True),
+    )
+
+
+def _safety(data: Any) -> SafetyState:
+    if data is None:
+        return SafetyState()
+    if not isinstance(data, Mapping):
+        raise _CorruptError("safety")
+    active = data.get("active") or {}
+    overridden = data.get("overridden") or []
+    restart = data.get("restart_pending")
+    if not isinstance(active, Mapping) or not isinstance(overridden, list):
+        raise _CorruptError("safety content")
+    if restart is not None and not isinstance(restart, Mapping):
+        raise _CorruptError("restart_pending")
+    return SafetyState(
+        active={str(key): _warning(value) for key, value in active.items()},
+        overridden=frozenset(_required_str(item) for item in overridden),
+        restart_pending=(
+            RestartPending(deadline=_required_dt(restart.get("deadline")))
+            if restart is not None
+            else None
+        ),
+    )
+
+
+def _restore(data: Any) -> SafetyRestore | None:
+    if data is None:
+        return None
+    if not isinstance(data, Mapping):
+        raise _CorruptError("safety_restore")
+    return SafetyRestore(
+        turn_on=_bool(data.get("turn_on"), default=False),
+        flow=_float(data.get("flow")),
+    )
+
+
 def _state_from(data: Mapping[str, Any]) -> ControllerState:
     last_mode = data.get("last_mode")
     return ControllerState(
         control_enabled=_bool(data.get("control_enabled"), default=True),
         profile=Profile(data.get("profile", Profile.BALANCED)),
         manual=_manual(data.get("manual")),
+        safety=_safety(data.get("safety")),
+        safety_restore=_restore(data.get("safety_restore")),
         dry_active=_bool(data.get("dry_active"), default=False),
         dry_humidity_high_since=_dt_from(data.get("dry_humidity_high_since")),
+        off_since=_dt_from(data.get("off_since")),
+        last_reminder=_dt_from(data.get("last_reminder")),
         stopped_by_integration=_bool(data.get("stopped_by_integration"), default=False),
         last_write=_dt_from(data.get("last_write")),
         last_written_flow=_float(data.get("last_written_flow")),
@@ -153,9 +311,13 @@ def state_from_dict(
     """Load the controller state from the store.
 
     - ``data`` None (no store yet): defaults, no reset.
-    - corrupt data or a future ``version``: defaults and ``reset``.
-    - an expired boost or timed pause is ended with trigger
-      ``timeout_while_offline``.
+    - corrupt data or a future major ``version``: defaults and ``reset``.
+    - an expired boost, timed pause or restart wait is ended with trigger
+      ``timeout_while_offline`` (an ended restart wait also sends
+      "restarted").
+    - ``safety.active`` is not trusted (03-modes.md#persistence): every loaded
+      warning is unconfirmed and counts only until the startup grace ends,
+      unless a source reports it again.
 
     Missing keys get their defaults (forward compatible minor versions).
     """
@@ -168,11 +330,21 @@ def state_from_dict(
     except KeyError, TypeError, ValueError:
         return LoadResult(state=ControllerState(), reset=True)
 
+    state = replace(state, safety_unconfirmed=frozenset(state.safety.active))
+    expired: list[str] = []
     manual = state.manual
     if manual is not None and manual.until is not None and manual.until <= now:
-        expired = "boost" if isinstance(manual, Boost) else "pause"
+        expired.append("boost" if isinstance(manual, Boost) else "pause")
         state = replace(
             state, manual=None, pending_trigger=Trigger.TIMEOUT_WHILE_OFFLINE
         )
-        return LoadResult(state=state, expired=expired)
-    return LoadResult(state=state)
+    restart = state.safety.restart_pending
+    if restart is not None and restart.deadline <= now:
+        expired.append("restart wait")
+        state = replace(
+            state,
+            safety=replace(state.safety, restart_pending=None),
+            pending_trigger=Trigger.TIMEOUT_WHILE_OFFLINE,
+            restarted_pending=True,
+        )
+    return LoadResult(state=state, expired=" and ".join(expired) or None)

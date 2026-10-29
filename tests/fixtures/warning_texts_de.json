@@ -1,0 +1,202 @@
+[
+  {
+    "headline": "Geruchsbelästigung in Musterstadt",
+    "text": "Im Bereich Musterstadt kommt es zu einer Geruchsbelästigung. Es besteht keine akute Gesundheitsgefahr.",
+    "actions": "Halten Sie Fenster und Türen geschlossen.",
+    "expected": "shut_down",
+    "origin": "NRW standard text Geruchsbelästigung (paraphrased)",
+    "constructed": false
+  },
+  {
+    "headline": "Schadstofffreisetzung in Musterstadt",
+    "text": "Bei einem Störfall in einem Betrieb in Musterstadt werden Schadstoffe freigesetzt.",
+    "actions": "Suchen Sie geschlossene Räume auf. Schließen Sie Fenster und Türen. Schalten Sie die Lüftungs- und Klimaanlagen ab.",
+    "expected": "shut_down",
+    "origin": "NRW standard text Schadstofffreisetzung (paraphrased)",
+    "constructed": false
+  },
+  {
+    "headline": "Rauchgase durch Brand in Musterstadt",
+    "text": "Durch einen Brand in Musterstadt ziehen Rauchgase in Richtung der Wohngebiete.",
+    "actions": "Halten Sie Fenster und Türen geschlossen und schalten Sie Klima- und Lüftungsanlagen ab.",
+    "expected": "shut_down",
+    "origin": "NRW standard text Rauchgase (paraphrased)",
+    "constructed": false
+  },
+  {
+    "headline": "Starke Geruchsentwicklung nach Brand",
+    "text": "Nach einem Brand in einer Lagerhalle kommt es in Musterstadt zu starker Geruchsentwicklung.",
+    "actions": "Meiden Sie den Aufenthalt im Freien.",
+    "expected": "shut_down",
+    "origin": "headline from the live NINA feed, text constructed",
+    "constructed": true
+  },
+  {
+    "headline": "Großbrand - Musterstadt",
+    "text": "Die Feuerwehr bekämpft einen Großbrand in einem Gewerbegebiet. Es kommt zu starker Rauchentwicklung.",
+    "actions": "Schließen Sie Fenster und Türen.",
+    "expected": "shut_down",
+    "origin": "constructed headline",
+    "constructed": true
+  },
+  {
+    "headline": "Brand mit starker Rauchentwicklung",
+    "text": "In Musterstadt brennt ein Wohnhaus.",
+    "actions": "Meiden Sie den Bereich.",
+    "expected": "shut_down",
+    "origin": "constructed headline",
+    "constructed": true
+  },
+  {
+    "headline": "Gefahrstoffaustritt in Musterstadt",
+    "text": "Auf dem Gelände eines Betriebs tritt ein Gefahrstoff aus.",
+    "actions": "Bleiben Sie in geschlossenen Räumen.",
+    "expected": "shut_down",
+    "origin": "constructed headline",
+    "constructed": true
+  },
+  {
+    "headline": "Gasaustritt in Musterstadt",
+    "text": "Bei Bauarbeiten wurde eine Leitung beschädigt.",
+    "actions": "Meiden Sie den Bereich und folgen Sie den Anweisungen der Einsatzkräfte.",
+    "expected": "shut_down",
+    "origin": "constructed headline",
+    "constructed": true
+  },
+  {
+    "headline": "Austritt von Gefahrstoffen nach Verkehrsunfall",
+    "text": "Nach einem Unfall auf der Autobahn bei Musterstadt laufen Stoffe aus einem Tankwagen aus.",
+    "actions": "Halten Sie Fenster und Türen geschlossen.",
+    "expected": "shut_down",
+    "origin": "constructed headline",
+    "constructed": true
+  },
+  {
+    "headline": "Explosion in Chemiewerk",
+    "text": "In einem Werk in Musterstadt hat es eine Explosion gegeben.",
+    "actions": "Suchen Sie geschlossene Räume auf.",
+    "expected": "shut_down",
+    "origin": "constructed headline",
+    "constructed": true
+  },
+  {
+    "headline": "Unfall im Kernkraftwerk",
+    "text": "In einem Kernkraftwerk hat sich ein Unfall ereignet.",
+    "actions": "Bleiben Sie im Haus und verfolgen Sie die Meldungen im Radio.",
+    "expected": "shut_down",
+    "origin": "constructed headline",
+    "constructed": true
+  },
+  {
+    "headline": "1. AKTUALISIERUNG: Großbrand - Musterstadt",
+    "text": "Der Großbrand in Musterstadt ist noch nicht gelöscht.",
+    "actions": "Halten Sie weiterhin Fenster und Türen geschlossen.",
+    "expected": "shut_down",
+    "origin": "constructed update headline",
+    "constructed": true
+  },
+  {
+    "headline": "Kampfmittelfund in Musterstadt",
+    "text": "Bei Bauarbeiten wurde ein Blindgänger gefunden. Für die Entschärfung wird der Bereich geräumt.",
+    "actions": "Verlassen Sie den Sperrbereich und folgen Sie den Anweisungen der Einsatzkräfte.",
+    "expected": "keep_running",
+    "origin": "NRW standard text Kampfmittelfund (paraphrased)",
+    "constructed": false
+  },
+  {
+    "headline": "Sirenenfehlauslösung in Musterstadt",
+    "text": "Die Sirenen in Musterstadt wurden versehentlich ausgelöst. Es besteht keine Gefahr.",
+    "actions": null,
+    "expected": "keep_running",
+    "origin": "NRW standard text Sirenenfehlauslösung (paraphrased)",
+    "constructed": false
+  },
+  {
+    "headline": "Probealarm in Musterstadt",
+    "text": "Heute werden die Sirenen probeweise ausgelöst. Es besteht keine Gefahr.",
+    "actions": null,
+    "expected": "keep_running",
+    "origin": "NRW standard text Probealarm (paraphrased)",
+    "constructed": false
+  },
+  {
+    "headline": "Ausfall Stromversorgung in Musterstadt",
+    "text": "In Teilen von Musterstadt ist die Stromversorgung ausgefallen.",
+    "actions": "Schalten Sie empfindliche Geräte aus und halten Sie Taschenlampen bereit.",
+    "expected": "keep_running",
+    "origin": "NRW standard text Ausfall Stromversorgung (paraphrased)",
+    "constructed": false
+  },
+  {
+    "headline": "Hochwasser/Überflutung in Musterstadt",
+    "text": "Durch starke Regenfälle steigt der Pegel des Flusses.",
+    "actions": "Bringen Sie sich und Wertgegenstände in höhere Stockwerke.",
+    "expected": "keep_running",
+    "origin": "NRW standard text Hochwasser/Überflutung (paraphrased)",
+    "constructed": false
+  },
+  {
+    "headline": "Entwarnung",
+    "text": "Die Gefahr ist vorüber.",
+    "actions": "Sie können Fenster und Türen wieder öffnen und Lüftungs- und Klimaanlagen wieder einschalten.",
+    "expected": "keep_running",
+    "origin": "NRW standard text Entwarnung (paraphrased)",
+    "constructed": false
+  },
+  {
+    "headline": "Entwarnung: Feuerwehreinsatz - Musterstadt",
+    "text": "Der Einsatz der Feuerwehr ist beendet.",
+    "actions": "Schließen Sie vorsorglich Fenster und Türen.",
+    "expected": "keep_running",
+    "origin": "live NINA feed 2026-10-13 (place replaced)",
+    "constructed": false
+  },
+  {
+    "headline": "Amtliche WARNUNG vor STURMBÖEN",
+    "text": "Es treten Sturmböen mit Geschwindigkeiten um 70 km/h auf.",
+    "actions": "Achten Sie auf herabstürzende Äste.",
+    "expected": "keep_running",
+    "origin": "live NINA feed 2026-10-13 (DWD weather warning)",
+    "constructed": false
+  },
+  {
+    "headline": "Trinkwasser: Chlorung im Versorgungsgebiet Musterstadt",
+    "text": "Das Trinkwasser wird vorsorglich gechlort. Es kann leicht nach Chlor riechen.",
+    "actions": null,
+    "expected": "keep_running",
+    "origin": "live NINA feed 2026-10-13 (drinking-water notice, place replaced)",
+    "constructed": false
+  },
+  {
+    "headline": "Amtliche WARNUNG vor HOHER UV-INTENSITÄT",
+    "text": "Es wird eine hohe UV-Strahlung erwartet.",
+    "actions": "Vermeiden Sie längere Aufenthalte in der Sonne.",
+    "expected": "keep_running",
+    "origin": "constructed (DWD UV warning)",
+    "constructed": true
+  },
+  {
+    "headline": "Sperrung der Gasse am Markt - Brandenburg an der Havel",
+    "text": "Wegen Bauarbeiten ist die Gasse am Markt gesperrt.",
+    "actions": null,
+    "expected": "keep_running",
+    "origin": "constructed (place name with 'Brand', street word 'Gasse')",
+    "constructed": true
+  },
+  {
+    "headline": "Brand in Gewerbegebiet - Gefahr vorüber",
+    "text": "Der Brand ist gelöscht.",
+    "actions": "Sie können Fenster und Türen wieder öffnen.",
+    "expected": "keep_running",
+    "origin": "constructed (all-clear without the word Entwarnung)",
+    "constructed": true
+  },
+  {
+    "headline": "Trinkwasser mit auffälligem Geruch",
+    "text": "Das Trinkwasser in Musterstadt hat einen ungewöhnlichen Geruch. Es besteht keine Gesundheitsgefahr.",
+    "actions": null,
+    "expected": "keep_running",
+    "origin": "constructed (Geruch alone is no keyword)",
+    "constructed": true
+  }
+]

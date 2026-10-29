@@ -45,6 +45,7 @@ from .engine.options import (
     CONF_NIGHT_ENABLED,
     CONF_NIGHT_END,
     CONF_NIGHT_START,
+    CONF_NOTIFY_SERVICES,
     CONF_OFF_ENTITY,
     CONF_OFF_STATE,
     CONF_PRESENCE_ENTITIES,
@@ -59,6 +60,7 @@ from .engine.options import (
     OFF_STATE_OFF,
     OFF_STATE_ON,
     OFF_STATES,
+    OPTIONS_MINOR_VERSION,
     defaults_for_max_flow,
 )
 
@@ -154,6 +156,7 @@ __all__ = [
     "CONF_NIGHT_ENABLED",
     "CONF_NIGHT_END",
     "CONF_NIGHT_START",
+    "CONF_NOTIFY_SERVICES",
     "CONF_OFF_ENTITY",
     "CONF_OFF_STATE",
     "CONF_PRESENCE_ENTITIES",
@@ -174,6 +177,7 @@ __all__ = [
     "OFF_STATES",
     "OFF_STATE_OFF",
     "OFF_STATE_ON",
+    "OPTIONS_MINOR_VERSION",
     "PAUSE_DURATION_DEFAULT",
     "PAUSE_DURATION_HOURS",
     "SERVICE_BOOST",

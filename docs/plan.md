@@ -166,14 +166,14 @@ Done when: the 0.1 acceptance items pass in a test run of several days, includin
 
 Goal: safety shutdown and reminders as pure engine logic. Spec: [03-modes.md](spec/03-modes.md#safety-shutdown).
 
-- [ ] `ControllerState` extended (safety, `off_since`, `last_reminder`), store version bump with migration and test
-- [ ] Options migration (`MINOR_VERSION` 2) adding the defaults of the 0.2 options (`safety`, `notifications` including `pause_reminder_after`, `off_notice_after`)
-- [ ] `safety.py`: triggers `on_off`/`numeric`/`state_list`, `WarningDetails`, filters (exclude first, headline/advice, regex, severity), severity normalisation, HTML to text, warning key and incident key
-- [ ] `modes.py`: `safety_off` with priority, `override_safety`, `keep_off`, `restart_pending` with timeout, new warning during restart wait, `safety_when_disabled`, load rules (`active` rebuilt, `overridden` kept only with a matching incident) – BHV-40, 42, 43, 44
-- [ ] Reminders for indefinite pause and long off states (including external stops) – BHV-24
-- [ ] Decide Q11 (external start of the unit during `safety_off`) and update the spec
-- [ ] `tests/fixtures/warning_texts_de.json` with the 25 cases
-- [ ] Tests E23–E31 (including E30a–E30i), E39a, E40
+- [x] `ControllerState` extended (safety, `off_since`, `last_reminder`), store version bump (1.2) with migration and test
+- [x] Options migration (`MINOR_VERSION` 2) adding the defaults of the 0.2 options (`safety`, `notifications` including `pause_reminder_after`, `off_notice_after`)
+- [x] `safety.py`: triggers `on_off`/`numeric`/`state_list`, `WarningDetails`, filters (exclude first, headline/advice, regex, severity), severity normalisation, HTML to text, warning key and incident key
+- [x] `modes.py`: `safety_off` with priority, `override_safety`, `keep_off`, `restart_pending` with timeout, new warning during restart wait, `safety_when_disabled`, load rules (`active` rebuilt, `overridden` kept only with a matching incident) – BHV-40, 42, 43, 44
+- [x] Reminders for indefinite pause and long off states (including external stops) – BHV-24
+- [x] Decide Q11 (external start of the unit during `safety_off`) and update the spec: override (owner, 2026-10-29)
+- [x] `tests/fixtures/warning_texts_de.json` with the 25 cases
+- [x] Tests E23–E31 (including E30a–E30i), E39a, E40
 
 Done when: all safety and reminder scenarios pass, migrations tested.
 

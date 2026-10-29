@@ -19,6 +19,7 @@ from .controller import (
     VentilationController,
     create_store,
 )
+from .engine.options import migrate_options
 from .entity import async_remove_stale_entities
 from .services import async_setup_services
 
@@ -85,8 +86,10 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> Non
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Migrate an entry to the current version (no migration steps yet).
+    """Migrate an entry to the current version.
 
+    1.1 -> 1.2 (phase 0.2): the defaults of the options steps `safety` and
+    `notifications` are added (`migrate_options`), existing values are kept.
     A major version from the future (a downgrade) cannot be read and fails.
     Minor versions are backwards compatible: a newer minor version of the
     current major version is accepted as is.
@@ -101,4 +104,12 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             current,
         )
         return False
+    target = BetterHomeVentilationConfigFlow.MINOR_VERSION
+    if entry.minor_version < target:
+        hass.config_entries.async_update_entry(
+            entry,
+            options=migrate_options(entry.options, entry.minor_version),
+            minor_version=target,
+        )
+        _LOGGER.debug("Migrated %s to version %s.%s", entry.title, current, target)
     return True

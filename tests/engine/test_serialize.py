@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 
@@ -14,12 +15,56 @@ from engine.models import (
     Mode,
     Pause,
     Profile,
+    RestartPending,
+    SafetyRestore,
+    SafetyState,
+    Severity,
     Source,
     Trigger,
+    WarningInfo,
 )
-from engine.serialize import STORE_VERSION, state_from_dict, state_to_dict
+from engine.serialize import (
+    STORE_MINOR_VERSION,
+    STORE_VERSION,
+    migrate_store_data,
+    state_from_dict,
+    state_to_dict,
+)
 
 from .helpers import T0, Sim, of_type
+
+_WARNING = WarningInfo(
+    source_id="nina",
+    source_name="NINA region",
+    entity_id="binary_sensor.warning_region_1",
+    incident_key="nina:großbrand - musterstadt",
+    headline="Großbrand - Musterstadt",
+    text="Text",
+    recommended_actions="Fenster schließen",
+    severity=Severity.SEVERE,
+    sender="Leitstelle",
+    since=T0 - timedelta(minutes=10),
+)
+_SAFETY = SafetyState(
+    active={
+        "nina:1": _WARNING,
+        "smoke:binary_sensor.smoke:t": WarningInfo(
+            source_id="smoke",
+            source_name="Smoke",
+            entity_id="binary_sensor.smoke",
+            incident_key="smoke:binary_sensor.smoke:t",
+            headline=None,
+            text=None,
+            recommended_actions=None,
+            severity=None,
+            sender=None,
+            since=T0,
+            details=False,
+        ),
+    },
+    overridden=frozenset({"nina:großbrand - musterstadt"}),
+    restart_pending=RestartPending(deadline=T0 + timedelta(minutes=20)),
+)
 
 
 def _persisted(**overrides: Any) -> ControllerState:
@@ -162,6 +207,108 @@ def test_future_version_resets() -> None:
     assert result.state == ControllerState()
 
 
+def test_round_trip_of_the_02_fields() -> None:
+    """Safety, restore, ``off_since`` and ``last_reminder`` survive a round trip.
+
+    Loaded warnings are unconfirmed (``active`` is not trusted after a restart).
+    """
+    state = _persisted(
+        safety=_SAFETY,
+        safety_restore=SafetyRestore(turn_on=False, flow=230.0),
+        off_since=T0 - timedelta(hours=9),
+        last_reminder=T0 - timedelta(hours=1),
+    )
+    data = state_to_dict(state)
+    assert data["safety"]["overridden"] == ["nina:großbrand - musterstadt"]
+    assert data["safety"]["active"]["nina:1"]["severity"] == "severe"
+    result = state_from_dict(data, T0)
+    assert result.state == replace(state, safety_unconfirmed=frozenset(_SAFETY.active))
+    assert result.expired is None
+
+
+def test_expired_restart_wait_and_boost_end_while_offline() -> None:
+    """An ended restart wait sends "restarted"; both expiries are reported."""
+    state = _persisted(control_enabled=True, safety=_SAFETY)
+    result = state_from_dict(state_to_dict(state), T0 + timedelta(hours=1))
+    assert result.expired == "boost and restart wait"
+    assert result.state.safety.restart_pending is None
+    assert result.state.restarted_pending
+    assert result.state.pending_trigger is Trigger.TIMEOUT_WHILE_OFFLINE
+
+
+def test_store_migration_1_1_to_1_2() -> None:
+    """1.1 -> 1.2: safety keys added, ``off_since`` of a running pause = its start."""
+    old = state_to_dict(
+        _persisted(manual=Pause(until=None, started=T0, source=Source.BUTTON))
+    )
+    for key in ("safety", "safety_restore", "off_since", "last_reminder"):
+        del old[key]
+    migrated = migrate_store_data(1, 1, old)
+    assert migrated["off_since"] == T0.isoformat()
+    assert migrated["safety"] == {
+        "active": {},
+        "overridden": [],
+        "restart_pending": None,
+    }
+    assert migrated["last_reminder"] is None
+    assert migrated["safety_restore"] is None
+    loaded = state_from_dict(migrated, T0).state
+    assert loaded.off_since == T0
+    assert loaded.manual == Pause(until=None, started=T0, source=Source.BUTTON)
+
+    boost = state_to_dict(_persisted())
+    del boost["off_since"]
+    assert migrate_store_data(1, 1, boost)["off_since"] is None
+    assert old != migrated  # the input is not changed in place
+    assert "off_since" not in old
+
+
+def test_store_migration_leaves_other_versions_and_bad_data() -> None:
+    """Current or newer minor versions and non-mapping data are returned as is."""
+    data = {"profile": "quiet"}
+    assert migrate_store_data(1, STORE_MINOR_VERSION, data) is data
+    assert migrate_store_data(1, STORE_MINOR_VERSION + 1, data) is data
+    assert migrate_store_data(STORE_VERSION + 1, 1, data) is data
+    assert migrate_store_data(1, 1, ["x"]) == ["x"]
+
+
+@pytest.mark.parametrize(
+    "safety",
+    [
+        "x",
+        {"active": ["x"], "overridden": []},
+        {"active": {}, "overridden": "x"},
+        {"active": {}, "overridden": [1]},
+        {"active": {}, "overridden": [], "restart_pending": "soon"},
+        {"active": {}, "overridden": [], "restart_pending": {"deadline": None}},
+        {"active": {"k": "x"}},
+        {"active": {"k": {"source_id": "s"}}},
+        {
+            "active": {
+                "k": {
+                    "source_id": "s",
+                    "entity_id": "binary_sensor.x",
+                    "incident_key": "s:k",
+                    "since": "2026-01-15T12:00:00+00:00",
+                    "severity": "bogus",
+                }
+            }
+        },
+    ],
+)
+def test_corrupt_safety_resets(safety: object) -> None:
+    """Unreadable safety data -> defaults and the ``state_reset`` flag."""
+    result = state_from_dict({"safety": safety}, T0)
+    assert result.reset
+    assert result.state == ControllerState()
+
+
+def test_corrupt_restore_resets() -> None:
+    """An unreadable ``safety_restore`` -> reset."""
+    assert state_from_dict({"safety_restore": "on"}, T0).reset
+    assert state_from_dict({"safety_restore": {"flow": "x"}}, T0).reset
+
+
 def test_runtime_fields_are_not_persisted() -> None:
     """Runtime bookkeeping starts fresh after a load."""
     state = _persisted()
@@ -170,8 +317,12 @@ def test_runtime_fields_are_not_persisted() -> None:
         "control_enabled",
         "profile",
         "manual",
+        "safety",
+        "safety_restore",
         "dry_active",
         "dry_humidity_high_since",
+        "off_since",
+        "last_reminder",
         "stopped_by_integration",
         "last_write",
         "last_written_flow",

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import timedelta
 from typing import Any
 
@@ -23,12 +24,16 @@ from custom_components.better_home_ventilation.const import (
 )
 from custom_components.better_home_ventilation.engine.models import (
     Boost,
+    Mode,
     Pause,
     Profile,
     Source,
 )
 from custom_components.better_home_ventilation.select import nearest_boost_duration
-from custom_components.better_home_ventilation.sensor import SetpointSensor
+from custom_components.better_home_ventilation.sensor import (
+    SetpointSensor,
+    setpoint_attributes,
+)
 
 from .common import NUMBER_FLOW, MockUnit, advance, mock_entry
 from .test_controller import controller_of, setup_entry
@@ -345,6 +350,20 @@ async def test_off_mode_shows_zero_and_off_method(
     assert state_of(hass, MODE).state == "off"
     assert state_of(hass, REASON).state == "off"
     assert state_of(hass, ENDS_AT).state == "unknown"
+    assert "awaiting_restart" not in setpoint.attributes
+
+
+@pytest.mark.usefixtures("entities")
+async def test_setpoint_awaiting_restart_in_safety_off(
+    hass: HomeAssistant, unit: MockUnit
+) -> None:
+    """`awaiting_restart` is shown in `safety_off` only (04-interface.md)."""
+    entry = await setup_entry(hass)
+    decision = controller_of(entry).current_decision
+    assert decision is not None
+    assert "awaiting_restart" not in setpoint_attributes(decision)
+    waiting = replace(decision, mode=Mode.SAFETY_OFF, awaiting_restart=True)
+    assert setpoint_attributes(waiting)["awaiting_restart"] is True
 
 
 @pytest.mark.usefixtures("entities")

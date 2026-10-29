@@ -60,6 +60,7 @@ from .const import (
 )
 from .engine import CommandRejected, apply_command, evaluate
 from .engine.models import (
+    ClearNotification,
     Command,
     ControllerState,
     CorrectReadiness,
@@ -67,6 +68,7 @@ from .engine.models import (
     Effect,
     FireEvent,
     InputValue,
+    Notify,
     Options,
     ReadinessCondition,
     ScheduleAt,
@@ -80,6 +82,7 @@ from .engine.readiness import condition_met
 from .engine.serialize import (
     STORE_MINOR_VERSION,
     STORE_VERSION,
+    migrate_store_data,
     state_from_dict,
     state_to_dict,
 )
@@ -97,9 +100,29 @@ def store_key(entry_id: str) -> str:
     return f"{DOMAIN}.{entry_id}"
 
 
+class ControllerStore(Store[dict[str, Any]]):
+    """Store of the controller state with the engine's migrations (BHV-50)."""
+
+    async def _async_migrate_func(
+        self,
+        old_major_version: int,
+        old_minor_version: int,
+        old_data: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Migrate stored data to the current version (`migrate_store_data`).
+
+        A future major version never gets here: `Store` raises
+        `UnsupportedStorageVersionError` first.
+        """
+        migrated: dict[str, Any] = migrate_store_data(
+            old_major_version, old_minor_version, old_data
+        )
+        return migrated
+
+
 def create_store(hass: HomeAssistant, entry_id: str) -> Store[dict[str, Any]]:
     """Return the store of the controller state of an entry (BHV-50)."""
-    return Store(
+    return ControllerStore(
         hass,
         STORE_VERSION,
         store_key(entry_id),
@@ -529,6 +552,9 @@ class VentilationController:
                     )
                 case ScheduleAt(when=when):
                     scheduled = when
+                case Notify() | ClearNotification():
+                    # TODO(0.2, M9): send/clear notifications (notify.py).
+                    pass
         if self._stopped:
             return
         self._cancel_schedule()
