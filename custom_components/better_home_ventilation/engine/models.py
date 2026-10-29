@@ -351,10 +351,16 @@ class ActuatorSnapshot:
     integration's own (neither its context nor a late confirmation of its last
     command, docs/spec/02-control.md#writing; used for an external stop/start
     of a ``fan`` actuator without off actuator).
+
+    ``awaiting_confirmation`` is True while the last write to the actuator is
+    not confirmed yet: it is inside the confirmation window and the actuator
+    has not reported another state since (02-control.md#output-shaping; the
+    unit is taking the written value, so ``current`` is the written value).
     """
 
     state: str | None
     foreign_change: bool = False
+    awaiting_confirmation: bool = False
     step: float | None = None
     min_value: float | None = None
     max_value: float | None = None
@@ -498,7 +504,8 @@ class Decision:
     """Result of one evaluation (docs/spec/02-control.md#decision-record).
 
     ``setpoint`` is the flow after shaping (0 in off modes, the demand in
-    ``disabled``), ``target`` the flow before shaping, ``written`` the flow
+    ``disabled``, the held ``current`` while a gate blocks the write),
+    ``target`` the flow before shaping, ``written`` the flow
     sent to the actuator in this evaluation (None if nothing was written).
     ``problem`` is True if any problem persists longer than ``problem_delay``.
     """

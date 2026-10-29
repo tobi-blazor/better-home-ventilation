@@ -32,7 +32,7 @@ Each evaluation:
 ## Startup
 
 - The controller starts when HA has started (`EVENT_HOMEASSISTANT_STARTED`, or immediately if already running).
-- During `startup_grace` (default 60 s) evaluations run and entities show values, but **nothing is written** and no "inputs lost" problem or notification is raised. Reason: many sensors become available a few seconds after start.
+- During `startup_grace` (default 60 s) evaluations run and entities show values, but **nothing is written** and no "inputs lost" problem or notification is raised. Reason: many sensors become available a few seconds after start. The setpoint shows `current` (what the unit runs at), the `target` attribute the value the inputs ask for ([setpoint](#output-shaping)).
 - Exception: an active safety shutdown is applied immediately, including during the grace period.
 - After the grace period the first write ignores `min_write_interval`.
 
@@ -155,7 +155,7 @@ The profile (BHV-26) is a fixed, built-in strategy, chosen with the `profile` se
 Shaping turns the target into the setpoint, the value actually written. Let:
 
 - `target` = the flow the active mode asks for ([03-modes.md](03-modes.md#target-per-mode)), quantised to `flow_quantum` (round half up) and clamped to the actuator range
-- `current` = actuator's current value converted to flow if valid, otherwise the last written value, otherwise None
+- `current` = the last written value while that write **awaits its confirmation** (the command is inside the confirmation window of [writing](#writing) and the actuator has not reported another state since it was sent; an attribute-only update does not count); otherwise the actuator's current value converted to flow if valid, otherwise the last written value, otherwise None. Reason: a device that confirms on its next poll still shows the old value for up to its poll interval, although the unit is already taking the new one. Any state change after the command ends the wait (the confirmation, or an external change, which is then `current` as usual), and so does the end of the window (a write the unit never took: the actuator value counts again)
 - `bypass` = the mode changed in this evaluation, or a boost command (start, extension, level change) or a profile change happened since the last evaluation, or this is the first write after startup, or `current` is None
 
 ```text
@@ -172,6 +172,19 @@ else:
 ```
 
 Then the written value is quantised again and mapped to the actuator.
+
+**Setpoint** (what the unit should run at, shown by the setpoint sensor):
+
+| Case | Setpoint |
+|---|---|
+| a value is written in this evaluation | the written value |
+| shaping holds (`interval`, `deadband`, or nothing to change) | `current` |
+| a gate blocks the write (`grace`, `unavailable`, `not_ready`, see [readiness](#readiness-and-availability)) | `current`; 0 if the unit was stopped by the integration and is still waiting to be switched on ([off and on](#off-and-on)) |
+| `current` is None (no actuator value and nothing written yet) | `target` |
+| off modes | 0 |
+| `disabled` | `target` (the demand, shown not written; this is the shadow run, BHV-03) |
+
+So during the startup grace the setpoint stays at the value the unit runs at while the target follows the inputs, and the first write after the grace is the first change of the setpoint. Every evaluation publishes exactly one decision, after its effects have been executed; an evaluation that runs before the actuator confirms a write (e.g. a periodic evaluation right after the write) shows the written value, not the old actuator value.
 
 Properties this guarantees (tested, see [06-testing.md](06-testing.md)):
 

@@ -65,6 +65,7 @@ Time is always injected (`now` parameter in the engine, `freezer` fixture in com
 | E37 | cooking trigger power 1500 W > 100 | cooking boost until run-on after power drops |
 | E38 | state serialise → deserialise | identical; expired timers ended with `timeout_while_offline` |
 | E39 | startup grace | no WriteFlow effect during grace |
+| E39b | restart: unit at the last written 190, target 85 then 240 during the grace; after the grace an evaluation before the actuator confirms the write | setpoint 190 during the grace (target 85, 240); then 240 written and shown, the evaluation before the confirmation holds 240 (not 190); never confirmed: after the window the actuator value 190 counts again. Unavailable actuator: last written value; not ready: actuator value; stopped by the integration and blocked from switching on: 0 |
 | E39a | startup grace with an active warning (0.2) | safety TurnOff still issued during grace |
 | E40 | indefinite pause | reminder after 8 h, then every 24 h |
 | E41 | select actuator stages 50/100/200/300/400, target 230 | stage 300; decreasing to 190 stays at 300 until target ≤ 180 (hysteresis) |
@@ -114,6 +115,7 @@ Constructed headlines are marked as such in the fixture. Real messages that were
 | C7 | services: entry resolution with one and two entries, error translations |
 | C8 | actuator write with context, verification retry, `write_mismatch` |
 | C8a | late confirmation with a new context (device confirms after 20 s and 45 s): a timed pause stays timed, a late start is no command, a late write is own without `write_mismatch`; a stop at the unit after the confirmation, another value, `unavailable` and the commanded state after the window stay external |
+| C8b | restart with a stored last written value and a unit that confirms after 20 s: the setpoint sensor shows the last written value during the grace (target changing), then the written value exactly once per evaluation, never the old value again; a write awaits its confirmation until the actuator changes state or the window ends |
 | C9 | restart: boost active → reload entry → `ends_at` unchanged, boost continues |
 | C10 | notifications: `notify.mobile_app_x` called with actions and tag; firing `mobile_app_notification_action` with `BHV_<entry8>_KEEP_VENTILATING` overrides |
 | C11 | no notify services → `persistent_notification` created |

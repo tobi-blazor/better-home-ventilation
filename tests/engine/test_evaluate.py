@@ -9,6 +9,8 @@ from __future__ import annotations
 from datetime import timedelta
 from typing import Any
 
+import pytest
+
 from engine.models import (
     ControllerState,
     ControlSwitchCommand,
@@ -37,6 +39,7 @@ from .helpers import (
     READY,
     T0,
     Sim,
+    co2_for,
     make_options,
     of_type,
     running_state,
@@ -63,7 +66,7 @@ def test_e39_startup_grace_writes_nothing() -> None:
     decision, effects = sim.run()
     assert not writes(effects)
     assert decision.write_blocked_by is WriteBlock.GRACE
-    assert decision.setpoint == 400
+    assert (decision.setpoint, decision.target) == (80, 400)  # the unit runs at 80
     assert decision.problems == ()  # no input problems during the grace
     assert of_type(effects, ScheduleAt) == [ScheduleAt(when=T0 + timedelta(seconds=30))]
 
@@ -72,6 +75,106 @@ def test_e39_startup_grace_writes_nothing() -> None:
     assert [(w.flow, w.bypass) for w in writes(effects)] == [(400, True)]
     assert [p.key for p in decision.problems] == [ProblemKey.INPUTS_INVALID]
     assert sim.state.written_since_start
+
+
+def test_bhv16_setpoint_while_blocked_is_the_held_current() -> None:
+    """While a gate blocks the write the setpoint is `current`, not the target.
+
+    Restart: the unit runs at the last written 190; the target changes during
+    the grace (85, then 240). The first write after the grace shows 240; an
+    evaluation before the actuator confirms it holds 240 (awaiting
+    confirmation), not the 190 the actuator still reports.
+    """
+    restored = ControllerState(last_written_flow=190, last_mode=Mode.AUTOMATIC)
+    sim = Sim(
+        values={CO2_A: co2_for(85), CO2_B: co2_for(85)},
+        actuator="190",
+        state=restored,
+        started_at=T0,
+    )
+    decision, _ = sim.run()
+    assert (decision.setpoint, decision.target) == (190, 85)
+    sim.advance(seconds=30)
+    sim.set(CO2_A, co2_for(240))
+    decision, _ = sim.run()
+    assert (decision.setpoint, decision.target) == (190, 240)
+    assert decision.write_blocked_by is WriteBlock.GRACE
+
+    sim.advance(seconds=30)
+    decision, effects = sim.run()
+    assert [w.flow for w in writes(effects)] == [240]
+    assert (decision.setpoint, decision.written) == (240, 240)
+    sim.set_actuator("190", awaiting_confirmation=True)  # confirmed on the next poll
+    decision, effects = sim.run()
+    assert not writes(effects)
+    assert (decision.setpoint, decision.target) == (240, 240)
+    assert decision.write_blocked_by is None
+
+    # Never confirmed: after the window the actuator value counts again.
+    sim.advance(seconds=61)
+    sim.set_actuator("190", awaiting_confirmation=False)
+    decision, _ = sim.run()
+    assert decision.setpoint == 190
+    assert decision.write_blocked_by is WriteBlock.INTERVAL
+
+
+def test_awaiting_confirmation_is_current_for_shaping() -> None:
+    """A write awaiting its confirmation is `current`: no step from the old value."""
+    sim = Sim(
+        make_options(min_write_interval=0),
+        values={CO2_A: co2_for(400)},
+        actuator="190",
+        state=running_state(last_written_flow=240),
+    )
+    sim.set_actuator("190", awaiting_confirmation=True)
+    decision, effects = sim.run()
+    assert [w.flow for w in writes(effects)] == [290]  # 240 + max step 50
+    assert decision.setpoint == 290
+
+
+@pytest.mark.parametrize(
+    ("actuator", "conditions", "blocked"),
+    [
+        ("unavailable", (), WriteBlock.UNAVAILABLE),
+        (
+            "120",
+            (ReadinessCondition(entity_id=READY, expected_state="Remote"),),
+            WriteBlock.NOT_READY,
+        ),
+    ],
+)
+def test_setpoint_while_unavailable_or_not_ready(
+    actuator: str, conditions: tuple[ReadinessCondition, ...], blocked: WriteBlock
+) -> None:
+    """Unavailable: the last written value; not ready: the actuator value."""
+    sim = Sim(
+        make_options(readiness_conditions=conditions),
+        values={CO2_A: 1600, READY: "Local"},
+        actuator=actuator,
+        state=running_state(last_written_flow=100, bypass_pending=True),
+    )
+    decision, effects = sim.run()
+    assert not writes(effects)
+    assert decision.write_blocked_by is blocked
+    assert (decision.setpoint, decision.target) == (
+        100 if actuator == "unavailable" else 120,
+        400,
+    )
+
+
+def test_setpoint_zero_while_blocked_before_switching_on() -> None:
+    """Stopped by the integration and blocked from switching on: the setpoint is 0."""
+    sim = Sim(
+        make_options(off_entity=OFF_SWITCH, off_state="on"),
+        off="on",
+        actuator="190",
+        state=running_state(stopped_by_integration=True),
+        started_at=T0,
+    )
+    decision, effects = sim.run()
+    assert not of_type(effects, TurnOn)
+    assert decision.write_blocked_by is WriteBlock.GRACE
+    assert (decision.setpoint, decision.target) == (0, 80)
 
 
 def test_startup_mode_change_event() -> None:

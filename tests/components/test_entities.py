@@ -7,9 +7,17 @@ from typing import Any
 
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.const import ATTR_ENTITY_ID, ATTR_FRIENDLY_NAME, EntityCategory
-from homeassistant.core import CoreState, HomeAssistant, State
+from homeassistant.core import (
+    CoreState,
+    Event,
+    EventStateChangedData,
+    HomeAssistant,
+    State,
+    callback,
+)
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.util import dt as dt_util
 import pytest
 from pytest_homeassistant_custom_component.common import (
@@ -30,7 +38,7 @@ from custom_components.better_home_ventilation.engine.models import (
 from custom_components.better_home_ventilation.select import nearest_boost_duration
 from custom_components.better_home_ventilation.sensor import SetpointSensor
 
-from .common import NUMBER_FLOW, MockUnit, advance, mock_entry
+from .common import CO2_LIVING, NUMBER_FLOW, MockUnit, advance, mock_entry
 from .test_controller import controller_of, setup_entry
 
 #: Entity ids and friendly names of the 0.1 entities per language (C5).
@@ -320,6 +328,73 @@ async def test_sensors_follow_the_decision(
     assert attributes["humidity_mean"] == 45
     assert attributes["invalid_inputs"] == []
     assert attributes["limits"] == []
+
+
+@pytest.mark.usefixtures("entities")
+async def test_bhv16_setpoint_after_restart_shows_what_the_unit_runs_at(
+    hass: HomeAssistant,
+    unit: MockUnit,
+    freezer: FrozenDateTimeFactory,
+    hass_storage: dict[str, Any],
+) -> None:
+    """Restart sequence (02-control.md#output-shaping, setpoint while nothing is written).
+
+    The unit runs at the last written 190 m³/h. During the startup grace the
+    setpoint stays 190 while the target changes (85, then 240). The first write
+    after the grace publishes 240 once: the evaluations before the delayed
+    confirmation (grace end and periodic timer at the same time, the actuator
+    still reports 190) hold the written value instead of showing 190 again.
+    """
+    unit.delay[NUMBER_FLOW] = 20  # confirms on its next poll, with a new context
+    hass.states.async_set(NUMBER_FLOW, "190", {"min": 0, "max": 400, "step": 1})
+    hass.states.async_set(CO2_LIVING, "860", {"device_class": "carbon_dioxide"})
+    entry = mock_entry()
+    key = f"{DOMAIN}.{entry.entry_id}"
+    hass_storage[key] = {
+        "key": key,
+        "version": 1,
+        "minor_version": 1,
+        "data": {
+            "last_written_flow": 190,
+            "last_write": "2026-10-14T19:00:00+00:00",
+            "last_mode": "automatic",
+        },
+    }
+    published: list[tuple[float, float | None, float | None]] = []
+
+    @callback
+    def record(event: Event[EventStateChangedData]) -> None:
+        new_state = event.data["new_state"]
+        if new_state is not None and new_state.state not in ("unknown", "unavailable"):
+            attributes = new_state.attributes
+            published.append(
+                (
+                    float(new_state.state),
+                    attributes.get("target"),
+                    attributes.get("written"),
+                )
+            )
+
+    async_track_state_change_event(hass, [SETPOINT], record)
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert published == [(190, 85, 190)]
+
+    await advance(hass, freezer, 20)
+    hass.states.async_set(CO2_LIVING, "1125", {"device_class": "carbon_dioxide"})
+    await hass.async_block_till_done()
+    await advance(hass, freezer, 10)  # debounced evaluation, still in the grace
+    assert published[-1] == (190, 240, 190)
+    assert state_of(hass, SETPOINT).attributes["write_blocked_by"] == "grace"
+
+    for _ in range(12):  # grace end, write, delayed confirmation, verification
+        await advance(hass, freezer, 5)
+    assert len(unit.calls_for("number", "set_value")) == 1
+    assert state_of(hass, NUMBER_FLOW).state == "240.0"
+    after_write = published[published.index((240, 240, 240)) :]
+    assert {setpoint for setpoint, _, _ in after_write} == {240}
+    assert [setpoint for setpoint, _, _ in published[:2]] == [190, 190]
 
 
 def test_setpoint_unrecorded_attributes() -> None:

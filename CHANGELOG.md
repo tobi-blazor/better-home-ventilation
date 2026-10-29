@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The profile select shows a short description with each profile (e.g. "Quiet – limited all day"), so the choice is clear in the dropdown.
 
+### Fixed
+
+- The setpoint sensor shows what the unit runs at while nothing is written: during the startup grace, while the actuator is unavailable or a readiness condition is not met it keeps the current flow instead of the unshaped target, and right after a write it no longer jumps back to the old value for a moment before a unit that reports on its next poll confirms the new one.
+
 ## [0.1.0] - 2026-10-21
 
 First version, for test runs on a real installation. The safety shutdown on hazard warnings is not included yet (planned for 0.2), so this version is not meant for unattended everyday operation.

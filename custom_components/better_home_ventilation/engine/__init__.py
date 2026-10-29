@@ -248,11 +248,20 @@ def _write_stage(
     Gate order (02-control.md#readiness-and-availability): control switch off
     -> startup grace -> availability -> readiness. A gate reason is reported
     in ``write_blocked_by`` even when no write is due.
+
+    The setpoint is what the unit should run at: the written value, or
+    ``current`` when nothing is written (shaping holds or a gate blocks the
+    write). ``disabled`` shows the target (shadow run, BHV-03).
     """
     now = snapshot.now
     actuator = snapshot.actuator
     native_now = current_native(options, actuator)
     flow_now = native_to_flow(options, native_now)
+    if actuator.awaiting_confirmation and state.last_written_flow is not None:
+        # The unit is still taking the last written value (02-control.md,
+        # output shaping): it counts as current until the actuator confirms it.
+        flow_now = state.last_written_flow
+        native_now = flow_to_native(flow_now, options, actuator)
     current = flow_now if flow_now is not None else state.last_written_flow
     running = unit_running(options, snapshot)
     low, high = flow_range(options, actuator)
@@ -342,6 +351,9 @@ def _write_stage(
     )
     value = shaped.value
     hold_reason = shaped.blocked_by
+    # What the unit runs at when nothing is written; 0 while it waits to be
+    # switched on again (stopped by the integration, a gate may keep it so).
+    held = 0.0 if turn_on else (current if current is not None else target)
     native = None
     if value is not None:
         native = flow_to_native(value, options, actuator, flow_now)
@@ -356,14 +368,15 @@ def _write_stage(
     if value is None or native is None:
         return _Output(
             state=state,
-            setpoint=current if current is not None else target,
+            setpoint=held,
             target=target,
             blocked_by=blocked or hold_reason,
         )
     if blocked is not None:
+        # Nothing reaches the unit: it keeps running at `current`.
         return _Output(
             state=replace(state, bypass_pending=state.bypass_pending or bypass_reason),
-            setpoint=value,
+            setpoint=held,
             target=target,
             blocked_by=blocked,
         )

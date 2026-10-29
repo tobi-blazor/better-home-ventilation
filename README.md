@@ -340,7 +340,9 @@ All values are flows in m³/h. The calculation has five stages: **contributions 
 
    Example: the unit runs at 80 and CO₂ jumps to 1400 ppm (target 400). The setpoint becomes 130, five minutes later 180, and so on.
 
-   The current flow is read back from the actuator; a value changed at the unit or by someone else is taken as the new current flow. 30 s after each write the actuator is checked; on a mismatch the value is written once more, then the problem `write_mismatch` is reported.
+   The current flow is read back from the actuator; a value changed at the unit or by someone else is taken as the new current flow. Until the actuator reports a written value (at most 60 s, for units that report only on their next poll) the written value counts as the current flow. 30 s after each write the actuator is checked; on a mismatch the value is written once more, then the problem `write_mismatch` is reported.
+
+   While nothing is written (shaping holds, during the startup grace, while the actuator is unavailable or a readiness condition is not met), the setpoint shows the current flow, so it always matches what the unit runs at; the attribute `target` shows what the inputs ask for. Only with the **Control** switch off does the setpoint show the calculated demand ([shadow run](#use-cases)).
 
 ### Reasons
 
@@ -373,7 +375,7 @@ The integration is event driven; it does not poll anything.
 | state change of the actuator, off actuator or a readiness entity | at once |
 | saving options or readiness conditions | the entry is reloaded |
 
-Control starts once Home Assistant has started. During the startup grace (1 min) the entities show values but nothing is written and no input problems are raised, because many sensors become available a few seconds after start.
+Control starts once Home Assistant has started. During the startup grace (1 min) the entities show values but nothing is written and no input problems are raised, because many sensors become available a few seconds after start. The setpoint keeps the flow the unit runs at until the first write after the grace.
 
 Input values count only when they are **valid**: not `unavailable`, `unknown` or empty; numeric; reported within the stale timeout (30 min, also when the value did not change); and plausible (CO₂ 250–10000 ppm, humidity 0–100 %). Invalid values are left out of every calculation, listed in the setpoint attribute `invalid_inputs`, and reported as a problem after the problem delay.
 
@@ -563,7 +565,7 @@ Only one controller may write to the unit. If an existing automation, blueprint 
 
 | Symptom | What to check |
 |---|---|
-| The setpoint changes but the unit does not | Setpoint attribute `write_blocked_by`: `disabled` (Control switch off), `not_ready` (readiness condition, for example the control mode), `unavailable` (actuator), `grace` (just started), `interval` / `deadband` (shaping holds on purpose). Then the **Problem** sensor's `problems` attribute. |
+| The target changes but the setpoint and the unit do not | Setpoint attribute `write_blocked_by`: `disabled` (Control switch off; the setpoint shows the demand), `not_ready` (readiness condition, for example the control mode), `unavailable` (actuator), `grace` (just started), `interval` / `deadband` (shaping holds on purpose). Then the **Problem** sensor's `problems` attribute. |
 | The unit runs at another value than the setpoint | Another automation or the unit's own program writes too ([two controllers](#running-two-controllers)); the problem `write_mismatch` appears. Or the unit needs a readiness condition. |
 | `write_failed` | A service call to the unit failed; the Home Assistant log has the error. |
 | A sensor is in `invalid_inputs` | It is unavailable, not numeric, has not reported within the stale timeout, or is outside the plausible range (CO₂ 250–10000 ppm, humidity 0–100 %). |
