@@ -63,7 +63,7 @@ def source(
     entity_id: str | None = None,
     device_id: str | None = None,
     name: str = "Example source",
-    **data: Any,
+    data: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Return the data of a warning source subentry."""
     key = CONF_SOURCE_ENTITY if entity_id else CONF_SOURCE_DEVICE
@@ -78,7 +78,7 @@ def source(
             CONF_TEXT_KEYWORDS: [],
             CONF_EXCLUDE_KEYWORDS: [],
             CONF_MIN_SEVERITY: "none",
-            **data,
+            **(data or {}),
         },
         "subentry_type": SUBENTRY_WARNING_SOURCE,
         "title": name,
@@ -298,7 +298,7 @@ async def test_numeric_source_and_unavailable_problem(
     entry = await setup_entry(
         hass,
         subentries=[
-            source(entity_id=LEVEL, **{CONF_TRIGGER: "numeric", CONF_THRESHOLD: 3})
+            source(entity_id=LEVEL, data={CONF_TRIGGER: "numeric", CONF_THRESHOLD: 3})
         ],
     )
     controller = controller_of(entry)
@@ -404,7 +404,7 @@ async def test_c11a_nina_device_source(
             source(
                 device_id=device_id,
                 name="Example City",
-                **{
+                data={
                     CONF_HEADLINE_KEYWORDS: ["/brand(?!enburg)/"],
                     CONF_EXCLUDE_KEYWORDS: ["Entwarnung"],
                 },
@@ -486,7 +486,7 @@ async def test_e30c_details_failure_counts_and_raises_problem(
     entry = await setup_entry(
         hass,
         subentries=[
-            source(device_id=device_id, **{CONF_EXCLUDE_KEYWORDS: ["Entwarnung"]})
+            source(device_id=device_id, data={CONF_EXCLUDE_KEYWORDS: ["Entwarnung"]})
         ],
     )
     controller = controller_of(entry)
