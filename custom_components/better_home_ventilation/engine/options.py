@@ -1,8 +1,9 @@
-"""Option keys and defaults of phase 0.1.
+"""Option keys, defaults and the options migration.
 
 Pure module: no Home Assistant imports, no I/O. The keys are the stored keys in
-``entry.options`` (see docs/spec/01-configuration.md). Keys never change once
-released; renames go through a migration.
+``entry.options`` and in the ``warning_source`` subentries (see
+docs/spec/01-configuration.md). Keys never change once released; renames go
+through a migration.
 
 Stored format: durations in seconds (int), times as ``"HH:MM:SS"``, flows in
 m³/h, entity lists as lists of entity ids.
@@ -13,7 +14,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 import math
 from types import MappingProxyType
-from typing import Final
+from typing import Any, Final
 
 type OptionValue = int | float | bool | str
 
@@ -86,6 +87,43 @@ CONF_BOOST_DEFAULT_DURATION: Final = "boost_default_duration"
 CONF_BOOST_DEFAULT_LEVEL: Final = "boost_default_level"
 CONF_BOOST_MAX_DURATION: Final = "boost_max_duration"
 
+# --- Options step `safety` (0.2) ---------------------------------------------
+CONF_RESTART_CONFIRM_TIMEOUT: Final = "restart_confirm_timeout"
+CONF_SAFETY_WHEN_DISABLED: Final = "safety_when_disabled"
+
+# --- Options step `notifications` (0.2) --------------------------------------
+CONF_NOTIFY_SERVICES: Final = "notify_services"
+CONF_NOTIFY_SAFETY: Final = "notify_safety"
+CONF_NOTIFY_REMINDERS: Final = "notify_reminders"
+CONF_NOTIFY_PROBLEMS: Final = "notify_problems"
+CONF_PAUSE_REMINDER_AFTER: Final = "pause_reminder_after"
+CONF_OFF_NOTICE_AFTER: Final = "off_notice_after"
+
+# --- Subentries `warning_source` (0.2) ---------------------------------------
+CONF_SOURCE_ENTITY: Final = "source_entity"
+CONF_SOURCE_DEVICE: Final = "source_device"
+CONF_TRIGGER: Final = "trigger"
+CONF_THRESHOLD: Final = "threshold"
+CONF_STATES: Final = "states"
+CONF_DETAILS: Final = "details"
+CONF_HEADLINE_KEYWORDS: Final = "headline_keywords"
+CONF_TEXT_KEYWORDS: Final = "text_keywords"
+CONF_EXCLUDE_KEYWORDS: Final = "exclude_keywords"
+CONF_MIN_SEVERITY: Final = "min_severity"
+
+TRIGGER_ON_OFF: Final = "on_off"
+TRIGGER_NUMERIC: Final = "numeric"
+TRIGGER_STATE_LIST: Final = "state_list"
+TRIGGERS: Final = (TRIGGER_ON_OFF, TRIGGER_NUMERIC, TRIGGER_STATE_LIST)
+
+DETAILS_AUTO: Final = "auto"
+DETAILS_ATTRIBUTES: Final = "attributes"
+DETAILS_NONE: Final = "none"
+DETAILS_MODES: Final = (DETAILS_AUTO, DETAILS_ATTRIBUTES, DETAILS_NONE)
+
+#: ``min_severity`` value that disables the severity filter.
+MIN_SEVERITY_NONE: Final = "none"
+
 # --- Defaults ----------------------------------------------------------------
 DEFAULT_NAME: Final = "Ventilation"
 
@@ -119,8 +157,65 @@ DEFAULTS: Final[Mapping[str, OptionValue]] = MappingProxyType(
         CONF_PROBLEM_DELAY: 10 * _MINUTE,
         CONF_BOOST_DEFAULT_DURATION: 30 * _MINUTE,
         CONF_BOOST_MAX_DURATION: 4 * _HOUR,
+        # 0.2: options steps `safety` and `notifications`
+        CONF_RESTART_CONFIRM_TIMEOUT: 30 * _MINUTE,
+        CONF_SAFETY_WHEN_DISABLED: True,
+        CONF_NOTIFY_SAFETY: True,
+        CONF_NOTIFY_REMINDERS: True,
+        CONF_NOTIFY_PROBLEMS: True,
+        CONF_PAUSE_REMINDER_AFTER: 8 * _HOUR,
+        CONF_OFF_NOTICE_AFTER: 24 * _HOUR,
     }
 )
+
+#: Options minor version of the config entry (``ConfigFlow.MINOR_VERSION``).
+#: 1 = phase 0.1, 2 = phase 0.2 (options steps `safety` and `notifications`).
+OPTIONS_MINOR_VERSION: Final = 2
+
+#: Keys added per options minor version; their defaults come from ``DEFAULTS``
+#: or, for lists, are an empty list.
+ADDED_IN_MINOR_VERSION: Final[Mapping[int, tuple[str, ...]]] = MappingProxyType(
+    {
+        2: (
+            CONF_RESTART_CONFIRM_TIMEOUT,
+            CONF_SAFETY_WHEN_DISABLED,
+            CONF_NOTIFY_SERVICES,
+            CONF_NOTIFY_SAFETY,
+            CONF_NOTIFY_REMINDERS,
+            CONF_NOTIFY_PROBLEMS,
+            CONF_PAUSE_REMINDER_AFTER,
+            CONF_OFF_NOTICE_AFTER,
+        ),
+    }
+)
+
+#: Options whose default is an empty list (not in ``DEFAULTS``, which holds
+#: immutable values only).
+LIST_OPTIONS: Final = frozenset({CONF_PRESENCE_ENTITIES, CONF_NOTIFY_SERVICES})
+
+
+def default_value(key: str) -> OptionValue | list[str]:
+    """Return the stored default of an absolute option (a fresh list for lists)."""
+    if key in LIST_OPTIONS:
+        return []
+    return DEFAULTS[key]
+
+
+def migrate_options(options: Mapping[str, Any], from_minor: int) -> dict[str, Any]:
+    """Upgrade an options dict from minor version ``from_minor`` to the current one.
+
+    Every key added after ``from_minor`` gets its default; values that are
+    already present are kept (docs/spec/01-configuration.md#principles: new
+    options are added by a migration, never by changing code defaults). A
+    ``from_minor`` at or above :data:`OPTIONS_MINOR_VERSION` returns a copy.
+    """
+    result = dict(options)
+    for minor in range(from_minor + 1, OPTIONS_MINOR_VERSION + 1):
+        for key in ADDED_IN_MINOR_VERSION.get(minor, ()):
+            if key not in result:
+                result[key] = default_value(key)
+    return result
+
 
 #: Defaults given as a share of the max flow (0.1 options only).
 MAX_FLOW_SHARES: Final[Mapping[str, float]] = MappingProxyType(

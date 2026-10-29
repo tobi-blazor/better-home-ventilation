@@ -26,6 +26,7 @@ from engine.models import (
     Snapshot,
     TurnOff,
     TurnOn,
+    WarningDetails,
     WriteFlow,
 )
 
@@ -46,6 +47,7 @@ READY = "select.ventilation_control_mode"
 def make_options(**overrides: Any) -> Options:
     """Return options of a 400 m³/h unit with two CO₂ and two humidity sensors."""
     readiness = overrides.pop("readiness_conditions", ())
+    sources = overrides.pop("warning_sources", ())
     data: dict[str, Any] = {
         "actuator": ACTUATOR,
         "max_flow": 400,
@@ -53,7 +55,7 @@ def make_options(**overrides: Any) -> Options:
         "humidity_sensors": [HUM_A, HUM_B],
     }
     data.update(overrides)
-    return Options.from_mapping(data, readiness)
+    return Options.from_mapping(data, readiness, sources)
 
 
 def co2_for(flow: float) -> float:
@@ -104,6 +106,8 @@ class Sim:
         self.actuator = ActuatorSnapshot(state=actuator, **(actuator_attrs or {}))
         self.off = OffActuatorSnapshot(state=off) if off is not None else None
         self.reported_problems: frozenset[ProblemKey] = frozenset()
+        self.details: dict[str, tuple[WarningDetails, ...] | None] = {}
+        self.details_failed: set[str] = set()
         self.state = state or running_state()
         self.decision: Decision | None = None
 
@@ -146,7 +150,19 @@ class Sim:
             actuator=self.actuator,
             off_actuator=self.off,
             reported_problems=self.reported_problems,
+            warning_details=dict(self.details),
+            details_failed=frozenset(self.details_failed),
         )
+
+    def warn(self, entity_id: str, *details: WarningDetails, state: str = "on") -> None:
+        """Set a warning source entity to ``state`` with the given details."""
+        self.set(entity_id, state)
+        self.details[entity_id] = details or None
+
+    def clear(self, entity_id: str, state: str = "off") -> None:
+        """Set a warning source entity inactive and drop its details."""
+        self.set(entity_id, state)
+        self.details.pop(entity_id, None)
 
     def command(self, command: Command) -> None:
         """Apply a command at the current time."""
