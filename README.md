@@ -17,6 +17,7 @@ One integration instead of a pile of helpers, template sensors and automations: 
 - [Options](#options)
 - [Readiness conditions](#readiness-conditions)
 - [Warning sources](#warning-sources)
+- [Phone notifications](#phone-notifications)
 - [Profiles](#profiles)
 - [How the setpoint is calculated](#how-the-setpoint-is-calculated)
 - [When the setpoint is updated](#when-the-setpoint-is-updated)
@@ -148,7 +149,7 @@ The entry is created with all other settings at their defaults. Presence entitie
 
 ### Changing the settings later
 
-Open the integration page: in **Settings → Devices & services → Devices**, open the controller's device (named after the entry, for example "Ventilation") and follow its link to **Better Home Ventilation**. Select **Configure** on the entry. (From **Settings → Devices & services → Helpers**, the settings of any of its entities also offer the options.) The menu **Ventilation settings** offers four steps: **Actuator**, **Inputs**, **Control** and **Boosts**. Saving a step applies it right away (the entry is reloaded; a running boost or pause continues).
+Open the integration page: in **Settings → Devices & services → Devices**, open the controller's device (named after the entry, for example "Ventilation") and follow its link to **Better Home Ventilation**. Select **Configure** on the entry. (From **Settings → Devices & services → Helpers**, the settings of any of its entities also offer the options.) The menu **Ventilation settings** offers the steps **Actuator**, **Inputs**, **Control**, **Boosts**, **Safety** and **Notifications**. Saving a step applies it right away (the entry is reloaded; a running boost or pause continues).
 
 Readiness conditions are added on the same page with **Add readiness condition** ([below](#readiness-conditions)).
 
@@ -266,6 +267,32 @@ Section **Manual boost**:
 
 The profile is not an option: it is chosen in daily use with the **Profile** entity.
 
+### Safety
+
+> **Unreleased (0.2, in development).**
+
+| Key | UI name | Default | Meaning |
+|---|---|---|---|
+| `restart_confirm_timeout` | Restart confirmation timeout | 30 min | When the last warning ends, the unit stays off and asks on the phones whether to restart ([phone notifications](#phone-notifications)). Without an answer it restarts after this time. 0 restarts at once. |
+| `safety_when_disabled` | Safety while control is off | on | Also switch the unit off for a warning while the **Control** switch is off, and back to its previous state after the restart. When off, warnings are only shown on the entities while control is off, and no notification is sent. |
+
+The warning sources themselves are added on the integration page ([below](#warning-sources)); the step's description links there.
+
+### Notifications
+
+> **Unreleased (0.2, in development).**
+
+| Key | UI name | Default | Meaning |
+|---|---|---|---|
+| `notify_services` | Phones | none | The `notify.mobile_app_*` services of the Home Assistant Companion apps that get the notifications. The list shows the services that exist when the step opens. Without a phone, notifications appear as persistent notifications in Home Assistant, without actions. |
+| `notify_safety` | Safety notifications | on | Safety shutdown with **Keep ventilating**, the restart question with **Restart now** and **Keep off**, and the restart notice. |
+| `notify_reminders` | Reminders | on | Reminder with **Resume** while the unit stays off, repeated every 24 hours. |
+| `notify_problems` | Problem notifications | on | A notification when a problem persists longer than the problem delay; cleared when it is resolved. |
+| `pause_reminder_after` | Reminder for an indefinite pause after | 8 h | First reminder after a pause until resumed has lasted this long. At least 1 minute. |
+| `off_notice_after` | Reminder for other off states after | 24 h | First reminder after a timed pause or a safety shutdown has lasted this long. At least 1 minute. |
+
+The problem delay is in **Control** (section **Advanced**), because it also sets when the problem sensor turns on.
+
 ## Readiness conditions
 
 Some units ignore the written flow unless another entity has a certain state, for example a **control mode** `select` that must be set to a "remote" or "bus control" option. A readiness condition tells the integration about it.
@@ -291,7 +318,7 @@ How it works:
 
 ## Warning sources
 
-> **Unreleased (0.2, in development).** Warning sources and the safety shutdown are in the development branch; phone notifications with "Keep ventilating" and the restart question, and the safety settings in the options, follow before 0.2.0.
+> **Unreleased (0.2, in development).** Warning sources, the safety shutdown and the [phone notifications](#phone-notifications) are in the development branch.
 
 A warning source is a hazard signal that switches the ventilation off (**safety shutdown**), so that smoke or a chemical cloud outside is not pulled into the house and smoke inside is not spread through the ducts. Each source has its own trigger and filters, so a smoke detector, a NINA region and a weather warning sensor can be combined.
 
@@ -321,7 +348,7 @@ How warnings count:
 - A source without details, or whose details cannot be fetched within 10 seconds, **always counts** (fail-safe); a failed details call is reported as the problem `warning_details_failed`.
 - While a warning is active the mode is **Safety shutdown** (`safety_off`): the unit is switched off (off actuator, or lowest value) and nothing else is written. By default this also happens while the **Control** switch is off.
 - **Safety override** (or the action `override_safety`) keeps the ventilation running despite the current warnings. Updates of the same incident (for example "1. AKTUALISIERUNG: Großbrand …") stay overridden; a different warning switches the unit off again. Turning the switch off removes the override.
-- When the last warning ends, the unit does not restart silently: it waits for the restart confirmation (**Resume**) and restarts by itself after 30 minutes. While it waits, the setpoint attribute `awaiting_restart` is true.
+- When the last warning ends, the unit does not restart silently: it asks on the phones and waits for the restart confirmation (**Restart now** in the notification, or **Resume**) and restarts by itself after the restart confirmation timeout (30 minutes, [Safety](#safety) options). **Keep off** leaves it off until resumed. While it waits, the setpoint attribute `awaiting_restart` is true.
 
 The suggested keywords for NINA come in German (server language `de`) and English (every other language) and are based on the standardised warning texts of the German authorities and on live NINA messages; the [specification](docs/spec/01-configuration.md#warning-sources-config-subentries) lists them with the reasons. They are only suggestions: change them in the source's **Reconfigure** dialog.
 
@@ -341,6 +368,31 @@ Any other entity with a `headline`/`title`/`event` or `description`/`text`/`mess
 **Setting up NINA:** add the [NINA integration](https://www.home-assistant.io/integrations/nina/) for your region with enough message slots (for example 5) and without its own filters, then add a warning source and choose the NINA region **device** (not a single slot: warnings move between slots). The suggested keywords filter out weather warnings, drinking-water notices, all-clear messages and tests.
 
 **Indoor gas detectors are not a recommended source.** With gas in the house the advice is not to operate electrical equipment, to open the windows and to leave the building; switching the unit does not help and is itself switching. Indoor smoke and CO detectors are good sources (smoke must not be spread through the ducts; CO near a fireplace).
+
+## Phone notifications
+
+> **Unreleased (0.2, in development).**
+
+The integration sends notifications to the phones selected in **Notifications** ([options](#notifications)), through the `notify.mobile_app_*` actions of the [Home Assistant Companion app](https://companion.home-assistant.io/). Texts are in the server language (English and German).
+
+| Notification | When | Actions |
+|---|---|---|
+| **Ventilation off: <headline>** with the recommended actions or the description of the warning (at most 300 characters) and the sender | a warning switches the unit off ([safety shutdown](#warning-sources)), also when a new warning arrives during the shutdown. A source without details shows its name | **Keep ventilating** (the same as the **Safety override** switch), **OK** (nothing) |
+| **Warning lifted** – "Restart ventilation? Restarts automatically at 14:30." | the last warning ended; replaces the safety notification | **Restart now** (resume), **Keep off** (the unit stays off until resumed) |
+| **Ventilation restarted** | nobody answered and the restart confirmation timeout passed | – |
+| **Ventilation off since 08:15** – "Moisture protection is inactive." | the unit has been off for the reminder time (8 h for a pause until resumed, 24 h otherwise), then every 24 hours | **Resume** |
+| **Ventilation problem** with the problem text | a problem persists longer than the problem delay (one notification per kind of problem) | – |
+
+How it works:
+
+- Tapping an action fires the event `mobile_app_notification_action` in Home Assistant; the integration reacts to its own action ids (`BHV_<first 8 characters of the entry id>_<ACTION>`) and ignores all others, so the notifications do not interfere with your automations. The logbook shows the source "notification".
+- A notification replaces the previous one of the same kind (tag `bhv_<entry>_safety`, `…_reminder`, `…_problem_<key>`), and it is removed from the phones when its reason is gone: the warning is overridden or ends, the unit runs again, the problem is resolved. A late answer (for example **Keep off** after the unit already restarted) does nothing.
+- **iOS:** safety notifications and the restart question are sent as *time-sensitive* (`push.interruption-level`), so they break through a Focus mode if you allow time-sensitive notifications for the Companion app.
+- **Android:** they are sent with `priority: high` and `ttl: 0`, so they are delivered at once also while the phone dozes.
+- **Without phones**, or when none of the selected services exists any more, a persistent notification appears in Home Assistant instead (without actions; use the **Safety override** switch or the **Resume** button). It is dismissed when its reason is gone.
+- A selected service that no longer exists (the app was removed, the phone renamed) raises a repair issue and the problem `missing_notify_service`; the other phones still get the notifications. Open **Notifications** and save: the missing service is not selected any more.
+- Sending never delays the control. A phone that cannot be reached is logged once, and again when it works.
+- Each kind can be switched off in **Notifications**. With **Safety while control is off** disabled, a warning while the **Control** switch is off sends no notification.
 
 ## Profiles
 
@@ -484,6 +536,7 @@ The **Problem** sensor's attribute `problems` lists `{key, entity_id, since}` fo
 | `no_valid_co2` | CO₂ sensors are configured but none is valid; the fallback flow is used |
 | `warning_source_unavailable` | an entity of a warning source is unavailable (one entry per source) |
 | `warning_details_failed` | the details of an active warning could not be fetched; it counts as a warning without details |
+| `missing_notify_service` | a phone selected in **Notifications** no longer exists (see the repair issue) |
 
 ## Actions
 
@@ -634,6 +687,8 @@ Only one controller may write to the unit. If an existing automation, blueprint 
 | Boost or pause is rejected | The **Control** switch is off (`control_disabled`). |
 | The unit went into a pause by itself | It was stopped at the unit or by another integration ([external stop](#stopping-the-unit-at-the-unit-counts-as-a-pause)); the logbook shows "at the unit". |
 | Entity ids differ from this README | They depend on the device name and the server language. |
+| No notification arrives on the phone | The phone is selected in **Notifications** and the kind is switched on; the Companion app may notify (test with **Developer tools → Actions**, `notify.mobile_app_…`); a repair issue `missing_notify_service` means the service was renamed or removed. Without a reachable phone a persistent notification is created; a failed send is in the log. |
+| Tapping an action does nothing | The answer came late (the warning was already lifted or the unit restarted), or the notification belongs to an entry that was deleted and created again. Use the **Safety override** switch or the **Resume** button. |
 
 For more detail enable debug logging on the integration page (**Enable debug logging**), reproduce the issue, and disable it again to download the log.
 

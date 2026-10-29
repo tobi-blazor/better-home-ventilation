@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Entities **Safety warning** (on while any warning is active, with the list of warnings as attribute) and **Safety override** (keep ventilating despite the current warnings; turning it off shuts down again), created only when at least one warning source exists.
 - Action `better_home_ventilation.override_safety`.
 - Problems `warning_source_unavailable` and `warning_details_failed` on the problem sensor.
+- Phone notifications through the Home Assistant Companion app: the safety shutdown with **Keep ventilating**, the restart question with **Restart now** and **Keep off** when the warning ends, a notice when the unit restarted by itself, reminders with **Resume** while the unit stays off, and problem notifications after the problem delay. Notifications are removed from the phones when their reason is gone. Safety notifications are time-sensitive on iOS and high priority on Android. Without a phone, persistent notifications are created in Home Assistant instead. Texts in English and German.
+- Options **Safety** (restart confirmation timeout, safety while control is off) and **Notifications** (phones, which notifications they get, reminder times).
+- Repair issue and problem `missing_notify_service` when a selected phone's notify service no longer exists.
 
 ### Changed
 
