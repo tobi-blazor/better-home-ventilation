@@ -652,6 +652,7 @@ def test_e39a_safety_turn_off_during_startup_grace() -> None:
     )
     decision, effects = sim.run()
     assert decision.mode is Mode.SAFETY_OFF
+    assert decision.setpoint == 0
     assert of_type(effects, TurnOff) == [TurnOff(entity_id=OFF_SWITCH)]
     assert _notify(effects, NotifyKind.SAFETY)
     assert not writes(effects)
@@ -664,6 +665,37 @@ def test_e39a_lowest_value_during_startup_grace() -> None:
     decision, effects = sim.run()
     assert decision.mode is Mode.SAFETY_OFF
     assert [w.flow for w in writes(effects)] == [0]
+    assert decision.setpoint == 0
+
+
+def test_e39a_override_during_startup_grace_holds_the_stopped_unit() -> None:
+    """E39a: an override in the grace shows 0 until the unit is switched on.
+
+    The safety off passed the grace and stopped the unit; switching it on again
+    is an ordinary write behind the grace gate, so the setpoint stays at what
+    the unit runs at (0, stopped by the integration, 02-control.md#output-shaping).
+    """
+    options = make_options(off_entity=OFF_SWITCH, warning_sources=(SMOKE_SOURCE,))
+    sim = Sim(
+        options,
+        off="off",
+        values={SMOKE: "on"},
+        state=ControllerState(),
+        started_at=T0,
+    )
+    sim.run()
+    sim.advance(seconds=10)
+    sim.command(OverrideSafetyCommand(source=Source.SERVICE))
+    decision, effects = sim.run()
+    assert decision.mode is Mode.AUTOMATIC
+    assert decision.write_blocked_by is WriteBlock.GRACE
+    assert decision.setpoint == 0
+    assert not of_type(effects, TurnOn)
+    assert not writes(effects)
+    sim.advance(seconds=60)
+    decision, effects = sim.run()
+    assert of_type(effects, TurnOn) == [TurnOn(entity_id=OFF_SWITCH)]
+    assert [w.flow for w in writes(effects)] == [decision.setpoint]
 
 
 def test_q11_external_start_during_safety_off_is_an_override() -> None:

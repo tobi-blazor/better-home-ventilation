@@ -622,6 +622,7 @@ class VentilationController:
             actuator_state,
             foreign_change=actuator_state is not None
             and not self._writer.is_own(actuator_state.context),
+            awaiting_confirmation=self._writer.awaiting_confirmation(actuator_state),
         )
         self._writer.observe(actuator)
         off_actuator = None

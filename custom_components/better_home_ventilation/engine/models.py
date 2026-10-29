@@ -52,6 +52,8 @@ class Reason(StrEnum):
     MINIMUM = "minimum"
     CO2 = "co2"
     HUMIDITY_HIGH = "humidity_high"
+    #: CO₂ and humidity-high ask for about the same flow (02-control.md#reason).
+    CO2_AND_HUMIDITY_HIGH = "co2_and_humidity_high"
     DRYNESS_PROTECTION = "dryness_protection"
     AWAY = "away"
     QUIET_LIMIT = "quiet_limit"
@@ -61,6 +63,12 @@ class Reason(StrEnum):
     COOKING = "cooking"
     OFF = "off"
     SAFETY_OFF = "safety_off"
+
+
+#: The single reasons a combined reason stands for (attribute ``reasons``).
+COMBINED_REASONS: Final[Mapping[Reason, tuple[Reason, ...]]] = {
+    Reason.CO2_AND_HUMIDITY_HIGH: (Reason.CO2, Reason.HUMIDITY_HIGH),
+}
 
 
 class Profile(StrEnum):
@@ -490,10 +498,16 @@ class ActuatorSnapshot:
     integration's own (neither its context nor a late confirmation of its last
     command, docs/spec/02-control.md#writing; used for an external stop/start
     of a ``fan`` actuator without off actuator).
+
+    ``awaiting_confirmation`` is True while the last write to the actuator is
+    not confirmed yet: it is inside the confirmation window and the actuator
+    has not reported another state since (02-control.md#output-shaping; the
+    unit is taking the written value, so ``current`` is the written value).
     """
 
     state: str | None
     foreign_change: bool = False
+    awaiting_confirmation: bool = False
     step: float | None = None
     min_value: float | None = None
     max_value: float | None = None
@@ -751,7 +765,8 @@ class Decision:
     """Result of one evaluation (docs/spec/02-control.md#decision-record).
 
     ``setpoint`` is the flow after shaping (0 in off modes, the demand in
-    ``disabled``), ``target`` the flow before shaping, ``written`` the flow
+    ``disabled``, the held ``current`` while a gate blocks the write),
+    ``target`` the flow before shaping, ``written`` the flow
     sent to the actuator in this evaluation (None if nothing was written).
     ``problem`` is True if any problem persists longer than ``problem_delay``.
 
@@ -782,6 +797,14 @@ class Decision:
     warnings: tuple[WarningInfo, ...] = ()
     overridden_incidents: frozenset[str] = frozenset()
     awaiting_restart: bool = False
+
+    @property
+    def reasons(self) -> tuple[Reason, ...]:
+        """Every rule within the band of the reason (``co2``, ``humidity_high``).
+
+        A single reason for everything except a combined reason.
+        """
+        return COMBINED_REASONS.get(self.reason, (self.reason,))
 
 
 # --- Effects -----------------------------------------------------------------

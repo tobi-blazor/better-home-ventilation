@@ -32,7 +32,7 @@ Each evaluation:
 ## Startup
 
 - The controller starts when HA has started (`EVENT_HOMEASSISTANT_STARTED`, or immediately if already running).
-- During `startup_grace` (default 60 s) evaluations run and entities show values, but **nothing is written** and no "inputs lost" problem or notification is raised. Reason: many sensors become available a few seconds after start.
+- During `startup_grace` (default 60 s) evaluations run and entities show values, but **nothing is written** and no "inputs lost" problem or notification is raised. Reason: many sensors become available a few seconds after start. The setpoint shows `current` (what the unit runs at), the `target` attribute the value the inputs ask for ([setpoint](#output-shaping)); in the off modes it is 0.
 - Exception: an active safety shutdown is applied immediately, including during the grace period.
 - After the grace period the first write ignores `min_write_interval`.
 
@@ -58,7 +58,9 @@ A numeric input value is **valid** if all of the following hold:
 - state is not `unavailable`, `unknown` or empty
 - state parses as a finite float
 - `now - state.last_reported ≤ stale_timeout` (default 30 min). `last_reported` is updated by HA even when the value does not change (since HA 2024.4, `States.async_set_internal`; checked on 2026.10.0).
-- plausibility range: CO₂ 250–10000 ppm, humidity 0–100 %. Values outside are invalid.
+- plausibility range: CO₂ 100–10000 ppm, humidity 0–100 %. Values outside are invalid.
+
+The CO₂ lower bound is far below outdoor air (about 420 ppm) on purpose (owner decision 2026-10-29). Sensors with automatic baseline calibration that drifted read 189–249 ppm at night in a test run; with a bound of 250 ppm they were invalid, raised `inputs_invalid`, and with all CO₂ sensors invalid the fallback flow would have ventilated needlessly. Such a sensor still shows the rise of CO₂ when a room is occupied, so its values are used; only clearly broken values (below 100 ppm, e.g. 0) are invalid. The documentation says that values well below ~400 ppm indicate a sensor that needs calibration.
 
 Invalid values are **excluded** from every calculation. They are listed in the attribute `invalid_inputs` of the setpoint sensor and, after `problem_delay`, reported as problem `inputs_invalid`.
 
@@ -112,10 +114,15 @@ The reason of the automatic demand is determined in this order:
 | Condition | Reason |
 |---|---|
 | `fallback` and `demand == fallback_flow` | `fallback` |
+| not `fallback`, `d_co2` not None, `d_hum` allowed, both above `d_min` (raw and quantised), and `abs(q(d_co2) − q(d_hum)) ≤ flow_quantum` | `co2_and_humidity_high` |
 | `d_hum` allowed and `d_hum == demand` and `d_hum > d_min` | `humidity_high` |
 | `d_co2 == demand` and `d_co2 > d_min` | `co2` |
 | `dry` and (`d_hum` suppressed and `d_hum > demand`, or `co2_from > co2_start` and the CO₂ ramp from `co2_start` would exceed `demand`) | `dryness_protection` |
 | otherwise | `minimum` |
+
+`q(x)` = `x` quantised to `flow_quantum` (round half up), as the target ([output shaping](#output-shaping)).
+
+**CO₂ and humidity** (owner decision 2026-10-29): when CO₂ and humidity-high ask for about the same flow, neither alone determines the setpoint. In a test run the reason flipped between `co2` and `humidity_high` 107 times in 7 days (13 times in 3 minutes) with both contributions almost equal. Without fallback and with both above `d_min`, the demand is the larger of the two, so the combined reason always names the rule that sets the value. The band is compared on the **quantised** contributions: the raw values move with every sensor reading, so a band on raw values would only move the flicker to its edge; a quantised value changes only when its contribution crosses a quantisation step, and a contribution that quantises to `d_min` does not count as above the minimum. The attribute `reasons` lists the single reasons behind the reason (`[co2, humidity_high]` for the combined one, otherwise just the reason).
 
 ## Limits
 
@@ -128,7 +135,7 @@ Which limits apply depends on the [profile](#profiles).
 CO₂ is ignored while away (nobody produces CO₂; pets are a documented limitation). The fallback flow is kept: without valid CO₂ values the integration cannot know that nobody produces CO₂.
 
 **Quiet (BHV-14):** if the quiet limit applies and `demand > quiet_max_flow` and not (`h_max is not None and h_max ≥ quiet_humidity_override`):
-`demand = quiet_max_flow`; reason `quiet_limit`. This also caps the fallback flow (noise is independent of sensor failures).
+`demand = quiet_max_flow`; reason `quiet_limit`. This also caps the fallback flow (noise is independent of sensor failures). Output shaping brings a flow above the active quiet limit down without the dead band ([strict quiet limit](#output-shaping)).
 The demand before this limit is kept as `demand_unquiet` (with its reason); the `boost` mode uses it, so a user boost never gets less than the air quality asks for without noise protection ([03-modes.md](03-modes.md#target-per-mode)).
 
 All active limits are listed in the attribute `limits` (`away`, `quiet`, `dry`), also when they did not change the value.
@@ -155,7 +162,7 @@ The profile (BHV-26) is a fixed, built-in strategy, chosen with the `profile` se
 Shaping turns the target into the setpoint, the value actually written. Let:
 
 - `target` = the flow the active mode asks for ([03-modes.md](03-modes.md#target-per-mode)), quantised to `flow_quantum` (round half up) and clamped to the actuator range
-- `current` = actuator's current value converted to flow if valid, otherwise the last written value, otherwise None
+- `current` = the last written value while that write **awaits its confirmation** (the command is inside the confirmation window of [writing](#writing) and the actuator has not reported another state since it was sent; an attribute-only update does not count); otherwise the actuator's current value converted to flow if valid, otherwise the last written value, otherwise None. Reason: a device that confirms on its next poll still shows the old value for up to its poll interval, although the unit is already taking the new one. Any state change after the command ends the wait (the confirmation, or an external change, which is then `current` as usual), and so does the end of the window (a write the unit never took: the actuator value counts again)
 - `bypass` = the mode changed in this evaluation, or a boost command (start, extension, level change) or a profile change happened since the last evaluation, or this is the first write after startup, or `current` is None
 
 ```text
@@ -165,13 +172,28 @@ elif now - last_write < min_write_interval:
     hold
 elif target - current ≥ deadband_up:
     write current + min(target - current, max_step_up)
-elif current - target ≥ deadband_down:
+elif current - target ≥ deadband_down or (quiet_strict and current > target):
     write current - min(current - target, max_step_down)
 else:
     hold
 ```
 
+**The quiet limit is strict** (BHV-14, owner decision 2026-10-29). `quiet_strict` is true when the mode is `automatic` or `fallback`, the quiet limit is active (`quiet` in `limits`, i.e. it applies and the humidity override is not reached), and `current` is above `quiet_max_flow`, or above the target while the target is the quiet limit (reason `quiet_limit`; the target can lie below `quiet_max_flow` after quantisation or clamping). Then the dead band down does not hold the flow: shaping writes the target, still limited by `min_write_interval` and `max_step_down`. Reason: with the dead band down of 20 m³/h a flow 5–15 m³/h above the limit (e.g. 260 written in the evening, quiet limit 250 from 22:00) was held for hours, although the quiet limit is a noise promise. Below the quiet limit the dead band applies as usual, so the noisy-demand protection is unchanged there. Other modes are not affected (a user boost is never capped by the quiet limit).
+
 Then the written value is quantised again and mapped to the actuator.
+
+**Setpoint** (what the unit should run at, shown by the setpoint sensor):
+
+| Case | Setpoint |
+|---|---|
+| a value is written in this evaluation | the written value |
+| shaping holds (`interval`, `deadband`, or nothing to change) | `current` |
+| a gate blocks the write (`grace`, `unavailable`, `not_ready`, see [readiness](#readiness-and-availability)) | `current`; 0 if the unit was stopped by the integration and is still waiting to be switched on ([off and on](#off-and-on)) |
+| `current` is None (no actuator value and nothing written yet) | `target` |
+| off modes | 0, also during the startup grace (the safety off passes it, [startup](#startup)) and while a gate blocks the off |
+| `disabled` | `target` (the demand, shown not written; this is the shadow run, BHV-03), also when the restore after a safety off is written (`safety_when_disabled`, [03-modes.md](03-modes.md#mode-resolution)) |
+
+So during the startup grace the setpoint stays at the value the unit runs at while the target follows the inputs, and the first write after the grace is the first change of the setpoint. Every evaluation publishes exactly one decision, after its effects have been executed; an evaluation that runs before the actuator confirms a write (e.g. a periodic evaluation right after the write) shows the written value, not the old actuator value.
 
 Properties this guarantees (tested, see [06-testing.md](06-testing.md)):
 
@@ -235,7 +257,7 @@ Logging follows the quality rule `log-when-unavailable`: one `info` message when
 Every evaluation produces a `Decision`:
 
 ```text
-time, mode, profile, reason, setpoint (after shaping, flow), target (before shaping), written (flow or None),
+time, mode, profile, reason, reasons (derived from reason), setpoint (after shaping, flow), target (before shaping), written (flow or None),
 contributions {minimum, co2, humidity_high, fallback, boost, shower, cooking},
 inputs {co2_max, co2_max_entity, h_max, h_max_entity, h_mean, presence_home},
 limits [..], invalid_inputs [..], problems [..], ends_at, write_blocked_by (None | grace | interval | deadband | disabled | not_ready | unavailable)

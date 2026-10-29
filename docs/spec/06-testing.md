@@ -20,12 +20,18 @@ Time is always injected (`now` parameter in the engine, `freezer` fixture in com
 | E1 | CO₂ 700, 850, 1125, 1400, 1600 ppm, defaults, max 400 | 80, 80, 240, 400, 400 m³/h (before shaping) |
 | E2 | two CO₂ sensors 900 / 1200 | ramp uses 1200, `co2_max_entity` = second |
 | E3 | one CO₂ sensor `unavailable`, other 900 | uses 900, entity listed in `invalid_inputs` |
+| E3a | CO₂ sensors 189 / 249 ppm (miscalibrated, at night); then both 99 ppm | valid: automatic, minimum, no `invalid_inputs`; 99 ppm: invalid, fallback |
 | E4 | all CO₂ sensors invalid | mode `fallback`, setpoint 150, reason `fallback` |
 | E5 | CO₂ value unchanged but `last_reported` older than 30 min | invalid |
 | E6 | humidity max 62 % | humidity ramp ≈ 229 m³/h (quantised 230), reason `humidity_high` if above CO₂ demand |
+| E6a | CO₂ and humidity-high (raw): 230/230, 230/226, 233/229.3, 226/233, 240/229.3, 230/250, 230/80, 84/80.3 | `co2_and_humidity_high` (tie, near-tie within one quantum after quantisation), `humidity_high` (225/235), `co2` (clear lead), `humidity_high`, `co2` (humidity at the minimum), `co2` (humidity only rounds to the minimum); `reasons` `[co2, humidity_high]` for the combined reason, otherwise `[reason]` |
+| E6b | CO₂ demand 230, humidity 61.9 → 62.0 → 62.1 % and back (227.2 / 229.3 / 231.5) | always `co2_and_humidity_high` (before: flipped between `co2` and `humidity_high`) |
+| E6c | CO₂ 230, humidity-high 233.9 … 236.4 (raw edge 5 crossed back and forth) | always `co2_and_humidity_high` (quantised 230 / 235); 237.6 (240) → `humidity_high` |
+| E6d | both 260 at night; both 230 while away; both 230 while humidity-high is suppressed by dryness; profile quiet, both 350, boost 300 | `quiet_limit` (`reasons` `[quiet_limit]`); `humidity_high`; `co2`; boost 350 with `co2_and_humidity_high` |
 | E7 | humidity mean 38 %, max 58 % | `dry` active, humidity-high allowed for 60 min, then suppressed, reason `dryness_protection` |
 | E8 | mean 40.5 % after `dry` | stays `dry` (hysteresis until 42 %) |
 | E9 | night 23:00, demand 350 | 250, reason `quiet_limit` |
+| E9a | night, quiet limit 250 active, current above it: 260 / 255 with demand 350; 400 with demand 350; 260 with demand 245; quiet max 252 (target 250) at 252; 260 in the evening, night window starts | 250 / 250 written despite the dead band down; 350 (step 50); 245; 250; 250 at 22:00. Interval still holds. Not strict: both below the limit (245 → 230 held), at the limit (250 → 240 held), in the day, in profile `air_quality`, above the humidity override |
 | E10 | night, humidity max 66 % | not limited |
 | E11 | night window 22:00–07:00 at 06:59 and 07:00 | inside / outside |
 | E12 | away, CO₂ 1300 | 80, reason `away` |
@@ -65,7 +71,8 @@ Time is always injected (`now` parameter in the engine, `freezer` fixture in com
 | E37 | cooking trigger power 1500 W > 100 | cooking boost until run-on after power drops |
 | E38 | state serialise → deserialise | identical; expired timers ended with `timeout_while_offline` |
 | E39 | startup grace | no WriteFlow effect during grace |
-| E39a | startup grace with an active warning (0.2) | safety TurnOff still issued during grace |
+| E39a | startup grace with an active warning (0.2); then overridden during the grace | safety TurnOff (or the lowest value) still issued during grace, setpoint 0; after the override the setpoint stays 0 (unit stopped by the integration, switching on is held by the grace) until TurnOn and the write after the grace |
+| E39b | restart: unit at the last written 190, target 85 then 240 during the grace; after the grace an evaluation before the actuator confirms the write | setpoint 190 during the grace (target 85, 240); then 240 written and shown, the evaluation before the confirmation holds 240 (not 190); never confirmed: after the window the actuator value 190 counts again. Unavailable actuator: last written value; not ready: actuator value; stopped by the integration and blocked from switching on: 0 |
 | E40 | indefinite pause | reminder after 8 h, then every 24 h |
 | E41 | select actuator stages 50/100/200/300/400, target 230 | stage 300; decreasing to 190 stays at 300 until target ≤ 180 (hysteresis) |
 | E41a | select stages as E41, decreasing from 100 to 50 (or below) | lowest stage `50`; 51 stays at `100` |
@@ -114,6 +121,7 @@ Constructed headlines are marked as such in the fixture. Real messages that were
 | C7 | services: entry resolution with one and two entries, error translations |
 | C8 | actuator write with context, verification retry, `write_mismatch` |
 | C8a | late confirmation with a new context (device confirms after 20 s and 45 s): a timed pause stays timed, a late start is no command, a late write is own without `write_mismatch`; a stop at the unit after the confirmation, another value, `unavailable` and the commanded state after the window stay external |
+| C8b | restart with a stored last written value and a unit that confirms after 20 s: the setpoint sensor shows the last written value during the grace (target changing), then the written value exactly once per evaluation, never the old value again; a write awaits its confirmation until the actuator changes state or the window ends |
 | C9 | restart: boost active → reload entry → `ends_at` unchanged, boost continues |
 | C10 | notifications: `notify.mobile_app_x` called with actions and tag; firing `mobile_app_notification_action` with `BHV_<entry8>_KEEP_VENTILATING` overrides |
 | C11 | no notify services → `persistent_notification` created |

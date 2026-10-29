@@ -22,11 +22,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Repair issue `state_reset` (for information) when the stored state could not be read and was reset to the defaults.
 - Diagnostics download with the settings, the stored state, the states of all used entities, the last 100 decisions, problems and warnings; phones are removed and person/device tracker states reduced to home/not home.
 - Replay tool `tools/replay.py`: runs recorded sensor history (CSV) with the settings of an entry (or its diagnostics download) through the control logic and reports setpoint percentiles, the share of time per reason and mode, writes per day and the longest time at max flow, optionally with every decision as CSV. Needs only Python, not Home Assistant.
+- New reason **CO₂ and humidity** (`co2_and_humidity_high`) when CO₂ and humidity-high ask for about the same flow (at most one flow step apart). Before, the reason flipped between CO₂ and humidity with every sensor reading in that case. The setpoint attribute `reasons` lists the single reasons (`co2`, `humidity_high`).
 
 ### Changed
 
 - The profile select shows a short description with each profile (e.g. "Quiet – limited all day"), so the choice is clear in the dropdown.
 - Existing entries and their stored state are migrated for 0.2: the defaults of the new safety and notification settings are added (restart confirmation after 30 minutes, safety also while control is off, reminders after 8 hours of indefinite pause and after 24 hours of any other off state). Nothing changes in operation until warning sources and notifications are available.
+- CO₂ values from 100 ppm (before: 250 ppm) count as plausible. Miscalibrated sensors that read 190–250 ppm at night are no longer ignored, so they raise no problem and do not cause the fallback flow. Values well below ~400 ppm mean the sensor needs calibration (README FAQ).
+
+### Fixed
+
+- The quiet limit is kept strictly: a flow above the active quiet limit is brought down even when it is less than the dead band down above it. Before, for example, 260 m³/h written in the evening stayed for hours after the quiet limit of 250 m³/h started at 22:00. The minimum write interval and the maximum step down still apply.
+- The setpoint sensor shows what the unit runs at while nothing is written: during the startup grace, while the actuator is unavailable or a readiness condition is not met it keeps the current flow instead of the unshaped target (a pause or safety shutdown still shows 0), and right after a write it no longer jumps back to the old value for a moment before a unit that reports on its next poll confirms the new one.
 
 ## [0.1.0] - 2026-10-21
 

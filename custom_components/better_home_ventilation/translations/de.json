@@ -618,6 +618,7 @@
           "minimum": "Minimum",
           "co2": "CO₂",
           "humidity_high": "Hohe Luftfeuchte",
+          "co2_and_humidity_high": "CO₂ und Feuchte",
           "dryness_protection": "Trockenheitsschutz",
           "away": "Abwesend",
           "quiet_limit": "Ruhegrenze",

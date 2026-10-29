@@ -6,10 +6,19 @@ from datetime import timedelta
 
 import pytest
 
-from engine.models import WriteBlock
+from engine.models import Limit, Profile, Reason, WriteBlock
 from engine.shaping import clamp, quantise, shape
 
-from .helpers import CO2_A, CO2_B, T0, Sim, make_options, running_state, writes
+from .helpers import (
+    CO2_A,
+    CO2_B,
+    HUM_A,
+    T0,
+    Sim,
+    make_options,
+    running_state,
+    writes,
+)
 
 
 def test_e13_bhv16_step_limit_one_step_per_interval() -> None:
@@ -106,6 +115,159 @@ def test_quantise_rounds_half_up_and_clamp() -> None:
     assert quantise(123.4, 0) == 123.4
     assert clamp(500, 0, 400) == 400
     assert clamp(-1, 0, 400) == 0
+
+
+def test_bhv14_strict_down_ignores_the_deadband_only() -> None:
+    """`strict_down` (quiet limit): no dead band down; interval and step still apply."""
+    options = make_options()
+    held = shape(250, 260, bypass=False, now=T0, last_write=None, options=options)
+    assert held.blocked_by is WriteBlock.DEADBAND
+    strict = shape(
+        250,
+        260,
+        bypass=False,
+        now=T0,
+        last_write=None,
+        options=options,
+        strict_down=True,
+    )
+    assert strict.value == 250
+    stepped = shape(
+        250,
+        400,
+        bypass=False,
+        now=T0,
+        last_write=None,
+        options=options,
+        strict_down=True,
+    )
+    assert stepped.value == 350
+    interval = shape(
+        250,
+        260,
+        bypass=False,
+        now=T0,
+        last_write=T0 - timedelta(minutes=4),
+        options=options,
+        strict_down=True,
+    )
+    assert interval.blocked_by is WriteBlock.INTERVAL
+    up = shape(
+        255,
+        250,
+        bypass=False,
+        now=T0,
+        last_write=None,
+        options=options,
+        strict_down=True,
+    )
+    assert up.blocked_by is WriteBlock.DEADBAND  # the dead band up is unchanged
+
+
+NIGHT = T0.replace(hour=23)
+
+
+def _night(current: str, flow: float, **kwargs: object) -> tuple[float, object]:
+    """Run one evaluation at 23:00 with CO₂ asking for ``flow``; (written, reason)."""
+    co2 = 850 + (flow - 80) * 550 / 320
+    sim = Sim(
+        make_options(night_enabled=True, **kwargs),
+        now=NIGHT,
+        values={CO2_A: co2, CO2_B: co2},
+        actuator=current,
+        state=running_state(last_write=NIGHT - timedelta(minutes=10)),
+    )
+    decision, effects = sim.run()
+    flows = [effect.flow for effect in writes(effects)]
+    return (flows[0] if flows else decision.setpoint), decision.reason
+
+
+@pytest.mark.parametrize(
+    ("current", "flow", "expected"),
+    [
+        ("260", 350, 250),  # capped target, 10 above: written despite dead band 20
+        ("255", 350, 250),
+        ("400", 350, 350),  # step down limited to 50
+        ("260", 245, 245),  # target below the limit, current above it
+        ("245", 230, 245),  # both below the limit: dead band holds
+        ("250", 240, 250),  # at the limit, not above it: dead band holds
+    ],
+)
+def test_e09a_bhv14_quiet_limit_is_strict(
+    current: str, flow: float, expected: float
+) -> None:
+    """E9a: above an active quiet limit the dead band down does not hold the flow."""
+    written, _ = _night(current, flow)
+    assert written == expected
+
+
+def test_e09a_quiet_limit_quantised_below_its_value() -> None:
+    """Quiet max 252 quantises to a target of 250: 252 is above the target."""
+    written, reason = _night("252", 350, quiet_max_flow=252)
+    assert (written, reason) == (250, Reason.QUIET_LIMIT)
+
+
+def test_e09a_quiet_strict_not_without_the_quiet_limit() -> None:
+    """Day, profile air quality or humidity override: the normal dead band applies."""
+    day_sim = Sim(
+        make_options(night_enabled=True),
+        values={CO2_A: 850 + 170 * 550 / 320, CO2_B: 700},
+        actuator="260",
+    )
+    decision, effects = day_sim.run()
+    assert decision.target == 250
+    assert not writes(effects)
+    assert decision.write_blocked_by is WriteBlock.DEADBAND
+
+    co2 = 850 + 170 * 550 / 320  # demand 250
+    air_quality = Sim(
+        make_options(night_enabled=True),
+        now=NIGHT,
+        values={CO2_A: co2, CO2_B: co2},
+        actuator="260",
+        state=running_state(
+            profile=Profile.AIR_QUALITY, last_write=NIGHT - timedelta(minutes=10)
+        ),
+    )
+    decision, effects = air_quality.run()
+    assert Limit.QUIET not in decision.limits
+    assert not writes(effects)
+
+    co2 = 850 + 305 * 550 / 320  # demand 385
+    humid = Sim(
+        make_options(night_enabled=True),
+        now=NIGHT,
+        values={CO2_A: co2, CO2_B: co2, HUM_A: 66},
+        actuator="400",
+        state=running_state(last_write=NIGHT - timedelta(minutes=10)),
+    )
+    decision, effects = humid.run()
+    assert Limit.QUIET not in decision.limits  # humidity override
+    assert decision.target == 385
+    assert not writes(effects)  # 15 below: the dead band holds
+
+
+def test_e09a_night_window_starts_while_above_the_limit() -> None:
+    """Observed: 260 in the evening; from 22:00 the quiet limit 250 is written.
+
+    Before, the dead band down (20) held 260 for hours above the limit.
+    """
+    co2 = 850 + 180 * 550 / 320  # demand 260
+    sim = Sim(
+        make_options(night_enabled=True),
+        now=T0.replace(hour=21, minute=50),
+        values={CO2_A: co2, CO2_B: co2},
+        actuator="260",
+        state=running_state(last_write=T0.replace(hour=21)),
+    )
+    decision, effects = sim.run()
+    assert (decision.target, decision.setpoint) == (260, 260)
+    assert not writes(effects)
+    sim.advance(minutes=10)
+    decision, effects = sim.run()
+    assert (decision.target, decision.reason) == (250, Reason.QUIET_LIMIT)
+    assert [effect.flow for effect in writes(effects)] == [250]
+    assert decision.setpoint == 250
 
 
 def test_zero_step_cannot_move() -> None:

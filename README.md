@@ -446,11 +446,13 @@ All values are flows in m³/h. The calculation has five stages: **contributions 
 5. **Shaping** turns the target into the **setpoint**, the flow actually written. The target is rounded to the flow step and kept within the actuator range. A mode change, a boost command, a profile change, the first write after startup and a restored readiness condition are written at once. Otherwise:
    - at most one change per minimum write interval (5 min);
    - up only if the target is at least 10 above the current flow, by at most 50 per change;
-   - down only if the target is at least 20 below the current flow, by at most 50 per change.
+   - down only if the target is at least 20 below the current flow, by at most 50 per change. Exception: while the quiet limit applies and the current flow is above it, the flow is brought down to the target even if it is less than 20 above it (still at most one change per interval and at most 50 per change), so the quiet limit is always kept.
 
    Example: the unit runs at 80 and CO₂ jumps to 1400 ppm (target 400). The setpoint becomes 130, five minutes later 180, and so on.
 
-   The current flow is read back from the actuator; a value changed at the unit or by someone else is taken as the new current flow. 30 s after each write the actuator is checked; on a mismatch the value is written once more, then the problem `write_mismatch` is reported.
+   The current flow is read back from the actuator; a value changed at the unit or by someone else is taken as the new current flow. Until the actuator reports a written value (at most 60 s, for units that report only on their next poll) the written value counts as the current flow. 30 s after each write the actuator is checked; on a mismatch the value is written once more, then the problem `write_mismatch` is reported.
+
+   While nothing is written (shaping holds, during the startup grace, while the actuator is unavailable or a readiness condition is not met), the setpoint shows the current flow, so it always matches what the unit runs at; the attribute `target` shows what the inputs ask for. In a pause or a safety shutdown the setpoint is 0. Only with the **Control** switch off does the setpoint show the calculated demand ([shadow run](#use-cases)).
 
 ### Reasons
 
@@ -461,6 +463,7 @@ The **Reason** sensor names the rule or mode that determined the setpoint:
 | `minimum` | the minimum flow |
 | `co2` | the CO₂ ramp |
 | `humidity_high` | the humidity-high ramp |
+| `co2_and_humidity_high` | the CO₂ ramp and the humidity-high ramp ask for about the same flow (at most one flow step, 5 m³/h, apart after rounding to the flow step); shown as "CO₂ and humidity" |
 | `dryness_protection` | the flow is lower than humidity-high (or, in the winter profile, the full CO₂ ramp) would ask for, because the air is dry |
 | `away` | the away limit |
 | `quiet_limit` | the quiet limit |
@@ -484,9 +487,9 @@ The integration is event driven; it does not poll anything.
 | state change of the actuator, off actuator, a readiness entity or a warning source | at once (warning details are fetched first, at most 10 s) |
 | saving options, readiness conditions or warning sources | the entry is reloaded |
 
-Control starts once Home Assistant has started. During the startup grace (1 min) the entities show values but nothing is written and no input problems are raised, because many sensors become available a few seconds after start.
+Control starts once Home Assistant has started. During the startup grace (1 min) the entities show values but nothing is written and no input problems are raised, because many sensors become available a few seconds after start; only a safety shutdown is applied at once. The setpoint keeps the flow the unit runs at until the first write after the grace.
 
-Input values count only when they are **valid**: not `unavailable`, `unknown` or empty; numeric; reported within the stale timeout (30 min, also when the value did not change); and plausible (CO₂ 250–10000 ppm, humidity 0–100 %). Invalid values are left out of every calculation, listed in the setpoint attribute `invalid_inputs`, and reported as a problem after the problem delay.
+Input values count only when they are **valid**: not `unavailable`, `unknown` or empty; numeric; reported within the stale timeout (30 min, also when the value did not change); and plausible (CO₂ 100–10000 ppm, humidity 0–100 %). Invalid values are left out of every calculation, listed in the setpoint attribute `invalid_inputs`, and reported as a problem after the problem delay.
 
 ## Entities
 
@@ -515,6 +518,7 @@ All entities belong to one device per entry (named after the entry, model "Deman
 | Attribute | Content |
 |---|---|
 | `mode`, `reason`, `profile` | as the entities |
+| `reasons` | the single reasons behind `reason`: `co2` and `humidity_high` for `co2_and_humidity_high`, otherwise just the reason |
 | `target` | flow the active mode asks for, before shaping |
 | `written`, `last_write` | last flow written to the unit and when |
 | `actuator_value` | current native value of the actuator (not recorded) |
@@ -742,6 +746,10 @@ Failed, stale or implausible values are ignored, never read as 0. If one of seve
 
 A sensor that is removed from Home Assistant counts as invalid and raises a [repair issue](#repair-issues). A renamed sensor (new entity id) is followed automatically.
 
+### My CO₂ sensor shows less than 400 ppm
+
+Outdoor air has about 420 ppm, so a room cannot really be lower. Values well below ~400 ppm (for example 190–250 ppm at night) mean the sensor needs calibration: sensors with automatic baseline calibration drift when the room never gets fresh air, or they were calibrated in a closed room. The integration still uses such values (CO₂ from 100 ppm counts as valid), because the rise in an occupied room still shows, but the CO₂ ramp then starts later than it should. Calibrate the sensor outdoors or at an open window as its manual describes.
+
 ### Pause does not stop the unit
 
 Without an off actuator, a pause (and every other "off") writes the lowest actuator value: 0 % for a `fan`, the lowest value of a `number` (**Actuator minimum** if set, else its `min` attribute, else 0), the lowest mapped stage for a `select`. The setpoint attribute `off_method` is then `minimum`. Many units do not stop at that value: they ignore flows below their own minimum (for example 50 m³/h) and keep running.
@@ -775,10 +783,10 @@ Only one controller may write to the unit. If an existing automation, blueprint 
 
 | Symptom | What to check |
 |---|---|
-| The setpoint changes but the unit does not | Setpoint attribute `write_blocked_by`: `disabled` (Control switch off), `not_ready` (readiness condition, for example the control mode), `unavailable` (actuator), `grace` (just started), `interval` / `deadband` (shaping holds on purpose). Then the **Problem** sensor's `problems` attribute. |
+| The target changes but the setpoint and the unit do not | Setpoint attribute `write_blocked_by`: `disabled` (Control switch off; the setpoint shows the demand), `not_ready` (readiness condition, for example the control mode), `unavailable` (actuator), `grace` (just started), `interval` / `deadband` (shaping holds on purpose). Then the **Problem** sensor's `problems` attribute. |
 | The unit runs at another value than the setpoint | Another automation or the unit's own program writes too ([two controllers](#running-two-controllers)); the problem `write_mismatch` appears. Or the unit needs a readiness condition. |
 | `write_failed` | A service call to the unit failed; the Home Assistant log has the error. |
-| A sensor is in `invalid_inputs` | It is unavailable, not numeric, has not reported within the stale timeout, or is outside the plausible range (CO₂ 250–10000 ppm, humidity 0–100 %). |
+| A sensor is in `invalid_inputs` | It is unavailable, not numeric, has not reported within the stale timeout, or is outside the plausible range (CO₂ 100–10000 ppm, humidity 0–100 %). |
 | The flow reacts slowly | That is the output shaping: one change per 5 minutes, at most 50 m³/h per change by default. Boosts, pauses and profile changes act at once. Tune the **Output shaping** section if needed. |
 | The flow stays low although CO₂ is high | Look at `limits` and the reason: `away` (nobody home), `quiet_limit` (night window or quiet profile) or `dryness_protection` (winter profile). |
 | The mode is Fallback | No CO₂ sensor is valid; see `invalid_inputs`. |
