@@ -6,7 +6,8 @@ returned effects (writes, off/on, readiness corrections, events, timers). It
 owns the subscriptions, the debouncer, the periodic timer, the evaluation lock,
 the store and the decision log. Entities (M5) read :attr:`current_decision`
 and register with :meth:`async_add_listener`. Notifications (M9) go through
-the :class:`~.notifications.Notifier`.
+the :class:`~.notifications.Notifier`, missing entities (M10) through
+:class:`~.issues.MissingEntities`.
 """
 
 from __future__ import annotations
@@ -92,6 +93,7 @@ from .engine.serialize import (
     state_from_dict,
     state_to_dict,
 )
+from .issues import MissingEntities, async_create_state_reset_issue
 from .notifications import Notifier
 from .warning_providers import CollectedDetails, DetailsCollector, source_entities
 
@@ -210,9 +212,11 @@ class VentilationController:
         self._notifier = Notifier(
             hass, entry, self.async_command, self._async_request_soon
         )
+        self._missing = MissingEntities(hass, entry, self._async_request_soon)
         self._warning_unsub: CALLBACK_TYPE | None = None
         self.device_id: str | None = None
-        #: True if the store was corrupt or from a future version (repair in 0.2).
+        #: True if the store was corrupt or from a future version (repair
+        #: issue ``state_reset``).
         self.state_reset = False
         self._state = ControllerState()
         self._store = create_store(hass, entry.entry_id)
@@ -268,6 +272,16 @@ class VentilationController:
     def decisions(self) -> tuple[Decision, ...]:
         """The last 100 decisions, oldest first (diagnostics)."""
         return tuple(self._decisions)
+
+    @property
+    def missing_entities(self) -> frozenset[str]:
+        """Configured entities and devices that do not exist (BHV-55)."""
+        return self._missing.missing
+
+    @property
+    def missing_notify_services(self) -> frozenset[str]:
+        """Configured notify services that do not exist (diagnostics)."""
+        return self._notifier.missing
 
     @property
     def started(self) -> bool:
@@ -391,6 +405,7 @@ class VentilationController:
         )
         self._async_track_warning_sources()
         self._notifier.async_start()
+        self._missing.async_start()
         await self.async_request_evaluation()
 
     async def async_shutdown(self) -> None:
@@ -413,6 +428,7 @@ class VentilationController:
         """Cancel every subscription, timer and pending verification."""
         self._stopped = True
         self._notifier.async_stop()
+        self._missing.async_stop()
         if self._warning_unsub is not None:
             self._warning_unsub()
             self._warning_unsub = None
@@ -434,12 +450,12 @@ class VentilationController:
             data, version = {}, STORE_VERSION + 1
         result = state_from_dict(data, dt_util.now(), version=version)
         if result.reset:
-            # TODO(0.2, BHV-50): raise the repair issue `state_reset`.
             _LOGGER.warning(
                 "Stored state of %s could not be read; starting with defaults",
                 self.entry.title,
             )
             self.state_reset = True
+            async_create_state_reset_issue(self.hass, self.entry)
         if result.expired is not None:
             _LOGGER.info(
                 "The %s of %s ended while Home Assistant was offline",
@@ -625,6 +641,7 @@ class VentilationController:
             reported_problems=self._writer.problems | self._notifier.problems,
             warning_details=details.details,
             details_failed=details.failed,
+            missing_entities=self._missing.missing,
         )
 
     async def _async_evaluate(self) -> None:
@@ -774,11 +791,11 @@ class VentilationController:
 
         docs/spec/01-configuration.md#renamed-and-removed-entities: a rename is
         written to the options and readiness subentries; the update listener
-        then reloads the entry.
+        then reloads the entry. A removal raises the repair issue
+        ``missing_entity`` (:class:`~.issues.MissingEntities`).
         """
         data = event.data
         if data["action"] == "remove":
-            # TODO(0.2, BHV-55): raise the repair issue `missing_entity`.
             _LOGGER.info(
                 "%s was removed; %s continues with the remaining entities",
                 data["entity_id"],

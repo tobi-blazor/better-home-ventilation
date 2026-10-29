@@ -39,6 +39,8 @@ custom_components/better_home_ventilation/
   notifications.py     sending/clearing notifications, action listener, missing notify service issue
                        (not `notify.py`: that module name is an integration's notify platform,
                        `notify/legacy.py` imports `<integration>.notify` for a configured platform)
+  issues.py            repair issues missing_entity and state_reset
+                       (not `repairs.py`: that module name is an integration's repairs platform)
   warning_providers/   details providers (HA glue): __init__.py (registry), nina.py, dwd.py, environment_canada.py, attributes.py
   entity.py            BetterVentilationEntity base (device info, listener registration)
   sensor.py  binary_sensor.py  button.py  select.py  number.py  switch.py

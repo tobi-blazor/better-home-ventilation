@@ -30,6 +30,7 @@ from custom_components.better_home_ventilation.const import (
     SUBENTRY_WARNING_SOURCE,
 )
 from custom_components.better_home_ventilation.engine.models import ProblemKey
+from custom_components.better_home_ventilation.issues import ENTITY_OPTIONS
 from custom_components.better_home_ventilation.notifications import Action
 
 from .common import CONTROL_MODE, NUMBER_FLOW, NUMBER_RAW, mock_entry, schema_fields
@@ -311,6 +312,47 @@ def test_notification_texts_and_issues_are_translated(language: str) -> None:
     issue = _load(language)["issues"]["missing_notify_service"]
     assert issue["title"]
     assert set(PLACEHOLDER.findall(issue["description"])) == {"service", "entries"}
+
+
+@pytest.mark.parametrize("language", list(FILES))
+def test_repair_issues_are_translated(language: str) -> None:
+    """`missing_entity` and `state_reset` have a title and their placeholders (BHV-55)."""
+    strings = _load(language)
+    issues = strings["issues"]
+    missing = issues["missing_entity"]
+    assert set(PLACEHOLDER.findall(missing["title"])) == {"entity"}
+    assert set(PLACEHOLDER.findall(missing["description"])) == {"entity", "usages"}
+    reset = issues["state_reset"]
+    assert set(PLACEHOLDER.findall(reset["title"])) == {"entry"}
+    assert set(PLACEHOLDER.findall(reset["description"])) == {"entry"}
+    common = strings["common"]
+    for where in ENTITY_OPTIONS:
+        assert not PLACEHOLDER.findall(common[f"issue_where_{where}"])
+    for where in (SUBENTRY_READINESS_CONDITION, SUBENTRY_WARNING_SOURCE):
+        assert set(PLACEHOLDER.findall(common[f"issue_where_{where}"])) == {"title"}
+
+
+@pytest.mark.parametrize("language", list(FILES))
+def test_intent_texts_are_translated(language: str) -> None:
+    """Every intent speech and error has a text with its placeholders (BHV-22)."""
+    common = _load(language)["common"]
+    expected = {
+        "intent_boost": {"name", "level", "time"},
+        "intent_pause": {"name", "time"},
+        "intent_pause_indefinite": {"name"},
+        "intent_resume": {"name", "mode"},
+        "intent_status": {"name", "mode", "setpoint", "reason"},
+        "intent_status_until": {"name", "mode", "setpoint", "reason", "time"},
+        "intent_status_not_started": {"name"},
+        "intent_error_control_disabled": {"name"},
+        "intent_error_level_out_of_range": {"min", "max"},
+        "intent_error_entry_required": set(),
+        "intent_error_entry_not_found": {"name"},
+        "intent_error_no_entry": set(),
+        "intent_error_entry_not_loaded": {"name"},
+    }
+    for key, placeholders in expected.items():
+        assert set(PLACEHOLDER.findall(common[key])) == placeholders, key
 
 
 @pytest.mark.parametrize("language", list(FILES))

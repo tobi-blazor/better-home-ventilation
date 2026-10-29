@@ -80,7 +80,7 @@ Attributes that change on every evaluation but have no value for history (`actua
 
 ### Problem attributes
 
-`problems`: list of `{key, entity_id?, since}` of the problems that persist longer than `problem_delay` (the ones that turn the sensor on); `entity_id` is omitted for problems without an entity. Keys: `actuator_unavailable`, `not_ready`, `write_failed`, `write_mismatch`, `inputs_invalid`, `no_valid_co2`, `warning_source_unavailable`, `warning_details_failed`, `missing_entity`, `missing_notify_service`.
+`problems`: list of `{key, entity_id?, since}` of the problems that persist longer than `problem_delay` (the ones that turn the sensor on); `entity_id` is omitted for problems without an entity. Keys: `actuator_unavailable`, `not_ready`, `write_failed`, `write_mismatch`, `inputs_invalid`, `no_valid_co2`, `warning_source_unavailable`, `warning_details_failed`, `missing_entity`, `missing_notify_service`. `missing_entity` has the id of the missing entity (the device id for a warning source device).
 
 ## Services
 
@@ -167,9 +167,16 @@ Details (decided 2026-10-29 for M9):
 
 | Issue id | When | Fix |
 |---|---|---|
-| `missing_entity_<entity_id>` | a configured entity is not in the state machine and not in the entity registry 5 min after startup | text points to the options flow |
+| `missing_entity_<entity_id>` | a configured entity (options, readiness condition, warning source entity) is not in the state machine and not in the entity registry 5 min after Home Assistant started, or is removed from the entity registry; a warning source device that is not in the device registry (id = device id); one issue per entity, listing every loaded entry that uses it and where (options step or subentry); removed when the entity has a state or a registry entry again or no loaded entry uses it; also the problem `missing_entity` | text points to the options flow |
 | `missing_notify_service_<service>` | a configured notify service no longer exists (checked when the controller starts and whenever a `notify` service is registered or removed); one issue per service, listing every loaded entry that misses it, removed when the service exists again or no loaded entry uses it; also the problem `missing_notify_service` (implemented in M9) | text points to the options step `notifications` |
-| `state_reset` | the store is corrupt or from an unknown version | informational, dismissable |
+| `state_reset_<entry_id>` | the store is corrupt or from an unknown version | informational, dismissable |
+
+Details (decided 2026-10-29 for M10):
+
+- **Module:** `issues.py`, not `repairs.py` (the module name of an integration's repairs platform with fix flows).
+- **`missing_entity`:** the wait counts from the start of Home Assistant, not of the entry: an entry loaded or reloaded later checks at once, and an entry reloaded after an options change keeps the issues of entities that are still missing. Disabling or removing an entry drops its usages. The issue is not fixable (no fix flow; the options flow is the fix); severity warning. The usages name the entry and the place in the server language (`common.issue_where_<key>`, e.g. "Ventilation: CO₂ sensors (step Inputs)"), because issue placeholders are not translated by the frontend. The problem `missing_entity` has the entity id (the device id for a warning source device) and is raised at once (no startup grace; the issue already waited).
+- **`state_reset`:** one issue per entry (`state_reset_<entry_id>`, two entries can reset independently). Not fixable and not persistent (`is_persistent=False`): the user ignores it in the repairs dialog, and it is gone after the next restart. Removed with the entry.
+- SPEC-GAP: an entity without a registry entry (e.g. a YAML template sensor without `unique_id`) whose state is removed while Home Assistant runs is found only at the next start: removing a state is no proof that the entity is gone (reloads remove and add states).
 
 ## Diagnostics
 

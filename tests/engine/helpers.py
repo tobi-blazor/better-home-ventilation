@@ -106,6 +106,7 @@ class Sim:
         self.actuator = ActuatorSnapshot(state=actuator, **(actuator_attrs or {}))
         self.off = OffActuatorSnapshot(state=off) if off is not None else None
         self.reported_problems: frozenset[ProblemKey] = frozenset()
+        self.missing_entities: frozenset[str] = frozenset()
         self.details: dict[str, tuple[WarningDetails, ...] | None] = {}
         self.details_failed: set[str] = set()
         self.state = state or running_state()
@@ -150,6 +151,7 @@ class Sim:
             actuator=self.actuator,
             off_actuator=self.off,
             reported_problems=self.reported_problems,
+            missing_entities=self.missing_entities,
             warning_details=dict(self.details),
             details_failed=frozenset(self.details_failed),
         )

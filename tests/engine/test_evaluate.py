@@ -361,6 +361,25 @@ def test_reported_problems_pass_through() -> None:
     ]
 
 
+def test_bhv55_missing_entities_are_problems() -> None:
+    """Entities the glue reports as missing raise ``missing_entity`` each (BHV-55).
+
+    They are raised during the startup grace as well: the glue reports them
+    only after its own 5 minute check or a registry removal.
+    """
+    sim = Sim(started_at=T0)
+    sim.missing_entities = frozenset({"sensor.gone_b", "sensor.gone_a"})
+    decision, _ = sim.run()
+    assert [(p.key, p.entity_id) for p in decision.problems] == [
+        (ProblemKey.MISSING_ENTITY, "sensor.gone_a"),
+        (ProblemKey.MISSING_ENTITY, "sensor.gone_b"),
+    ]
+    sim.missing_entities = frozenset()
+    sim.advance(minutes=1)
+    decision, _ = sim.run()
+    assert decision.problems == ()
+
+
 def test_no_valid_co2_problem() -> None:
     """Fallback raises ``no_valid_co2`` plus one ``inputs_invalid`` per sensor."""
     sim = Sim(values={CO2_A: "unknown", CO2_B: "unknown"})

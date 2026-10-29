@@ -757,12 +757,41 @@
     "notify_action_ok": "OK",
     "notify_action_restart": "Restart now",
     "notify_action_keep_off": "Keep off",
-    "notify_action_resume": "Resume"
+    "notify_action_resume": "Resume",
+    "notify_problem_missing_entity": "{entities} no longer exists; the ventilation runs without it. See the repair issue.",
+    "issue_where_actuator": "actuator (step Actuator)",
+    "issue_where_off_entity": "off actuator (step Actuator)",
+    "issue_where_co2_sensors": "CO₂ sensors (step Inputs)",
+    "issue_where_humidity_sensors": "humidity sensors (step Inputs)",
+    "issue_where_presence_entities": "presence (step Inputs)",
+    "issue_where_readiness_condition": "readiness condition {title}",
+    "issue_where_warning_source": "warning source {title}",
+    "intent_boost": "{name} boosted to {level} m³/h until {time}.",
+    "intent_pause": "{name} paused until {time}.",
+    "intent_pause_indefinite": "{name} paused until you resume it.",
+    "intent_resume": "{name} is back to {mode}.",
+    "intent_status": "{name}: {mode}, {setpoint} m³/h, reason: {reason}.",
+    "intent_status_until": "{name}: {mode} until {time}, {setpoint} m³/h, reason: {reason}.",
+    "intent_status_not_started": "{name} has not started yet.",
+    "intent_error_control_disabled": "Control of {name} is switched off.",
+    "intent_error_level_out_of_range": "The level must be between {min} and {max} m³/h.",
+    "intent_error_entry_required": "There are several ventilation units; say which one.",
+    "intent_error_entry_not_found": "There is no ventilation called {name}.",
+    "intent_error_no_entry": "No ventilation is set up.",
+    "intent_error_entry_not_loaded": "{name} is not loaded."
   },
   "issues": {
     "missing_notify_service": {
       "title": "Notify service {service} not found",
       "description": "{entries} sends notifications to {service}, which no longer exists (for example because the Companion app was removed or the phone renamed). Open the settings of the entry, choose **Notifications** and select the current phones; saving removes the missing service. Until then the other phones get the notifications, or a persistent notification is created if none is left."
+    },
+    "missing_entity": {
+      "title": "{entity} not found",
+      "description": "{entity} is used in {usages}, but it exists neither as an entity nor in the entity registry (for example because its integration was removed or the entity was deleted). The ventilation keeps running without it. Open the settings of the entry and choose an existing entity in the named step, or delete the readiness condition or warning source. This issue disappears as soon as the entity exists again or is no longer used."
+    },
+    "state_reset": {
+      "title": "Stored state of {entry} was reset",
+      "description": "The stored state of {entry} could not be read (it was damaged or written by a newer version) and was replaced by the defaults: a running boost or pause and overrides of warnings ended, the control switch is on and the profile is Balanced. Check the control switch and the profile. This message is for information only; you can ignore it."
     }
   }
 }
