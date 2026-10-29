@@ -130,7 +130,7 @@ Which limits apply depends on the [profile](#profiles).
 CO₂ is ignored while away (nobody produces CO₂; pets are a documented limitation). The fallback flow is kept: without valid CO₂ values the integration cannot know that nobody produces CO₂.
 
 **Quiet (BHV-14):** if the quiet limit applies and `demand > quiet_max_flow` and not (`h_max is not None and h_max ≥ quiet_humidity_override`):
-`demand = quiet_max_flow`; reason `quiet_limit`. This also caps the fallback flow (noise is independent of sensor failures).
+`demand = quiet_max_flow`; reason `quiet_limit`. This also caps the fallback flow (noise is independent of sensor failures). Output shaping brings a flow above the active quiet limit down without the dead band ([strict quiet limit](#output-shaping)).
 The demand before this limit is kept as `demand_unquiet` (with its reason); the `boost` mode uses it, so a user boost never gets less than the air quality asks for without noise protection ([03-modes.md](03-modes.md#target-per-mode)).
 
 All active limits are listed in the attribute `limits` (`away`, `quiet`, `dry`), also when they did not change the value.
@@ -167,11 +167,13 @@ elif now - last_write < min_write_interval:
     hold
 elif target - current ≥ deadband_up:
     write current + min(target - current, max_step_up)
-elif current - target ≥ deadband_down:
+elif current - target ≥ deadband_down or (quiet_strict and current > target):
     write current - min(current - target, max_step_down)
 else:
     hold
 ```
+
+**The quiet limit is strict** (BHV-14, owner decision 2026-10-29). `quiet_strict` is true when the mode is `automatic` or `fallback`, the quiet limit is active (`quiet` in `limits`, i.e. it applies and the humidity override is not reached), and `current` is above `quiet_max_flow`, or above the target while the target is the quiet limit (reason `quiet_limit`; the target can lie below `quiet_max_flow` after quantisation or clamping). Then the dead band down does not hold the flow: shaping writes the target, still limited by `min_write_interval` and `max_step_down`. Reason: with the dead band down of 20 m³/h a flow 5–15 m³/h above the limit (e.g. 260 written in the evening, quiet limit 250 from 22:00) was held for hours, although the quiet limit is a noise promise. Below the quiet limit the dead band applies as usual, so the noisy-demand protection is unchanged there. Other modes are not affected (a user boost is never capped by the quiet limit).
 
 Then the written value is quantised again and mapped to the actuator.
 

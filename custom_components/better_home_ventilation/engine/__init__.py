@@ -34,12 +34,14 @@ from .models import (
     Decision,
     Effect,
     FireEvent,
+    Limit,
     Mode,
     OffMethod,
     Options,
     Problem,
     ProblemId,
     ProblemKey,
+    Reason,
     ScheduleAt,
     Snapshot,
     Trigger,
@@ -124,6 +126,7 @@ def evaluate(
         bypass_reason=mode_changed or readiness.restored,
         ready=readiness.ready,
         in_grace=in_grace,
+        quiet=_quiet_strict(mode, reason, demand.limits, options),
     )
     state = out.state
     effects: list[Effect] = [*readiness.corrections, *out.effects]
@@ -242,6 +245,7 @@ def _write_stage(
     bypass_reason: bool,
     ready: bool,
     in_grace: bool,
+    quiet: _QuietStrict | None = None,
 ) -> _Output:
     """Shape the target, map it and decide off/on and writes behind the gate.
 
@@ -348,6 +352,9 @@ def _write_stage(
         now=now,
         last_write=state.last_write,
         options=options,
+        strict_down=(
+            quiet is not None and current is not None and quiet.applies(current, target)
+        ),
     )
     value = shaped.value
     hold_reason = shaped.blocked_by
@@ -390,6 +397,36 @@ def _write_stage(
         target=target,
         written=value,
         effects=tuple(effects),
+    )
+
+
+@dataclass(frozen=True, kw_only=True)
+class _QuietStrict:
+    """The active quiet limit and whether it set the target."""
+
+    max_flow: float
+    capped: bool
+
+    def applies(self, current: float, target: float) -> bool:
+        """Return True if ``current`` is above the quiet limit (strict down)."""
+        cap = min(self.max_flow, target) if self.capped else self.max_flow
+        return current > cap
+
+
+def _quiet_strict(
+    mode: Mode, reason: Reason, limits: Sequence[Limit], options: Options
+) -> _QuietStrict | None:
+    """When the quiet limit is strict for this target, or None (BHV-14).
+
+    02-control.md#output-shaping: in ``automatic`` and ``fallback`` with the
+    quiet limit active, a current flow above ``quiet_max_flow``, or above the
+    target while the target is the quiet limit (reason ``quiet_limit``, e.g.
+    quantised or clamped below it), is brought down without the dead band.
+    """
+    if mode not in (Mode.AUTOMATIC, Mode.FALLBACK) or Limit.QUIET not in limits:
+        return None
+    return _QuietStrict(
+        max_flow=options.quiet_max_flow, capped=reason is Reason.QUIET_LIMIT
     )
 
 

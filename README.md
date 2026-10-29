@@ -336,7 +336,7 @@ All values are flows in m³/h. The calculation has five stages: **contributions 
 5. **Shaping** turns the target into the **setpoint**, the flow actually written. The target is rounded to the flow step and kept within the actuator range. A mode change, a boost command, a profile change, the first write after startup and a restored readiness condition are written at once. Otherwise:
    - at most one change per minimum write interval (5 min);
    - up only if the target is at least 10 above the current flow, by at most 50 per change;
-   - down only if the target is at least 20 below the current flow, by at most 50 per change.
+   - down only if the target is at least 20 below the current flow, by at most 50 per change. Exception: while the quiet limit applies and the current flow is above it, the flow is brought down to the target even if it is less than 20 above it (still at most one change per interval and at most 50 per change), so the quiet limit is always kept.
 
    Example: the unit runs at 80 and CO₂ jumps to 1400 ppm (target 400). The setpoint becomes 130, five minutes later 180, and so on.
 

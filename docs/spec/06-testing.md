@@ -27,6 +27,7 @@ Time is always injected (`now` parameter in the engine, `freezer` fixture in com
 | E7 | humidity mean 38 %, max 58 % | `dry` active, humidity-high allowed for 60 min, then suppressed, reason `dryness_protection` |
 | E8 | mean 40.5 % after `dry` | stays `dry` (hysteresis until 42 %) |
 | E9 | night 23:00, demand 350 | 250, reason `quiet_limit` |
+| E9a | night, quiet limit 250 active, current above it: 260 / 255 with demand 350; 400 with demand 350; 260 with demand 245; quiet max 252 (target 250) at 252; 260 in the evening, night window starts | 250 / 250 written despite the dead band down; 350 (step 50); 245; 250; 250 at 22:00. Interval still holds. Not strict: both below the limit (245 → 230 held), at the limit (250 → 240 held), in the day, in profile `air_quality`, above the humidity override |
 | E10 | night, humidity max 66 % | not limited |
 | E11 | night window 22:00–07:00 at 06:59 and 07:00 | inside / outside |
 | E12 | away, CO₂ 1300 | 80, reason `away` |

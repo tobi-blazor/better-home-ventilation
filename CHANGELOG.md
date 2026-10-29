@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The quiet limit is kept strictly: a flow above the active quiet limit is brought down even when it is less than the dead band down above it. Before, for example, 260 m³/h written in the evening stayed for hours after the quiet limit of 250 m³/h started at 22:00. The minimum write interval and the maximum step down still apply.
 - The setpoint sensor shows what the unit runs at while nothing is written: during the startup grace, while the actuator is unavailable or a readiness condition is not met it keeps the current flow instead of the unshaped target, and right after a write it no longer jumps back to the old value for a moment before a unit that reports on its next poll confirms the new one.
 
 ## [0.1.0] - 2026-10-21
