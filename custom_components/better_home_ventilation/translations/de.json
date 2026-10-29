@@ -83,6 +83,7 @@
       "off_entity_is_actuator": "Der Aus-Aktor muss eine andere Entität als der Aktor sein.",
       "off_entity_not_found": "Die Entität des Aus-Aktors existiert nicht.",
       "quiet_range": "Der Ruhe-Volumenstrom muss zwischen Mindest- und maximalem Volumenstrom liegen.",
+      "reminder_too_short": "Eine Erinnerung braucht mindestens 1 Minute.",
       "select_mapping": "Bitte für mindestens zwei Optionen einen Volumenstrom eingeben, jeweils mit unterschiedlichem Wert.",
       "select_options": "Die Auswahl-Entität braucht mindestens zwei Optionen.",
       "sensor_not_found": "Mindestens einer der ausgewählten Sensoren existiert nicht."
@@ -95,13 +96,17 @@
           "actuator": "Aktor",
           "inputs": "Eingänge",
           "control": "Regelung",
-          "boosts": "Boost"
+          "boosts": "Boost",
+          "safety": "Sicherheit",
+          "notifications": "Benachrichtigungen"
         },
         "menu_option_descriptions": {
           "actuator": "Aktor-Entität, maximaler Volumenstrom, Aus-Aktor und Wertebereich.",
           "inputs": "CO₂- und Feuchtesensoren der Räume sowie Anwesenheits-Entitäten.",
           "control": "CO₂- und Feuchte-Rampen, Volumenströme, Ruhe- und Abwesenheitsbegrenzung und wie ruhig das Gerät läuft.",
-          "boosts": "Standarddauer und -stufe eines manuellen Boosts."
+          "boosts": "Standarddauer und -stufe eines manuellen Boosts.",
+          "safety": "Bestätigung des Wiedereinschaltens nach einer Warnung und Sicherheit bei ausgeschalteter Regelung.",
+          "notifications": "Telefone, welche Benachrichtigungen sie erhalten und wann Erinnerungen kommen."
         }
       },
       "actuator": {
@@ -312,6 +317,38 @@
               "boost_max_duration": "Durch Verlängern dauert ein Boost nie länger als diese Zeit ab jetzt."
             }
           }
+        }
+      },
+      "safety": {
+        "title": "Sicherheit",
+        "description": "Warnquellen werden als eigene Einträge hinzugefügt: auf der [Integrationsseite]({integration_url}) **Warnquelle hinzufügen** wählen. Diese Einstellungen gelten für alle.",
+        "data": {
+          "restart_confirm_timeout": "Wartezeit für die Bestätigung",
+          "safety_when_disabled": "Sicherheit bei ausgeschalteter Regelung"
+        },
+        "data_description": {
+          "restart_confirm_timeout": "Endet die letzte Warnung, bleibt das Gerät aus und fragt auf den Telefonen, ob es wieder einschalten soll. Ohne Antwort schaltet es nach dieser Zeit ein. 0 schaltet sofort ein.",
+          "safety_when_disabled": "Das Gerät auch bei ausgeschaltetem Regelungsschalter für eine Warnung ausschalten und nach dem Wiedereinschalten in den vorherigen Zustand bringen. Ausgeschaltet werden Warnungen nur an den Entitäten angezeigt."
+        }
+      },
+      "notifications": {
+        "title": "Benachrichtigungen",
+        "description": "Benachrichtigungen gehen an die gewählten Home Assistant Companion Apps, mit Aktionen wie Weiter lüften. Ohne gewähltes Telefon erscheinen sie als dauerhafte Benachrichtigungen in Home Assistant, ohne Aktionen.",
+        "data": {
+          "notify_services": "Telefone",
+          "notify_safety": "Sicherheitsbenachrichtigungen",
+          "notify_reminders": "Erinnerungen",
+          "notify_problems": "Problembenachrichtigungen",
+          "pause_reminder_after": "Erinnerung bei unbefristeter Pause nach",
+          "off_notice_after": "Erinnerung bei anderen Aus-Zuständen nach"
+        },
+        "data_description": {
+          "notify_services": "Die notify.mobile_app-Dienste der Companion Apps, die die Benachrichtigungen erhalten. Ein Dienst, der nicht mehr existiert, ist hier nicht gewählt und wird beim Speichern entfernt.",
+          "notify_safety": "Sicherheitsabschaltung mit Weiter lüften, die Frage zum Wiedereinschalten mit Jetzt einschalten und Aus lassen sowie der Hinweis auf das Wiedereinschalten.",
+          "notify_reminders": "Erinnerung mit Fortsetzen, solange das Gerät aus bleibt (der Feuchteschutz ist nicht aktiv), alle 24 Stunden wiederholt.",
+          "notify_problems": "Eine Benachrichtigung, wenn ein Problem länger als die Verzögerung für Probleme (Einstellungen unter Regelung) besteht; sie wird entfernt, wenn es behoben ist.",
+          "pause_reminder_after": "Erste Erinnerung, nachdem eine Pause bis zum Fortsetzen so lange gedauert hat (mindestens 1 Minute).",
+          "off_notice_after": "Erste Erinnerung, nachdem eine befristete Pause oder eine Sicherheitsabschaltung so lange gedauert hat (mindestens 1 Minute)."
         }
       }
     }
@@ -697,6 +734,35 @@
     "provider_dwd_weather_warnings": "DWD-Wetterwarnungen (nummerierte Attribute)",
     "provider_environment_canada": "Environment Canada (Titel der Meldungen)",
     "provider_attributes": "allgemeine Attribute (Überschrift, Beschreibung, Schweregrad)",
-    "provider_none": "keiner (nur ein/aus, Filter gelten nicht)"
+    "provider_none": "keiner (nur ein/aus, Filter gelten nicht)",
+    "notify_safety_title": "Lüftung aus: {headline}",
+    "notify_safety_message_no_details": "{source} meldet eine Warnung. Die Lüftung wurde ausgeschaltet.",
+    "notify_restart_title": "Warnung aufgehoben",
+    "notify_restart_message": "Lüftung wieder einschalten? Sie startet automatisch um {time}.",
+    "notify_restarted_title": "Lüftung wieder eingeschaltet",
+    "notify_restarted_message": "Die Warnung ist vorbei; die Lüftung läuft wieder.",
+    "notify_reminder_title": "Lüftung aus seit {time}",
+    "notify_reminder_message": "Der Feuchteschutz ist nicht aktiv.",
+    "notify_problem_title": "Problem mit der Lüftung",
+    "notify_problem_actuator_unavailable": "{entities} ist nicht verfügbar; es kann nichts an das Gerät geschrieben werden.",
+    "notify_problem_not_ready": "Die Bereitschaftsbedingung an {entities} ist nicht erfüllt; es wird nichts an das Gerät geschrieben.",
+    "notify_problem_write_failed": "Das Schreiben an das Gerät ist fehlgeschlagen.",
+    "notify_problem_write_mismatch": "Das Gerät hat den geschriebenen Wert nicht übernommen.",
+    "notify_problem_inputs_invalid": "Diese Eingänge sind ungültig und werden ignoriert: {entities}.",
+    "notify_problem_no_valid_co2": "Kein CO₂-Sensor liefert einen gültigen Wert; das Gerät läuft mit dem Ersatz-Volumenstrom.",
+    "notify_problem_warning_source_unavailable": "Die Warnquelle {entities} ist nicht verfügbar und kann das Gerät nicht abschalten.",
+    "notify_problem_warning_details_failed": "Die Details der Warnung an {entities} konnten nicht abgerufen werden; die Warnung zählt ohne sie.",
+    "notify_problem_missing_notify_service": "Ein eingestellter Benachrichtigungsdienst existiert nicht mehr. Prüfe die Benachrichtigungseinstellungen.",
+    "notify_action_keep_ventilating": "Weiter lüften",
+    "notify_action_ok": "OK",
+    "notify_action_restart": "Jetzt einschalten",
+    "notify_action_keep_off": "Aus lassen",
+    "notify_action_resume": "Fortsetzen"
+  },
+  "issues": {
+    "missing_notify_service": {
+      "title": "Benachrichtigungsdienst {service} nicht gefunden",
+      "description": "{entries} sendet Benachrichtigungen an {service}, den es nicht mehr gibt (zum Beispiel, weil die Companion App entfernt oder das Telefon umbenannt wurde). Öffne die Einstellungen des Eintrags, wähle **Benachrichtigungen** und wähle die aktuellen Telefone; beim Speichern wird der fehlende Dienst entfernt. Bis dahin erhalten die anderen Telefone die Benachrichtigungen, oder es wird eine dauerhafte Benachrichtigung erstellt, wenn keines mehr übrig ist."
+    }
   }
 }

@@ -175,6 +175,8 @@ The warning sources themselves are subentries, see [below](#warning-sources-conf
 
 Without `notify_services`, a `persistent_notification` is created instead (no actions). A stored service that no longer exists raises the repair issue `missing_notify_service`.
 
+Details (decided 2026-10-29 for M9): `notify_services` stores the service names without the domain (`mobile_app_example_phone`); a stored `notify.` prefix is accepted. A stored service that no longer exists is not pre-selected when the step opens (the selector offers only existing services), so saving the step removes it and resolves the repair issue. `pause_reminder_after` and `off_notice_after` must be at least 1 minute (error `reminder_too_short` on the field); `restart_confirm_timeout` 0 is valid (restart at once). The `safety` step has no cross-field validation; its description links to the integration page through the placeholder `integration_url`.
+
 ## Readiness conditions (config subentries)
 
 `async_get_supported_subentry_types` returns `{"readiness_condition": ReadinessConditionFlow}`. The integration page then shows "Add readiness condition", and each condition is listed with its own reconfigure and delete entries.

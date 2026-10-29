@@ -121,9 +121,10 @@ class Limit(StrEnum):
 class ProblemKey(StrEnum):
     """Problems known to the engine (04-interface.md#problem-attributes).
 
-    ``write_failed`` and ``write_mismatch`` are detected by the glue and passed
-    in through :attr:`Snapshot.reported_problems`; ``warning_details_failed``
-    comes from :attr:`Snapshot.details_failed`.
+    ``write_failed``, ``write_mismatch`` and ``missing_notify_service`` are
+    detected by the glue and passed in through
+    :attr:`Snapshot.reported_problems`; ``warning_details_failed`` comes from
+    :attr:`Snapshot.details_failed`.
     """
 
     ACTUATOR_UNAVAILABLE = "actuator_unavailable"
@@ -134,6 +135,7 @@ class ProblemKey(StrEnum):
     NO_VALID_CO2 = "no_valid_co2"
     WARNING_SOURCE_UNAVAILABLE = "warning_source_unavailable"
     WARNING_DETAILS_FAILED = "warning_details_failed"
+    MISSING_NOTIFY_SERVICE = "missing_notify_service"
 
 
 class Severity(StrEnum):

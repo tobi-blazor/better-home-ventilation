@@ -5,7 +5,8 @@ inputs from the state machine, runs ``engine.evaluate`` and applies the
 returned effects (writes, off/on, readiness corrections, events, timers). It
 owns the subscriptions, the debouncer, the periodic timer, the evaluation lock,
 the store and the decision log. Entities (M5) read :attr:`current_decision`
-and register with :meth:`async_add_listener`.
+and register with :meth:`async_add_listener`. Notifications (M9) go through
+the :class:`~.notifications.Notifier`.
 """
 
 from __future__ import annotations
@@ -91,6 +92,7 @@ from .engine.serialize import (
     state_from_dict,
     state_to_dict,
 )
+from .notifications import Notifier
 from .warning_providers import CollectedDetails, DetailsCollector, source_entities
 
 _LOGGER = logging.getLogger(__name__)
@@ -205,6 +207,9 @@ class VentilationController:
         #: True if the safety entities exist (at least one warning source).
         self.has_warning_sources = has_warning_sources(entry)
         self._details = DetailsCollector(hass)
+        self._notifier = Notifier(
+            hass, entry, self.async_command, self._async_request_soon
+        )
         self._warning_unsub: CALLBACK_TYPE | None = None
         self.device_id: str | None = None
         #: True if the store was corrupt or from a future version (repair in 0.2).
@@ -345,6 +350,7 @@ class VentilationController:
         self._stop_unsub = self.hass.bus.async_listen_once(
             EVENT_HOMEASSISTANT_STOP, self._async_on_stop
         )
+        self._notifier.async_setup()
 
     async def async_start(self, _hass: HomeAssistant | None = None) -> None:
         """Start control once Home Assistant has started (02-control.md#startup)."""
@@ -384,6 +390,7 @@ class VentilationController:
             )
         )
         self._async_track_warning_sources()
+        self._notifier.async_start()
         await self.async_request_evaluation()
 
     async def async_shutdown(self) -> None:
@@ -405,6 +412,7 @@ class VentilationController:
     def _async_stop(self) -> None:
         """Cancel every subscription, timer and pending verification."""
         self._stopped = True
+        self._notifier.async_stop()
         if self._warning_unsub is not None:
             self._warning_unsub()
             self._warning_unsub = None
@@ -614,7 +622,7 @@ class VentilationController:
             states=states,
             actuator=actuator,
             off_actuator=off_actuator,
-            reported_problems=self._writer.problems,
+            reported_problems=self._writer.problems | self._notifier.problems,
             warning_details=details.details,
             details_failed=details.failed,
         )
@@ -634,6 +642,8 @@ class VentilationController:
         self._async_save_if_changed()
         self._log_availability(snapshot)
         await self._async_apply(effects)
+        if not self._stopped:
+            self._notifier.async_update_problems(decision, self.options.problem_delay)
         self._async_notify()
 
     async def _async_apply(self, effects: Iterable[Effect]) -> None:
@@ -673,8 +683,8 @@ class VentilationController:
                 case ScheduleAt(when=when):
                     scheduled = when
                 case Notify() | ClearNotification():
-                    # TODO(0.2, M9): send/clear notifications (notify.py).
-                    pass
+                    # Sent in the background, never blocking the evaluation.
+                    self._notifier.async_handle(effect)
         if self._stopped:
             return
         self._cancel_schedule()

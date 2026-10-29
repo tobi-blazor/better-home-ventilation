@@ -46,7 +46,7 @@ rules:
   config-entry-unloading: done
   docs-configuration-parameters:
     status: done
-    comment: README "Options", "Readiness conditions" and "Warning sources" document every field of every options step and subentry flow with UI name, default and meaning, checked against strings.json.
+    comment: README "Options" (including Safety and Notifications), "Readiness conditions" and "Warning sources" document every field of every options step and subentry flow with UI name, default and meaning, checked against strings.json.
   docs-installation-parameters:
     status: done
     comment: README "Setup" documents every field of the three config flow steps.
@@ -84,7 +84,7 @@ rules:
     comment: README "Requirements and supported units"; any unit controllable through a number, fan or select entity, no device-specific code.
   docs-supported-functions:
     status: done
-    comment: README "Entities", "Profiles", "How the setpoint is calculated", "Actions" and "Events and logbook".
+    comment: README "Entities", "Profiles", "How the setpoint is calculated", "Notifications", "Actions" and "Events and logbook".
   docs-troubleshooting:
     status: done
     comment: README "Troubleshooting".
@@ -105,7 +105,9 @@ rules:
   reconfiguration-flow:
     status: exempt
     comment: entry.data is empty; every setting, including the actuator, is changed in the options flow (helper pattern).
-  repair-issues: todo
+  repair-issues:
+    status: todo
+    comment: missing_notify_service is implemented (0.2, M9); missing_entity and state_reset follow in M10.
   stale-devices:
     status: exempt
     comment: Exactly one device per config entry, removed together with the entry.

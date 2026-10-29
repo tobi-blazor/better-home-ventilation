@@ -6,8 +6,8 @@ Spec: docs/spec/01-configuration.md. Everything is stored in ``entry.options``;
 ``OptionsFlow`` and subentry flows finish with ``async_update_and_abort``
 (docs/adr/0001-update-listener-instead-of-options-flow-with-reload.md).
 
-Subentries: readiness conditions (0.1) and warning sources (0.2). The options
-steps `safety` and `notifications` follow in M9.
+Subentries: readiness conditions (0.1) and warning sources (0.2). Options
+steps `safety` and `notifications` (0.2).
 """
 
 from __future__ import annotations
@@ -93,13 +93,20 @@ from .const import (
     CONF_NIGHT_ENABLED,
     CONF_NIGHT_END,
     CONF_NIGHT_START,
+    CONF_NOTIFY_PROBLEMS,
+    CONF_NOTIFY_REMINDERS,
+    CONF_NOTIFY_SAFETY,
     CONF_NOTIFY_SERVICES,
     CONF_OFF_ENTITY,
+    CONF_OFF_NOTICE_AFTER,
     CONF_OFF_STATE,
+    CONF_PAUSE_REMINDER_AFTER,
     CONF_PRESENCE_ENTITIES,
     CONF_PROBLEM_DELAY,
     CONF_QUIET_HUMIDITY_OVERRIDE,
     CONF_QUIET_MAX_FLOW,
+    CONF_RESTART_CONFIRM_TIMEOUT,
+    CONF_SAFETY_WHEN_DISABLED,
     CONF_SELECT_MAPPING,
     CONF_SOURCE_DEVICE,
     CONF_SOURCE_ENTITY,
@@ -135,6 +142,7 @@ from .engine.safety import (
     invalid_regex as is_invalid_regex,
     suggested_filters,
 )
+from .notifications import mobile_app_services, service_name
 from .warning_providers import detect_provider, device_entities
 
 # --- Selector building blocks -------------------------------------------------
@@ -184,7 +192,16 @@ STEP_ACTUATOR: Final = "actuator"
 STEP_INPUTS: Final = "inputs"
 STEP_CONTROL: Final = "control"
 STEP_BOOSTS: Final = "boosts"
-OPTIONS_MENU: Final = [STEP_ACTUATOR, STEP_INPUTS, STEP_CONTROL, STEP_BOOSTS]
+STEP_SAFETY: Final = "safety"
+STEP_NOTIFICATIONS: Final = "notifications"
+OPTIONS_MENU: Final = [
+    STEP_ACTUATOR,
+    STEP_INPUTS,
+    STEP_CONTROL,
+    STEP_BOOSTS,
+    STEP_SAFETY,
+    STEP_NOTIFICATIONS,
+]
 
 SECTION_OFF: Final = "off"
 SECTION_RANGE: Final = "range"
@@ -227,8 +244,18 @@ DURATION_KEYS: Final = frozenset(
         CONF_PROBLEM_DELAY,
         CONF_BOOST_DEFAULT_DURATION,
         CONF_BOOST_MAX_DURATION,
+        CONF_RESTART_CONFIRM_TIMEOUT,
+        CONF_PAUSE_REMINDER_AFTER,
+        CONF_OFF_NOTICE_AFTER,
     }
 )
+
+#: Integration page with "Add warning source" (description of the step `safety`).
+INTEGRATION_URL: Final = f"/config/integrations/integration/{DOMAIN}"
+
+#: Shortest reminder threshold in seconds (`pause_reminder_after`,
+#: `off_notice_after`).
+MIN_REMINDER_AFTER: Final = 60
 
 
 def _number_selector(
@@ -583,6 +610,20 @@ def _validate_boosts(values: Mapping[str, Any]) -> dict[str, str]:
     return {}
 
 
+def _validate_notifications(values: Mapping[str, Any]) -> dict[str, str]:
+    """Validate the `notifications` step: reminders need at least one minute."""
+    return {
+        key: "reminder_too_short"
+        for key in (CONF_PAUSE_REMINDER_AFTER, CONF_OFF_NOTICE_AFTER)
+        if values[key] < MIN_REMINDER_AFTER
+    }
+
+
+def _no_validation(_values: Mapping[str, Any]) -> dict[str, str]:
+    """Accept every input (the selectors validate the fields)."""
+    return {}
+
+
 # --- Form helpers ---------------------------------------------------------------
 
 
@@ -911,6 +952,40 @@ def _boosts_options_schema(max_flow: float) -> vol.Schema:
     )
 
 
+SAFETY_OPTIONS_SCHEMA: Final = vol.Schema(
+    {
+        vol.Required(CONF_RESTART_CONFIRM_TIMEOUT): DURATION_SELECTOR,
+        vol.Required(CONF_SAFETY_WHEN_DISABLED): BOOLEAN_SELECTOR,
+    }
+)
+
+
+def _notifications_options_schema(services: list[str]) -> vol.Schema:
+    """Return the schema of the options step `notifications`.
+
+    ``services`` are the ``notify.mobile_app_*`` services when the step opens.
+    """
+    return vol.Schema(
+        {
+            vol.Optional(CONF_NOTIFY_SERVICES, default=list): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        selector.SelectOptionDict(value=service, label=service)
+                        for service in services
+                    ],
+                    multiple=True,
+                    mode=selector.SelectSelectorMode.LIST,
+                )
+            ),
+            vol.Required(CONF_NOTIFY_SAFETY): BOOLEAN_SELECTOR,
+            vol.Required(CONF_NOTIFY_REMINDERS): BOOLEAN_SELECTOR,
+            vol.Required(CONF_NOTIFY_PROBLEMS): BOOLEAN_SELECTOR,
+            vol.Required(CONF_PAUSE_REMINDER_AFTER): DURATION_SELECTOR,
+            vol.Required(CONF_OFF_NOTICE_AFTER): DURATION_SELECTOR,
+        }
+    )
+
+
 #: Options named in the max-flow hint of the options step `actuator`.
 MAX_FLOW_HINT_KEYS: Final = (
     CONF_MAX_FLOW,
@@ -1026,19 +1101,62 @@ class BetterHomeVentilationOptionsFlow(OptionsFlow):
             STEP_BOOSTS, schema, user_input, _validate_boosts
         )
 
+    async def async_step_safety(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Change the restart confirmation and the safety while disabled."""
+        return await self._async_options_form(
+            STEP_SAFETY,
+            SAFETY_OPTIONS_SCHEMA,
+            user_input,
+            _no_validation,
+            description_placeholders={"integration_url": INTEGRATION_URL},
+        )
+
+    async def async_step_notifications(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Choose the phones and which notifications they get.
+
+        The list shows the ``notify.mobile_app_*`` services that exist now;
+        stored services that no longer exist are not pre-selected, so saving
+        removes them (repair issue ``missing_notify_service``).
+        """
+        services = mobile_app_services(self.hass)
+        options = self.config_entry.options
+        stored = [
+            service_name(str(service))
+            for service in options.get(CONF_NOTIFY_SERVICES) or []
+        ]
+        return await self._async_options_form(
+            STEP_NOTIFICATIONS,
+            _notifications_options_schema(services),
+            user_input,
+            _validate_notifications,
+            options={
+                **options,
+                CONF_NOTIFY_SERVICES: [s for s in stored if s in services],
+            },
+        )
+
     async def _async_options_form(
         self,
         step_id: str,
         schema: vol.Schema,
         user_input: dict[str, Any] | None,
         validate: Callable[[Mapping[str, Any]], dict[str, str]],
+        *,
+        options: Mapping[str, Any] | None = None,
+        description_placeholders: Mapping[str, str] | None = None,
     ) -> ConfigFlowResult:
         """Show a one-form options step and save it when the input is valid.
 
         ``validate`` gets the stored options merged with the flattened input
-        and returns errors per field (or ``base``).
+        and returns errors per field (or ``base``). ``options`` replaces the
+        stored options as the base of the form (pre-filled values).
         """
-        options = self.config_entry.options
+        if options is None:
+            options = self.config_entry.options
         errors: dict[str, str] = {}
         if user_input is not None:
             merged = _merge_options(options, schema, user_input)
@@ -1053,6 +1171,7 @@ class BetterHomeVentilationOptionsFlow(OptionsFlow):
             step_id=step_id,
             data_schema=self.add_suggested_values_to_schema(schema, suggested),
             errors=errors,
+            description_placeholders=description_placeholders,
         )
 
     def _actuator_in_use(self, actuator: str) -> bool:

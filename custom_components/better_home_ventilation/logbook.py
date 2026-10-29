@@ -29,17 +29,10 @@ from homeassistant.util import dt as dt_util
 from .const import DOMAIN, EVENT_MODE_CHANGED
 from .engine.models import Mode, Trigger
 from .entity import unique_id
+from .notifications import format_time
 
 _COMMON = f"component.{DOMAIN}.common."
 _MODE_STATE = f"component.{DOMAIN}.entity.sensor.mode.state."
-
-
-def _format_time(ends_at: datetime, fired: datetime | None) -> str:
-    """Return ``HH:MM``, with the date if it is not the day of the event."""
-    local = dt_util.as_local(ends_at)
-    if fired is not None and dt_util.as_local(fired).date() != local.date():
-        return local.strftime("%Y-%m-%d %H:%M")
-    return local.strftime("%H:%M")
 
 
 @callback
@@ -80,7 +73,7 @@ def describe_mode_change(
     if ends_at := data.get("ends_at"):
         parsed = dt_util.parse_datetime(str(ends_at))
         if parsed is not None:
-            details.append(text("logbook_until", time=_format_time(parsed, fired)))
+            details.append(text("logbook_until", time=format_time(parsed, fired)))
     key = "logbook_back_to" if to_mode == Mode.AUTOMATIC else "logbook_switched_to"
     return text(key, mode=mode, details=", ".join(details))
 

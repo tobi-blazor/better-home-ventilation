@@ -137,29 +137,38 @@ Independently of intents, all buttons and switches can be exposed to Assist like
 
 ## Notifications
 
-Sent via the configured `notify.mobile_app_*` services (`notify.<service>` with `message`, `title`, `data`). Without configured services: `persistent_notification.create` (no actions).
+Sent via the configured `notify.mobile_app_*` services (`notify.<service>` with `message`, `title`, `data`). Without configured services: a persistent notification (`persistent_notification.async_create`, the function behind the `persistent_notification.create` action; no actions), with the tag as notification id.
 
 | Kind | Title / message (en; de in translations) | Actions | Tag |
 |---|---|---|---|
-| safety | "Ventilation off: <headline>" / "<recommended actions, otherwise description; HTML stripped, max. 300 chars> (<sender>)". Without details: "Ventilation off: <source name>" | `KEEP_VENTILATING` → `override_safety()`, `OK` → nothing | `bhv_<entry8>_safety` |
+| safety | "Ventilation off: <headline>" / "<recommended actions, otherwise description; HTML stripped, max. 300 chars> (<sender>)". Without details: "Ventilation off: <source name>" / "<source name> reports a warning. The ventilation was switched off." | `KEEP_VENTILATING` → `override_safety()`, `OK` → nothing | `bhv_<entry8>_safety` |
 | restart | "Warning lifted" / "Restart ventilation? Restarts automatically at <time>." | `RESTART` → `resume()`, `KEEP_OFF` → `keep_off()` | `bhv_<entry8>_safety` (replaces) |
-| restarted | "Ventilation restarted" | – | `bhv_<entry8>_safety` |
+| restarted | "Ventilation restarted" / "The warning has ended; the ventilation runs again." | – | `bhv_<entry8>_safety` |
 | reminder | "Ventilation off since <time>" / "Moisture protection is inactive." | `RESUME` → `resume()` | `bhv_<entry8>_reminder` |
-| problem | "Ventilation problem" / problem text | – | `bhv_<entry8>_problem_<key>` |
+| problem | "Ventilation problem" / problem text (`common.notify_problem_<key>`, with the friendly names of the problem's entities) | – | `bhv_<entry8>_problem_<key>` |
 
-`<entry8>` = first 8 characters of the entry id. Action ids are `BHV_<entry8>_<ACTION>`.
+`<entry8>` = first 8 characters of the entry id. Action ids are `BHV_<entry8>_<ACTION>`. `<time>` is `HH:MM` in local time, with the date if it is not today.
 
-- The integration listens to `mobile_app_notification_action` and maps the action id to the entry and command (`source: notification`).
-- When the reason disappears (warning overridden, problem resolved), the notification is cleared with `message: clear_notification` and the tag.
-- Safety notifications use `data.push.interruption-level: time-sensitive` (iOS) and `data.priority: high`, `data.ttl: 0` (Android).
+- The integration listens to `mobile_app_notification_action` and maps the action id to the entry and command (`source: notification`). Action ids of other entries and unknown actions are ignored; a command the engine rejects (e.g. "Keep ventilating" after the warning was already lifted) is ignored as well (logged at debug level).
+- When the reason disappears (warning overridden, problem resolved), the notification is cleared with `message: clear_notification` and the tag; a persistent notification with the tag is dismissed.
+- Safety notifications use `data.push.interruption-level: time-sensitive` (iOS) and `data.priority: high`, `data.ttl: 0` (Android), the keys of the mobile_app timer notifications (`mobile_app/timers.py`, HA 2026.10.1).
 - Texts are in `strings.json` under `common` (e.g. `common.notify_safety_title`, with placeholders like `{headline}`). hassfest accepts a `common` category for integrations (`script/hassfest/translations.py`, HA `main` 2026-10-13). They are loaded with `helpers.translation.async_get_translations(hass, hass.config.language, "common", {DOMAIN})`, fallback `en` (works for custom integrations, [Q7](README.md#open-questions)).
+
+Details (decided 2026-10-29 for M9):
+
+- **Options:** the `notify_*` options switch the kinds: `notify_safety` covers safety, restart and restarted, `notify_reminders` the reminder, `notify_problems` the problem notifications. A clear is sent only for an enabled kind. The priority data is sent with safety and restart (the two that ask for an answer), not with restarted.
+- **Targets:** every configured service that exists gets the notification. If services are configured but none of them exists, the persistent notification is used, so a safety shutdown is never silent.
+- **Problems:** one notification per problem key, sent when a problem of the key first persists longer than `problem_delay`, not repeated while it persists, cleared when no problem of the key is left. Problems are decisions of the engine; the glue sends them after each evaluation.
+- **Never blocking:** each notification runs in its own task after the previous one (so a clear never overtakes its notification); each service call has a timeout of 10 s; a failing service is logged once (warning) until it works again (info).
+- SPEC-GAP: which problem notifications were sent is not persisted. After a restart a problem resolved while Home Assistant was down leaves its notification on the phone, and a problem that persists is notified again after `problem_delay`.
+- SPEC-GAP: two entries whose ids share the first 8 characters (entry ids are ULIDs whose first 8 characters are a timestamp of about 0.25 s resolution) both react to the same action id.
 
 ## Repairs
 
 | Issue id | When | Fix |
 |---|---|---|
 | `missing_entity_<entity_id>` | a configured entity is not in the state machine and not in the entity registry 5 min after startup | text points to the options flow |
-| `missing_notify_service_<service>` | a configured notify service no longer exists | text points to the options step `notifications` |
+| `missing_notify_service_<service>` | a configured notify service no longer exists (checked when the controller starts and whenever a `notify` service is registered or removed); one issue per service, listing every loaded entry that misses it, removed when the service exists again or no loaded entry uses it; also the problem `missing_notify_service` (implemented in M9) | text points to the options step `notifications` |
 | `state_reset` | the store is corrupt or from an unknown version | informational, dismissable |
 
 ## Diagnostics

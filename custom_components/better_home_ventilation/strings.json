@@ -83,6 +83,7 @@
       "off_entity_is_actuator": "The off actuator must be a different entity than the actuator.",
       "off_entity_not_found": "The off actuator entity does not exist.",
       "quiet_range": "The quiet max flow must be between the minimum flow and the max flow.",
+      "reminder_too_short": "A reminder needs at least 1 minute.",
       "select_mapping": "Enter a flow for at least two options, each with a different flow.",
       "select_options": "The select entity needs at least two options.",
       "sensor_not_found": "At least one of the selected sensors does not exist."
@@ -95,13 +96,17 @@
           "actuator": "Actuator",
           "inputs": "Inputs",
           "control": "Control",
-          "boosts": "Boosts"
+          "boosts": "Boosts",
+          "safety": "Safety",
+          "notifications": "Notifications"
         },
         "menu_option_descriptions": {
           "actuator": "Actuator entity, max flow, off actuator and the native range.",
           "inputs": "Room CO₂ and humidity sensors and presence entities.",
           "control": "CO₂ and humidity ramps, flows, quiet and away limits and how calmly the unit runs.",
-          "boosts": "Default duration and level of a manual boost."
+          "boosts": "Default duration and level of a manual boost.",
+          "safety": "Restart confirmation after a warning and safety while control is switched off.",
+          "notifications": "Phones, which notifications they get and when reminders are sent."
         }
       },
       "actuator": {
@@ -312,6 +317,38 @@
               "boost_max_duration": "Extending a boost never makes it last longer than this from now."
             }
           }
+        }
+      },
+      "safety": {
+        "title": "Safety",
+        "description": "Warning sources are added as entries of their own: on the [integration page]({integration_url}), choose **Add warning source**. These settings apply to all of them.",
+        "data": {
+          "restart_confirm_timeout": "Restart confirmation timeout",
+          "safety_when_disabled": "Safety while control is off"
+        },
+        "data_description": {
+          "restart_confirm_timeout": "When the last warning ends, the unit stays off and asks on the phones whether to restart. Without an answer it restarts after this time. 0 restarts at once.",
+          "safety_when_disabled": "Also switch the unit off for a warning while the Control switch is off, and back to its previous state after the restart. When off, warnings are only shown on the entities."
+        }
+      },
+      "notifications": {
+        "title": "Notifications",
+        "description": "Notifications go to the selected Home Assistant Companion apps, with actions such as Keep ventilating. Without a selected phone they appear as persistent notifications in Home Assistant, without actions.",
+        "data": {
+          "notify_services": "Phones",
+          "notify_safety": "Safety notifications",
+          "notify_reminders": "Reminders",
+          "notify_problems": "Problem notifications",
+          "pause_reminder_after": "Reminder for an indefinite pause after",
+          "off_notice_after": "Reminder for other off states after"
+        },
+        "data_description": {
+          "notify_services": "The notify.mobile_app services of the Companion apps that get the notifications. A service that no longer exists is not selected here and is removed on saving.",
+          "notify_safety": "Safety shutdown with Keep ventilating, the restart question with Restart now and Keep off, and the restart notice.",
+          "notify_reminders": "Reminder with Resume while the unit stays off (moisture protection is inactive), repeated every 24 hours.",
+          "notify_problems": "A notification when a problem persists longer than the problem delay (Control settings, Advanced); cleared when it is resolved.",
+          "pause_reminder_after": "First reminder after a pause until resumed has lasted this long (at least 1 minute).",
+          "off_notice_after": "First reminder after a timed pause or a safety shutdown has lasted this long (at least 1 minute)."
         }
       }
     }
@@ -697,6 +734,35 @@
     "provider_dwd_weather_warnings": "DWD Weather Warnings (indexed attributes)",
     "provider_environment_canada": "Environment Canada (alert titles)",
     "provider_attributes": "generic attributes (headline, description, severity)",
-    "provider_none": "none (on/off only, filters do not apply)"
+    "provider_none": "none (on/off only, filters do not apply)",
+    "notify_safety_title": "Ventilation off: {headline}",
+    "notify_safety_message_no_details": "{source} reports a warning. The ventilation was switched off.",
+    "notify_restart_title": "Warning lifted",
+    "notify_restart_message": "Restart ventilation? Restarts automatically at {time}.",
+    "notify_restarted_title": "Ventilation restarted",
+    "notify_restarted_message": "The warning has ended; the ventilation runs again.",
+    "notify_reminder_title": "Ventilation off since {time}",
+    "notify_reminder_message": "Moisture protection is inactive.",
+    "notify_problem_title": "Ventilation problem",
+    "notify_problem_actuator_unavailable": "{entities} is unavailable; nothing can be written to the unit.",
+    "notify_problem_not_ready": "The readiness condition on {entities} is not met; nothing is written to the unit.",
+    "notify_problem_write_failed": "Writing to the unit failed.",
+    "notify_problem_write_mismatch": "The unit did not take the written value.",
+    "notify_problem_inputs_invalid": "These inputs are invalid and ignored: {entities}.",
+    "notify_problem_no_valid_co2": "No CO₂ sensor has a valid value; the unit runs at the fallback flow.",
+    "notify_problem_warning_source_unavailable": "The warning source {entities} is unavailable and cannot shut down the unit.",
+    "notify_problem_warning_details_failed": "The details of the warning on {entities} could not be fetched; the warning counts without them.",
+    "notify_problem_missing_notify_service": "A configured notify service no longer exists. Check the notification settings.",
+    "notify_action_keep_ventilating": "Keep ventilating",
+    "notify_action_ok": "OK",
+    "notify_action_restart": "Restart now",
+    "notify_action_keep_off": "Keep off",
+    "notify_action_resume": "Resume"
+  },
+  "issues": {
+    "missing_notify_service": {
+      "title": "Notify service {service} not found",
+      "description": "{entries} sends notifications to {service}, which no longer exists (for example because the Companion app was removed or the phone renamed). Open the settings of the entry, choose **Notifications** and select the current phones; saving removes the missing service. Until then the other phones get the notifications, or a persistent notification is created if none is left."
+    }
   }
 }

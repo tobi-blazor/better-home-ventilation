@@ -1,7 +1,8 @@
 """Flow translations (C4c): every form field, section and menu option is translated.
 
-The test walks every 0.1 flow step, takes the schema that is actually shown and
-checks `strings.json`, `translations/en.json` and `translations/de.json`.
+The test walks every flow step, takes the schema that is actually shown and
+checks `strings.json`, `translations/en.json` and `translations/de.json`. The
+notification texts (`common`) and the repair issues are checked as well.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import selector
 import pytest
+from pytest_homeassistant_custom_component.common import async_mock_service
 
 from custom_components.better_home_ventilation.const import (
     CONF_ACTUATOR,
@@ -27,6 +29,8 @@ from custom_components.better_home_ventilation.const import (
     SUBENTRY_READINESS_CONDITION,
     SUBENTRY_WARNING_SOURCE,
 )
+from custom_components.better_home_ventilation.engine.models import ProblemKey
+from custom_components.better_home_ventilation.notifications import Action
 
 from .common import CONTROL_MODE, NUMBER_FLOW, NUMBER_RAW, mock_entry, schema_fields
 
@@ -63,10 +67,12 @@ OPTIONS_ERRORS = {
     "off_entity_is_actuator",
     "off_entity_not_found",
     "quiet_range",
+    "reminder_too_short",
     "select_mapping",
     "select_options",
     "sensor_not_found",
 }
+OPTIONS_STEPS = ("actuator", "inputs", "control", "boosts", "safety", "notifications")
 
 
 def _load(name: str) -> dict[str, Any]:
@@ -125,7 +131,7 @@ async def _walk_flows(hass: HomeAssistant) -> list[tuple[str, Any]]:
     entry = mock_entry(actuator=NUMBER_FLOW)
     entry.add_to_hass(hass)
     options = hass.config_entries.options
-    for step in ("actuator", "inputs", "control", "boosts"):
+    for step in OPTIONS_STEPS:
         result = await options.async_init(entry.entry_id)
         result = await options.async_configure(
             result["flow_id"], {"next_step_id": step}
@@ -212,6 +218,7 @@ async def test_flows_are_translated(hass: HomeAssistant, language: str) -> None:
     """Every field has data and data_description, every section a name (C4c)."""
     hass.states.async_set("binary_sensor.unit_ready", "on")
     hass.states.async_set("number.unit_register", "1")
+    async_mock_service(hass, "notify", "mobile_app_example_phone")
     strings = _load(language)
     steps = {
         "config": strings["config"]["step"],
@@ -228,6 +235,8 @@ async def test_flows_are_translated(hass: HomeAssistant, language: str) -> None:
         "inputs",
         "control",
         "boosts",
+        "safety",
+        "notifications",
         "actuator_mapping",
         "state",
         "reconfigure",
@@ -244,7 +253,7 @@ def test_menu_errors_and_aborts_are_translated(language: str) -> None:
     strings = _load(language)
     menu = strings["options"]["step"]["init"]
     assert menu["title"]
-    for option in ("actuator", "inputs", "control", "boosts"):
+    for option in OPTIONS_STEPS:
         assert menu["menu_options"][option]
         assert menu["menu_option_descriptions"][option]
     assert set(strings["config"]["error"]) == CONFIG_ERRORS
@@ -277,6 +286,31 @@ def test_menu_errors_and_aborts_are_translated(language: str) -> None:
         "none",
     ):
         assert strings["common"][f"provider_{provider}"]
+
+
+@pytest.mark.parametrize("language", list(FILES))
+def test_notification_texts_and_issues_are_translated(language: str) -> None:
+    """Every notification kind, problem, action and repair issue has a text."""
+    common = _load(language)["common"]
+    for kind in ("safety", "restart", "restarted", "reminder", "problem"):
+        assert common[f"notify_{kind}_title"]
+    for key in (
+        "notify_safety_message_no_details",
+        "notify_restart_message",
+        "notify_restarted_message",
+        "notify_reminder_message",
+    ):
+        assert common[key]
+    for problem in ProblemKey:
+        assert common[f"notify_problem_{problem}"], problem
+    for action in Action:
+        assert common[f"notify_action_{action.lower()}"], action
+    assert set(PLACEHOLDER.findall(common["notify_safety_title"])) == {"headline"}
+    assert set(PLACEHOLDER.findall(common["notify_restart_message"])) == {"time"}
+    assert set(PLACEHOLDER.findall(common["notify_reminder_title"])) == {"time"}
+    issue = _load(language)["issues"]["missing_notify_service"]
+    assert issue["title"]
+    assert set(PLACEHOLDER.findall(issue["description"])) == {"service", "entries"}
 
 
 @pytest.mark.parametrize("language", list(FILES))
