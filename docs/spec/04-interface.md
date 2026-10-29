@@ -181,3 +181,9 @@ Details (decided 2026-10-29 for M10):
 ## Diagnostics
 
 `diagnostics.py` returns: `entry.options`, all subentries, the persisted controller state, current states of all configured entities (state, `last_reported`), the last 100 decisions, active problems. No redaction needed (no secrets), but person/device_tracker states are redacted to `home`/`not_home`.
+
+Details (decided 2026-10-29 for M10):
+
+- **Layout:** `entry` (title, version, minor version, options), `subentries` (id, type, title, unique id, data), `controller` (started, `state_reset`, missing entities, number of missing notify services), `stored_state` (the persisted part of the controller state, as in the store), `entities` (per entity read by the controller, warning source devices expanded: `state`, `last_changed`, `last_reported`; `None` for an entity without state), `problems` and `warnings` (active warnings, overridden incident keys, `awaiting_restart`) of the last decision, `decisions` (oldest first; dataclasses as dicts, datetimes ISO 8601, durations in seconds, sets as sorted lists).
+- **Redaction:** `async_redact_data` with `notify_services`: the service names carry phone (and often person) names. Entity attributes are not included at all (person and device_tracker attributes hold coordinates). Person/device_tracker states other than `home`, `unavailable` and `unknown` become `not_home` (zone names are locations).
+- The download is also an input of the replay tool ([06-testing.md](06-testing.md#replay)).
