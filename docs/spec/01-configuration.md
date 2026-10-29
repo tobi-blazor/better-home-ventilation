@@ -27,7 +27,7 @@ The design follows the Home Assistant developer documentation and the patterns o
 
 ## Config flow
 
-`ConfigFlow`, `VERSION = 1`, `MINOR_VERSION = 1`. Three short steps, the second only when needed. The entry is created with `data={}`, `options={…all fields and defaults…}`, `title=name`. The name is stored only as the title, not in `options`.
+`ConfigFlow`, `VERSION = 1`, `MINOR_VERSION = 2` (1 in 0.1; the migration 1.1 → 1.2 adds the defaults of the options steps `safety` and `notifications`, `engine/options.py` `migrate_options`). Three short steps, the second only when needed. The entry is created with `data={}`, `options={…all fields and defaults…}`, `title=name`. The name is stored only as the title, not in `options`.
 
 ### Step `user`
 

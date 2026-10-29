@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - The profile select shows a short description with each profile (e.g. "Quiet – limited all day"), so the choice is clear in the dropdown.
+- Existing entries and their stored state are migrated for 0.2: the defaults of the new safety and notification settings are added (restart confirmation after 30 minutes, safety also while control is off, reminders after 8 hours of indefinite pause and after 24 hours of any other off state). Nothing changes in operation until warning sources and notifications are available.
 
 ## [0.1.0] - 2026-10-21
 

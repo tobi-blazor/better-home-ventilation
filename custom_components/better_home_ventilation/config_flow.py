@@ -82,6 +82,7 @@ from .const import (
     CONF_NIGHT_ENABLED,
     CONF_NIGHT_END,
     CONF_NIGHT_START,
+    CONF_NOTIFY_SERVICES,
     CONF_OFF_ENTITY,
     CONF_OFF_STATE,
     CONF_PRESENCE_ENTITIES,
@@ -97,6 +98,7 @@ from .const import (
     OFF_STATE_OFF,
     OFF_STATE_ON,
     OFF_STATES,
+    OPTIONS_MINOR_VERSION,
     SUBENTRY_READINESS_CONDITION,
     defaults_for_max_flow,
 )
@@ -644,7 +646,9 @@ class BetterHomeVentilationConfigFlow(ConfigFlow, domain=DOMAIN):
     """Create a Better Home Ventilation entry: `user` → `actuator` → `inputs`."""
 
     VERSION = 1
-    MINOR_VERSION = 1
+    #: 2 since phase 0.2 (options `safety` and `notifications`, migrated in
+    #: `async_migrate_entry`).
+    MINOR_VERSION = OPTIONS_MINOR_VERSION
 
     def __init__(self) -> None:
         """Initialize the flow."""
@@ -737,6 +741,7 @@ class BetterHomeVentilationConfigFlow(ConfigFlow, domain=DOMAIN):
                     CONF_CO2_SENSORS: user_input[CONF_CO2_SENSORS],
                     CONF_HUMIDITY_SENSORS: user_input[CONF_HUMIDITY_SENSORS],
                     CONF_PRESENCE_ENTITIES: [],
+                    CONF_NOTIFY_SERVICES: [],
                 }
                 return self.async_create_entry(
                     title=self._title, data={}, options=options
