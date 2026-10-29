@@ -195,19 +195,21 @@ Done when: a template `binary_sensor` and a NINA entity work as sources in a dev
 
 Goal: actionable notifications for safety, restart, reminders and problems. Spec: [04-interface.md](spec/04-interface.md#notifications).
 
-- [ ] Options steps `safety` and `notifications` (list of `notify.mobile_app_*` services), translations
-- [ ] `notify.py`: send with actions, tags and priority data, clear with `clear_notification`, `persistent_notification` fallback
-- [ ] Listener for `mobile_app_notification_action`, mapping action id → entry and command (`source: notification`)
-- [ ] Texts in the `common` translation category (loading confirmed, Q7)
-- [ ] Problem notifications after `problem_delay`, reminder notifications with "Resume"
-- [ ] Tests C10, C11
+- [x] Options steps `safety` and `notifications` (list of `notify.mobile_app_*` services), translations
+- [x] `notifications.py` (not `notify.py`, the module name of a notify platform): send with actions, tags and priority data, clear with `clear_notification`, `persistent_notification` fallback
+- [x] Listener for `mobile_app_notification_action`, mapping action id → entry and command (`source: notification`)
+- [x] Texts in the `common` translation category (loading confirmed, Q7)
+- [x] Problem notifications after `problem_delay`, reminder notifications with "Resume"
+- [x] Repair issue and problem `missing_notify_service` (the other repairs stay in M10)
+- [x] Tests C10, C11
+- [ ] On a phone: "Keep ventilating", "Restart now", "Keep off" and "Resume" (real installation)
 
 Done when: on a phone, "Keep ventilating", "Restart now", "Keep off" and "Resume" trigger the right commands.
 
 ## M10 Diagnostics, repairs, voice, replay, release 0.2.0
 
 - [ ] `diagnostics.py` with decision log, presence redacted – BHV-54, C13
-- [ ] Repair issues `missing_entity`, `missing_notify_service`, `state_reset` – BHV-55, C4a (removal part), C14
+- [ ] Repair issues `missing_entity`, `state_reset` – BHV-55, C4a (removal part), C14 (`missing_notify_service` done in M9)
 - [ ] `intent.py`: four intents with `description` and `slot_schema`; verify Q2 and Q3; `examples/custom_sentences/{en,de}/` – BHV-22 (voice), C16
 - [ ] `tools/replay.py` (standard library only), CSV input, report output – BHV-56
 - [ ] Replay a winter month of recorded data, check reason shares and writes per day

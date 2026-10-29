@@ -36,7 +36,9 @@ custom_components/better_home_ventilation/
   config_flow.py       ConfigFlow, OptionsFlow (menu + sections), ReadinessConditionFlow, WarningSourceFlow (subentries)
   controller.py        HA glue: subscriptions, debounce, lock, timers, snapshot, effect execution, store
   actuator.py          adapters number/fan/select + off actuator: native <-> flow, service calls, verification
-  notify.py            sending/clearing notifications, action listener
+  notifications.py     sending/clearing notifications, action listener, missing notify service issue
+                       (not `notify.py`: that module name is an integration's notify platform,
+                       `notify/legacy.py` imports `<integration>.notify` for a configured platform)
   warning_providers/   details providers (HA glue): __init__.py (registry), nina.py, dwd.py, environment_canada.py, attributes.py
   entity.py            BetterVentilationEntity base (device info, listener registration)
   sensor.py  binary_sensor.py  button.py  select.py  number.py  switch.py
