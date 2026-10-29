@@ -962,3 +962,41 @@ async def test_bhv50_expired_boost_ends_while_offline(
     assert "ended while Home Assistant was offline" in caplog.text
     assert events[-1].data["trigger"] == "timeout_while_offline"
     assert events[-1].data["from_mode"] == "boost"
+
+
+@pytest.mark.usefixtures("entities")
+async def test_bhv50_store_migration_from_1_1(
+    hass: HomeAssistant, unit: MockUnit, hass_storage: dict[str, Any]
+) -> None:
+    """A 0.1 store (1.1) is migrated: the pause keeps running, `off_since` = start."""
+    entry = MockConfigEntry(
+        domain=DOMAIN, title="Ventilation", data={}, options=entry_options()
+    )
+    key = f"{DOMAIN}.{entry.entry_id}"
+    started = "2026-10-14T18:00:00+00:00"
+    hass_storage[key] = {
+        "key": key,
+        "version": 1,
+        "minor_version": 1,
+        "data": {
+            "manual": {
+                "type": "pause",
+                "until": None,
+                "started": started,
+                "source": "button",
+            },
+            "last_mode": "off",
+        },
+    }
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    controller = controller_of(entry)
+    assert not controller.state_reset
+    assert isinstance(controller.state.manual, Pause)
+    assert controller.state.off_since is not None
+    assert controller.state.off_since.isoformat() == started
+    assert hass_storage[key]["minor_version"] == 2
+    assert hass_storage[key]["data"]["off_since"] == started
+    assert hass_storage[key]["data"]["safety"]["active"] == {}

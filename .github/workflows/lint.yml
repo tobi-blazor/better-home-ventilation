@@ -38,7 +38,7 @@ jobs:
       - name: mypy (integration and component tests)
         run: mypy
 
-      - name: mypy (engine tests, engine as top-level package)
-        run: mypy tests/engine
+      - name: mypy (engine tests and replay tool, engine as top-level package)
+        run: mypy tests/engine tools tests/tools
         env:
           MYPYPATH: custom_components/better_home_ventilation

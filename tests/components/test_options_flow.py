@@ -10,7 +10,10 @@ from homeassistant.config_entries import ConfigEntryState, ConfigFlowResult
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_mock_service,
+)
 
 from custom_components.better_home_ventilation.const import (
     ACTUATOR_UNIT_FLOW,
@@ -38,11 +41,19 @@ from custom_components.better_home_ventilation.const import (
     CONF_MIN_WRITE_INTERVAL,
     CONF_NIGHT_END,
     CONF_NIGHT_START,
+    CONF_NOTIFY_PROBLEMS,
+    CONF_NOTIFY_REMINDERS,
+    CONF_NOTIFY_SAFETY,
+    CONF_NOTIFY_SERVICES,
     CONF_OFF_ENTITY,
+    CONF_OFF_NOTICE_AFTER,
     CONF_OFF_STATE,
+    CONF_PAUSE_REMINDER_AFTER,
     CONF_PRESENCE_ENTITIES,
     CONF_PROBLEM_DELAY,
     CONF_QUIET_MAX_FLOW,
+    CONF_RESTART_CONFIRM_TIMEOUT,
+    CONF_SAFETY_WHEN_DISABLED,
     CONF_SELECT_MAPPING,
     CONF_STALE_TIMEOUT,
     DOMAIN,
@@ -139,11 +150,18 @@ async def _assert_saved_and_reloaded(
 
 
 async def test_menu(hass: HomeAssistant, entry: MockConfigEntry) -> None:
-    """The options flow starts with a menu of the 0.1 steps."""
+    """The options flow starts with a menu of all steps (safety from 0.2)."""
     result = await hass.config_entries.options.async_init(entry.entry_id)
 
     assert result["type"] is FlowResultType.MENU
-    assert result["menu_options"] == ["actuator", "inputs", "control", "boosts"]
+    assert result["menu_options"] == [
+        "actuator",
+        "inputs",
+        "control",
+        "boosts",
+        "safety",
+        "notifications",
+    ]
 
 
 # --- actuator ---------------------------------------------------------------------
@@ -573,6 +591,126 @@ async def test_boosts_level_range(hass: HomeAssistant, entry: MockConfigEntry) -
 
     assert result["errors"] == {"manual": "level_range"}
     assert suggested(result["data_schema"], CONF_BOOST_DEFAULT_LEVEL) == 50
+
+
+# --- safety and notifications (0.2) ------------------------------------------------
+
+
+async def test_safety_save(
+    hass: HomeAssistant, entry: MockConfigEntry, reload_spy: MagicMock
+) -> None:
+    """The safety step shows the stored values and links to the integration."""
+    result = await _open(hass, entry, "safety")
+    schema = result["data_schema"]
+    assert suggested(schema, CONF_RESTART_CONFIRM_TIMEOUT) == {
+        "hours": 0,
+        "minutes": 30,
+        "seconds": 0,
+    }
+    assert suggested(schema, CONF_SAFETY_WHEN_DISABLED) is True
+    assert result["description_placeholders"] == {
+        "integration_url": f"/config/integrations/integration/{DOMAIN}"
+    }
+
+    result = await _submit(
+        hass,
+        result,
+        **{
+            CONF_RESTART_CONFIRM_TIMEOUT: {"minutes": 0},
+            CONF_SAFETY_WHEN_DISABLED: False,
+        },
+    )
+
+    await _assert_saved_and_reloaded(hass, entry, result, reload_spy)
+    assert entry.options[CONF_RESTART_CONFIRM_TIMEOUT] == 0
+    assert entry.options[CONF_SAFETY_WHEN_DISABLED] is False
+
+
+async def test_notifications_lists_mobile_app_services(
+    hass: HomeAssistant, entry: MockConfigEntry, reload_spy: MagicMock
+) -> None:
+    """Only `notify.mobile_app_*` services; a missing stored one is dropped."""
+    for service in ("mobile_app_example_tablet", "mobile_app_example_phone", "other"):
+        async_mock_service(hass, "notify", service)
+    hass.config_entries.async_update_entry(
+        entry,
+        options={
+            **entry.options,
+            CONF_NOTIFY_SERVICES: ["mobile_app_example_phone", "mobile_app_old_phone"],
+        },
+    )
+    await hass.async_block_till_done()
+    reload_spy.reset_mock()
+    result = await _open(hass, entry, "notifications")
+    schema = result["data_schema"]
+    field = schema_fields(schema)[CONF_NOTIFY_SERVICES][2]
+    assert field.config["multiple"] is True
+    assert [option["value"] for option in field.config["options"]] == [
+        "mobile_app_example_phone",
+        "mobile_app_example_tablet",
+    ]
+    assert suggested(schema, CONF_NOTIFY_SERVICES) == ["mobile_app_example_phone"]
+    for key in (CONF_NOTIFY_SAFETY, CONF_NOTIFY_REMINDERS, CONF_NOTIFY_PROBLEMS):
+        assert suggested(schema, key) is True
+    assert suggested(schema, CONF_PAUSE_REMINDER_AFTER) == {
+        "hours": 8,
+        "minutes": 0,
+        "seconds": 0,
+    }
+
+    result = await _submit(
+        hass,
+        result,
+        **{
+            CONF_NOTIFY_SERVICES: [
+                "mobile_app_example_phone",
+                "mobile_app_example_tablet",
+            ],
+            CONF_NOTIFY_REMINDERS: False,
+            CONF_OFF_NOTICE_AFTER: {"hours": 12},
+        },
+    )
+
+    await _assert_saved_and_reloaded(hass, entry, result, reload_spy)
+    assert entry.options[CONF_NOTIFY_SERVICES] == [
+        "mobile_app_example_phone",
+        "mobile_app_example_tablet",
+    ]
+    assert entry.options[CONF_NOTIFY_REMINDERS] is False
+    assert entry.options[CONF_OFF_NOTICE_AFTER] == 12 * 3600
+    assert entry.options[CONF_PAUSE_REMINDER_AFTER] == 8 * 3600
+
+
+async def test_notifications_without_phones_and_validation(
+    hass: HomeAssistant, entry: MockConfigEntry
+) -> None:
+    """No phones: an empty list; reminders need at least one minute."""
+    result = await _open(hass, entry, "notifications")
+    field = schema_fields(result["data_schema"])[CONF_NOTIFY_SERVICES][2]
+    assert field.config["options"] == []
+
+    result = await _submit(
+        hass,
+        result,
+        **{
+            CONF_PAUSE_REMINDER_AFTER: {"seconds": 30},
+            CONF_OFF_NOTICE_AFTER: {"minutes": 0},
+        },
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {
+        CONF_PAUSE_REMINDER_AFTER: "reminder_too_short",
+        CONF_OFF_NOTICE_AFTER: "reminder_too_short",
+    }
+
+    result = await _submit(hass, result, **{CONF_PAUSE_REMINDER_AFTER: {"minutes": 1}})
+    assert result["errors"] == {CONF_OFF_NOTICE_AFTER: "reminder_too_short"}
+
+    result = await _submit(hass, result, **{CONF_OFF_NOTICE_AFTER: {"hours": 1}})
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert entry.options[CONF_NOTIFY_SERVICES] == []
+    assert entry.options[CONF_PAUSE_REMINDER_AFTER] == 60
 
 
 async def test_options_of_other_entries_are_untouched(

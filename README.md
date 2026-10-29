@@ -16,12 +16,18 @@ One integration instead of a pile of helpers, template sensors and automations: 
 - [Setup](#setup)
 - [Options](#options)
 - [Readiness conditions](#readiness-conditions)
+- [Warning sources](#warning-sources)
+- [Phone notifications](#phone-notifications)
 - [Profiles](#profiles)
 - [How the setpoint is calculated](#how-the-setpoint-is-calculated)
 - [When the setpoint is updated](#when-the-setpoint-is-updated)
 - [Entities](#entities)
 - [Actions](#actions)
 - [Events and logbook](#events-and-logbook)
+- [Voice control](#voice-control)
+- [Repair issues](#repair-issues)
+- [Diagnostics](#diagnostics)
+- [Replay of recorded history](#replay-of-recorded-history)
 - [Examples](#examples)
 - [Limitations and FAQ](#limitations-and-faq)
 - [Troubleshooting](#troubleshooting)
@@ -147,7 +153,7 @@ The entry is created with all other settings at their defaults. Presence entitie
 
 ### Changing the settings later
 
-Open the integration page: in **Settings → Devices & services → Devices**, open the controller's device (named after the entry, for example "Ventilation") and follow its link to **Better Home Ventilation**. Select **Configure** on the entry. (From **Settings → Devices & services → Helpers**, the settings of any of its entities also offer the options.) The menu **Ventilation settings** offers four steps: **Actuator**, **Inputs**, **Control** and **Boosts**. Saving a step applies it right away (the entry is reloaded; a running boost or pause continues).
+Open the integration page: in **Settings → Devices & services → Devices**, open the controller's device (named after the entry, for example "Ventilation") and follow its link to **Better Home Ventilation**. Select **Configure** on the entry. (From **Settings → Devices & services → Helpers**, the settings of any of its entities also offer the options.) The menu **Ventilation settings** offers the steps **Actuator**, **Inputs**, **Control**, **Boosts**, **Safety** and **Notifications**. Saving a step applies it right away (the entry is reloaded; a running boost or pause continues).
 
 Readiness conditions are added on the same page with **Add readiness condition** ([below](#readiness-conditions)).
 
@@ -265,6 +271,32 @@ Section **Manual boost**:
 
 The profile is not an option: it is chosen in daily use with the **Profile** entity.
 
+### Safety
+
+> **Unreleased (0.2, in development).**
+
+| Key | UI name | Default | Meaning |
+|---|---|---|---|
+| `restart_confirm_timeout` | Restart confirmation timeout | 30 min | When the last warning ends, the unit stays off and asks on the phones whether to restart ([phone notifications](#phone-notifications)). Without an answer it restarts after this time. 0 restarts at once. |
+| `safety_when_disabled` | Safety while control is off | on | Also switch the unit off for a warning while the **Control** switch is off, and back to its previous state after the restart. When off, warnings are only shown on the entities while control is off, and no notification is sent. |
+
+The warning sources themselves are added on the integration page ([below](#warning-sources)); the step's description links there.
+
+### Notifications
+
+> **Unreleased (0.2, in development).**
+
+| Key | UI name | Default | Meaning |
+|---|---|---|---|
+| `notify_services` | Phones | none | The `notify.mobile_app_*` services of the Home Assistant Companion apps that get the notifications. The list shows the services that exist when the step opens. Without a phone, notifications appear as persistent notifications in Home Assistant, without actions. |
+| `notify_safety` | Safety notifications | on | Safety shutdown with **Keep ventilating**, the restart question with **Restart now** and **Keep off**, and the restart notice. |
+| `notify_reminders` | Reminders | on | Reminder with **Resume** while the unit stays off, repeated every 24 hours. |
+| `notify_problems` | Problem notifications | on | A notification when a problem persists longer than the problem delay; cleared when it is resolved. |
+| `pause_reminder_after` | Reminder for an indefinite pause after | 8 h | First reminder after a pause until resumed has lasted this long. At least 1 minute. |
+| `off_notice_after` | Reminder for other off states after | 24 h | First reminder after a timed pause or a safety shutdown has lasted this long. At least 1 minute. |
+
+The problem delay is in **Control** (section **Advanced**), because it also sets when the problem sensor turns on.
+
 ## Readiness conditions
 
 Some units ignore the written flow unless another entity has a certain state, for example a **control mode** `select` that must be set to a "remote" or "bus control" option. A readiness condition tells the integration about it.
@@ -287,6 +319,84 @@ How it works:
 - With **Correct automatically**, the integration sets the entity back to the expected state (at most once per minute per condition), fires the event `better_home_ventilation_readiness_corrected`, and writes the flow again right after it is restored. This also happens when no flow change is due, because the unit ignores the flow until the condition is met again. If the condition is still not met after three attempts, the problem `not_ready` is reported and further attempts follow every five minutes.
 - Without automatic correction (or while the entity is unavailable), the problem `not_ready` is reported at once; the problem sensor still waits for the problem delay.
 - No correction is made while the **Control** switch is off or during the startup grace.
+
+## Warning sources
+
+> **Unreleased (0.2, in development).** Warning sources, the safety shutdown and the [phone notifications](#phone-notifications) are in the development branch.
+
+A warning source is a hazard signal that switches the ventilation off (**safety shutdown**), so that smoke or a chemical cloud outside is not pulled into the house and smoke inside is not spread through the ducts. Each source has its own trigger and filters, so a smoke detector, a NINA region and a weather warning sensor can be combined.
+
+On the integration page select **Add warning source**:
+
+| Step | Key | UI name | Default | Meaning |
+|---|---|---|---|---|
+| 1 | `source_entity` | Entity | – | A `binary_sensor`, `input_boolean` or `switch` (on = warning), a `sensor` with a warning level or count, or a `select`/`input_select` with states. |
+| 1 | `source_device` | Device | – | Instead of an entity: a device whose binary sensors are all warnings, for example a NINA region with several message slots. All its enabled binary sensors count; slots added later are picked up automatically. Exactly one of entity and device. |
+| 1 | `name` | Name | name of the entity or device | Shown on the **Safety warning** entity and in notifications. |
+| 2 | `trigger` | Trigger | numeric for a numeric sensor, else state list | Only for a `sensor`, `select` or `input_select`. **Numeric threshold**: active while the state is a number at or above the threshold. **State list**: active while the state is one of the states (case does not matter). |
+| 2 | `threshold` | Threshold | – | For a numeric threshold, for example `3` for DWD warning level 3 or `1` for one Environment Canada alert. |
+| 2 | `states` | States | – | For a state list, for example `Orange` and `Rouge` for a Météo-France weather alert. Options of a select are offered; other values can be typed. |
+| 3 | `details` | Warning details | Automatic | Where the text of a warning comes from. **Automatic** uses the detected provider (shown in the form). **Attributes** reads headline and text from the entity's attributes. **None**: every activation is one warning; keywords and severity do not apply. |
+| 3 | `headline_keywords` | Event keywords (headline) | suggestions (NINA) | Matched in the headline only, for example "Brand" or "fire". |
+| 3 | `text_keywords` | Advice keywords (whole text) | suggestions (NINA) | Matched in headline, text and recommended actions, for example "Lüftung" or "ventilation". |
+| 3 | `exclude_keywords` | Exclude keywords | suggestions (NINA) | A warning that contains one of these anywhere never counts, for example "Entwarnung", "all clear", "Probealarm". Checked first. |
+| 3 | `min_severity` | Minimum severity | No minimum | Warnings below this severity are ignored; a warning without a known severity counts as extreme. |
+
+For an on/off entity or a device there is no step 2 (the trigger is on/off). For sources without details (smoke and CO detectors, template and group helpers, `input_boolean`, `switch`) the keywords and the severity are not shown, because they would never apply.
+
+How warnings count:
+
+- `unavailable` or `unknown` never makes a source active; after the problem delay the problem `warning_source_unavailable` is reported.
+- A warning counts if it contains no exclude keyword, passes the minimum severity, and matches an event keyword in the headline **or** an advice keyword anywhere. With both include lists empty every warning that is not excluded counts. Keywords ignore case; `/…/` is a regular expression (for example `/brand(?!enburg)/`).
+- Event words such as "Brand" are reliable in the short headline but give false hits in the body (the fire brigade as sender, "Amt für Brand- und Katastrophenschutz"). Advice words such as "Lüftung" are reliable anywhere, because authorities only mention ventilation when it must be switched off.
+- A source without details, or whose details cannot be fetched within 10 seconds, **always counts** (fail-safe); a failed details call is reported as the problem `warning_details_failed`.
+- While a warning is active the mode is **Safety shutdown** (`safety_off`): the unit is switched off (off actuator, or lowest value) and nothing else is written. By default this also happens while the **Control** switch is off.
+- **Safety override** (or the action `override_safety`) keeps the ventilation running despite the current warnings. Updates of the same incident (for example "1. AKTUALISIERUNG: Großbrand …") stay overridden; a different warning switches the unit off again. Turning the switch off removes the override.
+- When the last warning ends, the unit does not restart silently: it asks on the phones and waits for the restart confirmation (**Restart now** in the notification, or **Resume**) and restarts by itself after the restart confirmation timeout (30 minutes, [Safety](#safety) options). **Keep off** leaves it off until resumed. While it waits, the setpoint attribute `awaiting_restart` is true.
+
+The suggested keywords for NINA come in German (server language `de`) and English (every other language) and are based on the standardised warning texts of the German authorities and on live NINA messages; the [specification](docs/spec/01-configuration.md#warning-sources-config-subentries) lists them with the reasons. They are only suggestions: change them in the source's **Reconfigure** dialog.
+
+### Supported integrations
+
+| Integration | Entity | Details | Typical setup |
+|---|---|---|---|
+| [NINA](https://www.home-assistant.io/integrations/nina/) | `binary_sensor` per message slot | action `nina.get_details` (Home Assistant 2026.4: the attributes) | the region **device** as source, details Automatic, the suggested keywords |
+| [DWD Weather Warnings](https://www.home-assistant.io/integrations/dwd_weather_warnings/) | `sensor` (current warning level) | attributes `warning_<i>_headline`, `_description`, `_instruction`, `_level` | numeric threshold 3 or 4; usually not needed for ventilation |
+| [Environment Canada](https://www.home-assistant.io/integrations/environment_canada/) | `sensor` per alert type (count) | attribute `alert_<i>` (title only) | numeric threshold 1 |
+| [Meteoalarm](https://www.home-assistant.io/integrations/meteoalarm/) | `binary_sensor` | generic attributes (`headline`, `description`, `severity`, `awareness_level`) | on/off, minimum severity if wanted |
+| [Météo-France](https://www.home-assistant.io/integrations/meteo_france/) | `sensor` weather alert (colour) | none | state list, for example `Orange`, `Rouge` |
+| smoke and CO detectors, template, threshold or group `binary_sensor`, `input_boolean` | on/off | none | on/off; for example a threshold helper on outdoor PM2.5 or an `input_boolean` as manual danger switch |
+
+Any other entity with a `headline`/`title`/`event` or `description`/`text`/`message` attribute works with the generic attributes provider; otherwise it counts without details.
+
+**Setting up NINA:** add the [NINA integration](https://www.home-assistant.io/integrations/nina/) for your region with enough message slots (for example 5) and without its own filters, then add a warning source and choose the NINA region **device** (not a single slot: warnings move between slots). The suggested keywords filter out weather warnings, drinking-water notices, all-clear messages and tests.
+
+**Indoor gas detectors are not a recommended source.** With gas in the house the advice is not to operate electrical equipment, to open the windows and to leave the building; switching the unit does not help and is itself switching. Indoor smoke and CO detectors are good sources (smoke must not be spread through the ducts; CO near a fireplace).
+
+## Phone notifications
+
+> **Unreleased (0.2, in development).**
+
+The integration sends notifications to the phones selected in **Notifications** ([options](#notifications)), through the `notify.mobile_app_*` actions of the [Home Assistant Companion app](https://companion.home-assistant.io/). Texts are in the server language (English and German).
+
+| Notification | When | Actions |
+|---|---|---|
+| **Ventilation off: <headline>** with the recommended actions or the description of the warning (at most 300 characters) and the sender | a warning switches the unit off ([safety shutdown](#warning-sources)), also when a new warning arrives during the shutdown. A source without details shows its name | **Keep ventilating** (the same as the **Safety override** switch), **OK** (nothing) |
+| **Warning lifted** – "Restart ventilation? Restarts automatically at 14:30." | the last warning ended; replaces the safety notification | **Restart now** (resume), **Keep off** (the unit stays off until resumed) |
+| **Ventilation restarted** | nobody answered and the restart confirmation timeout passed | – |
+| **Ventilation off since 08:15** – "Moisture protection is inactive." | the unit has been off for the reminder time (8 h for a pause until resumed, 24 h otherwise), then every 24 hours | **Resume** |
+| **Ventilation problem** with the problem text | a problem persists longer than the problem delay (one notification per kind of problem) | – |
+
+How it works:
+
+- Tapping an action fires the event `mobile_app_notification_action` in Home Assistant; the integration reacts to its own action ids (`BHV_<first 8 characters of the entry id>_<ACTION>`) and ignores all others, so the notifications do not interfere with your automations. The logbook shows the source "notification".
+- A notification replaces the previous one of the same kind (tag `bhv_<entry>_safety`, `…_reminder`, `…_problem_<key>`), and it is removed from the phones when its reason is gone: the warning is overridden or ends, the unit runs again, the problem is resolved. A late answer (for example **Keep off** after the unit already restarted) does nothing.
+- **iOS:** safety notifications and the restart question are sent as *time-sensitive* (`push.interruption-level`), so they break through a Focus mode if you allow time-sensitive notifications for the Companion app.
+- **Android:** they are sent with `priority: high` and `ttl: 0`, so they are delivered at once also while the phone dozes.
+- **Without phones**, or when none of the selected services exists any more, a persistent notification appears in Home Assistant instead (without actions; use the **Safety override** switch or the **Resume** button). It is dismissed when its reason is gone.
+- A selected service that no longer exists (the app was removed, the phone renamed) raises a repair issue and the problem `missing_notify_service`; the other phones still get the notifications. Open **Notifications** and save: the missing service is not selected any more.
+- Sending never delays the control. A phone that cannot be reached is logged once, and again when it works.
+- Each kind can be switched off in **Notifications**. With **Safety while control is off** disabled, a warning while the **Control** switch is off sends no notification.
 
 ## Profiles
 
@@ -342,7 +452,7 @@ All values are flows in m³/h. The calculation has five stages: **contributions 
 
    The current flow is read back from the actuator; a value changed at the unit or by someone else is taken as the new current flow. Until the actuator reports a written value (at most 60 s, for units that report only on their next poll) the written value counts as the current flow. 30 s after each write the actuator is checked; on a mismatch the value is written once more, then the problem `write_mismatch` is reported.
 
-   While nothing is written (shaping holds, during the startup grace, while the actuator is unavailable or a readiness condition is not met), the setpoint shows the current flow, so it always matches what the unit runs at; the attribute `target` shows what the inputs ask for. Only with the **Control** switch off does the setpoint show the calculated demand ([shadow run](#use-cases)).
+   While nothing is written (shaping holds, during the startup grace, while the actuator is unavailable or a readiness condition is not met), the setpoint shows the current flow, so it always matches what the unit runs at; the attribute `target` shows what the inputs ask for. In a pause or a safety shutdown the setpoint is 0. Only with the **Control** switch off does the setpoint show the calculated demand ([shadow run](#use-cases)).
 
 ### Reasons
 
@@ -360,7 +470,8 @@ The **Reason** sensor names the rule or mode that determined the setpoint:
 | `fallback` | no valid CO₂ sensor, fallback flow |
 | `boost` | a manual boost |
 | `off` | a pause |
-| `shower`, `cooking`, `safety_off` | reserved for 0.2 and 0.3; not used in 0.1 |
+| `safety_off` | a safety shutdown or the wait for the restart confirmation ([warning sources](#warning-sources)) |
+| `shower`, `cooking` | reserved for 0.3; not used yet |
 
 During a boost the reason is the automatic rule (for example `co2`) when the automatic demand is higher than the boost level.
 
@@ -373,10 +484,10 @@ The integration is event driven; it does not poll anything.
 | state change of a room sensor or presence entity | after the debounce time (10 s); further changes within that time are evaluated together |
 | periodic | every evaluation interval (1 min) |
 | boost, pause, resume, profile change, control switch, end of a boost or pause | at once |
-| state change of the actuator, off actuator or a readiness entity | at once |
-| saving options or readiness conditions | the entry is reloaded |
+| state change of the actuator, off actuator, a readiness entity or a warning source | at once (warning details are fetched first, at most 10 s) |
+| saving options, readiness conditions or warning sources | the entry is reloaded |
 
-Control starts once Home Assistant has started. During the startup grace (1 min) the entities show values but nothing is written and no input problems are raised, because many sensors become available a few seconds after start. The setpoint keeps the flow the unit runs at until the first write after the grace.
+Control starts once Home Assistant has started. During the startup grace (1 min) the entities show values but nothing is written and no input problems are raised, because many sensors become available a few seconds after start; only a safety shutdown is applied at once. The setpoint keeps the flow the unit runs at until the first write after the grace.
 
 Input values count only when they are **valid**: not `unavailable`, `unknown` or empty; numeric; reported within the stale timeout (30 min, also when the value did not change); and plausible (CO₂ 100–10000 ppm, humidity 0–100 %). Invalid values are left out of every calculation, listed in the setpoint attribute `invalid_inputs`, and reported as a problem after the problem delay.
 
@@ -388,7 +499,7 @@ All entities belong to one device per entry (named after the entry, model "Deman
 |---|---|---|---|
 | Setpoint | `sensor.ventilation_setpoint` | | Flow the unit should run at (m³/h), after shaping; 0 in a pause. Attributes below. |
 | Reason | `sensor.ventilation_reason` | | Rule or mode that determined the setpoint ([reasons](#reasons)). |
-| Mode | `sensor.ventilation_mode` | | Automatic, Fallback, Boost, Off, Control off. (Shower, Cooking and Safety shutdown exist as states but are not used in 0.1.) |
+| Mode | `sensor.ventilation_mode` | | Automatic, Fallback, Boost, Off, Safety shutdown (with [warning sources](#warning-sources)), Control off. (Shower and Cooking exist as states but are not used yet.) |
 | Ends at | `sensor.ventilation_ends_at` | | End of the current boost or timed pause; empty otherwise. |
 | Boost | `button.ventilation_boost` | | Starts a boost with the **Boost duration** and **Boost level**; pressing again extends it by the duration. |
 | Pause | `button.ventilation_pause` | | Stops the unit for the **Pause duration**. |
@@ -399,6 +510,8 @@ All entities belong to one device per entry (named after the entry, model "Deman
 | Boost level | `number.ventilation_boost_level` | config | Flow of the boost button, minimum flow to max flow. Restored after a restart. |
 | Pause duration | `select.ventilation_pause_duration` | config | 1 h (initial), 4 h, 8 h, Until resumed. Restored after a restart. |
 | Problem | `binary_sensor.ventilation_problem` | diagnostic | On while a problem persists longer than the problem delay. |
+| Safety warning | `binary_sensor.ventilation_safety_warning` | | Only with a warning source. On while any warning is active, overridden or not. Attribute `warnings`: list of `{source, headline, severity, overridden, since}`. |
+| Safety override | `switch.ventilation_safety_override` | | Only with a warning source. On: the active warnings are overridden and the unit keeps running. Off: an active warning switches the unit off again. Without an active warning turning it on has no effect. |
 
 ### Setpoint attributes
 
@@ -429,6 +542,10 @@ The **Problem** sensor's attribute `problems` lists `{key, entity_id, since}` fo
 | `write_mismatch` | the actuator did not show the written value, also after a retry |
 | `inputs_invalid` | a room sensor is invalid (one entry per sensor) |
 | `no_valid_co2` | CO₂ sensors are configured but none is valid; the fallback flow is used |
+| `warning_source_unavailable` | an entity of a warning source is unavailable (one entry per source) |
+| `warning_details_failed` | the details of an active warning could not be fetched; it counts as a warning without details |
+| `missing_entity` | a configured entity (or the device of a warning source) no longer exists (one entry per entity, see the [repair issue](#repair-issues)) |
+| `missing_notify_service` | a phone selected in **Notifications** no longer exists (see the repair issue) |
 
 ## Actions
 
@@ -438,7 +555,8 @@ All actions take an optional **Entry** (`config_entry_id`). It can be left out w
 |---|---|---|
 | `better_home_ventilation.boost` | `duration` (minutes, 5–720, optional; default: the **Boost duration** entity), `level` (m³/h, minimum flow to max flow, optional; default: the **Boost level** entity) | Starts a boost, or extends a running one by the duration (from its current end, never beyond the maximum duration from now); a given level replaces the running level. Replaces a pause. |
 | `better_home_ventilation.pause` | `duration` (minutes, 1–10080, optional; without it the pause lasts until resumed) | Stops the unit. Replaces a boost. |
-| `better_home_ventilation.resume` | – | Ends a boost or a pause. |
+| `better_home_ventilation.resume` | – | Ends a boost or a pause; confirms the restart after a safety shutdown. |
+| `better_home_ventilation.override_safety` | – | Keeps the ventilation running despite the current warnings, or ends the wait for the restart confirmation ([warning sources](#warning-sources)). |
 
 Errors (shown translated in the UI):
 
@@ -449,6 +567,7 @@ Errors (shown translated in the UI):
 | `entry_not_loaded` | the entry is not loaded (for example disabled or failed) |
 | `level_out_of_range` | the boost level is outside minimum flow to max flow |
 | `control_disabled` | boost or pause while the **Control** switch is off (the buttons raise the same error) |
+| `no_active_warning` | `override_safety` without an active warning or restart wait |
 
 Between boost and pause the last command wins. A boost or pause that ends while Home Assistant is offline ends at the next start.
 
@@ -456,12 +575,103 @@ Between boost and pause the last command wins. A boost or pause that ends while 
 
 | Event | When | Data |
 |---|---|---|
-| `better_home_ventilation_mode_changed` | the mode changed | `entry_id`, `device_id`, `name`, `from_mode`, `to_mode`, `reason`, `setpoint`, `trigger`, `source`, `warning` (always empty in 0.1), `ends_at` (end of a new boost or timed pause, ISO 8601) |
+| `better_home_ventilation_mode_changed` | the mode changed | `entry_id`, `device_id`, `name`, `from_mode`, `to_mode`, `reason`, `setpoint`, `trigger`, `source`, `warning` (headline of the warning, or the source name, when the new mode is `safety_off`), `ends_at` (end of a new boost or timed pause, ISO 8601) |
 | `better_home_ventilation_readiness_corrected` | a readiness condition was corrected automatically | `entry_id`, `entity_id`, `from_state`, `to_state` |
 
-`trigger` is one of `startup`, `command`, `timeout`, `timeout_while_offline`, `inputs_lost`, `inputs_restored`, `control_switch` in 0.1. `source` (for commands) is `button`, `service` or `external` (at the unit).
+`trigger` is one of `startup`, `command`, `timeout`, `timeout_while_offline`, `inputs_lost`, `inputs_restored`, `control_switch`, and with warning sources `warning`, `warning_ended` and `override`. `source` (for commands) is `button`, `service`, `voice`, `notification` or `external` (at the unit).
 
 Every mode change appears in the logbook of the device, linked to the **Mode** sensor, for example "Ventilation switched to Boost (button, until 18:30)" or "Ventilation back to Automatic (timeout)". The text is in the server language. The setpoint itself is not logged per write; its history is in the **Setpoint** sensor.
+
+## Voice control
+
+> **Unreleased (0.2, in development).**
+
+The integration registers four intents for Assist. They have no entity target; they act on the ventilation entry.
+
+| Intent | Slots | Does | Answer (example) |
+|---|---|---|---|
+| `BetterVentilationBoost` | `duration` (minutes, 5–720), `level` (m³/h), `name` – all optional | boost like the action; without slots the **Boost duration** and **Boost level** entities | "Ventilation boosted to 300 m³/h until 18:30." |
+| `BetterVentilationPause` | `duration` (minutes, 1–10080), `name` – optional | pause; without a duration until resumed | "Ventilation paused until 19:30." |
+| `BetterVentilationResume` | `name` (optional) | ends a boost or pause | "Ventilation is back to Automatic." |
+| `BetterVentilationStatus` | `name` (optional) | nothing, it answers | "Ventilation: Automatic, 165 m³/h, reason: CO₂." |
+
+`name` is the title of the entry (case does not matter); it is only needed with more than one entry. Answers are in the language of the request (English and German). Errors are spoken too: control switched off, a level outside minimum to max flow, no or several matching entries. The logbook shows the source "voice".
+
+**LLM conversation agents** (OpenAI, Google, Anthropic, Ollama and others with the Assist API enabled) get the four intents as tools by themselves, with a description of each and its slots: "Boost the ventilation for 45 minutes", "Why is the ventilation so loud?". Nothing has to be exposed. In Home Assistant 2026.10 and later the tools are called `better_home_ventilation__BetterVentilationBoost` and so on.
+
+**The default conversation agent** ("Home Assistant") only understands sentences it knows. A custom integration cannot add sentences to it, so copy the example sentences:
+
+1. Copy [`examples/custom_sentences/en/better_home_ventilation.yaml`](examples/custom_sentences/en/better_home_ventilation.yaml) (or [`de`](examples/custom_sentences/de/better_home_ventilation.yaml)) to `<config>/custom_sentences/en/` (or `de/`) of your Home Assistant, for example with the File editor or Samba add-on. Keep the folder name of the language.
+2. Restart Home Assistant.
+3. Try "boost the ventilation for 30 minutes", "ventilation off for 2 hours", "ventilation back to normal", "what is the ventilation doing" (German: „Lüftung Boost“, „Lüftung 30 Minuten stärker“, „Lüftung für 2 Stunden aus“, „Lüftung wieder normal“, „Was macht die Lüftung?“).
+
+The files also contain the spoken error answers. Adapt the sentences as you like. They have no `name` slot, so they work with one entry; the file explains how to add the names of several entries. If a sentence collides with a built-in one (for example "turn off the ventilation" when an entity is called "Ventilation"), rephrase it in the file.
+
+Independently of the intents, every button and switch of the integration can be exposed to Assist like any entity.
+
+## Repair issues
+
+> **Unreleased (0.2, in development).**
+
+Repair issues appear under **Settings → System → Repairs**.
+
+| Issue | When | Fix |
+|---|---|---|
+| **<entity> not found** | an entity selected in the settings (actuator, off actuator, sensors, presence, a readiness condition or warning source entity) exists neither as an entity nor in the entity registry 5 minutes after Home Assistant started, or it was deleted from the entity registry; also a warning source device that was deleted. The issue names each entry and the step it is used in. The ventilation keeps running with the remaining entities, and the problem `missing_entity` is raised | open the settings of the entry and choose an existing entity in the named step (or delete the readiness condition or warning source); the issue disappears by itself when the entity exists again or is no longer used. A renamed entity is followed automatically and raises no issue |
+| **Notify service … not found** | a phone selected in **Notifications** no longer exists | open **Notifications** and save |
+| **Stored state of … was reset** | the stored state could not be read (damaged, or written by a newer version after a downgrade) and was replaced by the defaults: boost, pause and overrides ended, the control switch is on, the profile is Balanced | check the **Control** switch and the **Profile**; the issue is for information only, ignore it (it is gone after the next restart) |
+
+## Diagnostics
+
+> **Unreleased (0.2, in development).**
+
+**Download diagnostics** in the entry's menu (⋮) on the integration page gives a JSON file for bug reports and for the [replay](#replay-of-recorded-history):
+
+- the settings (options) and all readiness conditions and warning sources,
+- the stored state (boost, pause, profile, control switch, warnings, overrides),
+- the current state, `last_changed` and `last_reported` of every entity the integration reads,
+- the last 100 decisions (mode, reason, setpoint, every contribution, limits, invalid inputs, problems, why nothing was written),
+- the current problems and warnings.
+
+The selected phones (notify services) are removed from the file, entity attributes are not included, and the states of `person` and `device_tracker` entities are reduced to `home` / `not_home`. Warning texts are included as received.
+
+## Replay of recorded history
+
+> **Unreleased (0.2, in development).**
+
+`tools/replay.py` runs recorded sensor history through the same control logic and reports what the integration would have done, before you let it write to your unit. It needs only Python 3.14, not Home Assistant. Run it from a clone of the repository:
+
+```bash
+python tools/replay.py history.csv options.json --tz Europe/Berlin --decisions decisions.csv
+```
+
+- `history.csv`: one row per recorded state with a header row and the columns `time`, `entity_id`, `state` (ISO 8601 times; times without offset are in `--tz`). The history download of Home Assistant (`entity_id,state,last_changed`) and InfluxDB exports (`_time`, `_value`) work as they are. Include the CO₂ and humidity sensors and the presence entities; the actuator is simulated.
+- `options.json`: the [diagnostics download](#diagnostics) of the entry (or just its options). Edit the options in the file to try other settings.
+- `--profile balanced|air_quality|quiet|winter` (default balanced), `--interval` (seconds between periodic evaluations, default the evaluation interval of the options), `--stale` (a sensor without a recorded state for the stale timeout counts as invalid; off by default, because recordings usually hold only changes), `--decisions` (one CSV row per evaluation).
+
+Example output:
+
+```text
+Replay 2026-01-12 01:00 - 2026-01-14 00:50 (2.0 days), 3154 evaluations, profile balanced
+Setpoint (m³/h, time-weighted): min 80, p5 80, p25 80, p50 165, p75 250, p95 340, max 340, mean 178
+Time per reason:
+  co2                   40.1 %
+  minimum               21.3 %
+  away                  17.8 %
+  quiet_limit           12.5 %
+  humidity_high          6.3 %
+  fallback               2.1 %
+Time per mode:
+  automatic             97.9 %
+  fallback               2.1 %
+Writes per day: mean 32.7, max 52 (2026-01-12), total 98
+  2026-01-12  52
+  2026-01-13  46
+  2026-01-14  0
+Longest at max flow (400 m³/h): never
+```
+
+The replay assumes that the unit takes every written value at once. It leaves out readiness conditions, warning sources and manual commands (boost, pause). Replay a winter month before going live and check the share of `co2` against `minimum` and the writes per day.
 
 ## Examples
 
@@ -534,7 +744,7 @@ While nobody is home, CO₂ is ignored and the flow drops to the minimum flow, b
 
 Failed, stale or implausible values are ignored, never read as 0. If one of several CO₂ sensors fails, the others are used. If CO₂ sensors are configured and none is valid, the mode becomes **Fallback** and the fallback flow (150 m³/h) is used, also while away; the quiet limit still applies. Without any valid input and without CO₂ sensors, the minimum flow is used. Every invalid sensor is listed in `invalid_inputs` and, after the problem delay, turns the problem sensor on. When the actuator itself is unavailable, nothing is written until it is back.
 
-A sensor that is removed from Home Assistant counts as invalid; a repair issue for it comes in 0.2. A renamed sensor (new entity id) is followed automatically.
+A sensor that is removed from Home Assistant counts as invalid and raises a [repair issue](#repair-issues). A renamed sensor (new entity id) is followed automatically.
 
 ### My CO₂ sensor shows less than 400 ppm
 
@@ -566,6 +776,8 @@ Only one controller may write to the unit. If an existing automation, blueprint 
 - A pause without an off actuator writes the lowest actuator value, which may not stop the unit completely (`off_method: minimum`, see [Pause does not stop the unit](#pause-does-not-stop-the-unit)).
 - Changing the max flow does not change the flows derived from it; adjust them in **Control** and **Boosts**.
 - The logbook text is in the server language, not in each user's language.
+- An entity without an entity registry entry (for example a YAML template sensor without `unique_id`) that disappears while Home Assistant runs is reported as missing only after the next restart.
+- The place in the text of the repair issue "… not found" (for example "step Inputs") is in the server language.
 
 ## Troubleshooting
 
@@ -581,13 +793,17 @@ Only one controller may write to the unit. If an existing automation, blueprint 
 | Boost or pause is rejected | The **Control** switch is off (`control_disabled`). |
 | The unit went into a pause by itself | It was stopped at the unit or by another integration ([external stop](#stopping-the-unit-at-the-unit-counts-as-a-pause)); the logbook shows "at the unit". |
 | Entity ids differ from this README | They depend on the device name and the server language. |
+| No notification arrives on the phone | The phone is selected in **Notifications** and the kind is switched on; the Companion app may notify (test with **Developer tools → Actions**, `notify.mobile_app_…`); a repair issue `missing_notify_service` means the service was renamed or removed. Without a reachable phone a persistent notification is created; a failed send is in the log. |
+| Assist does not understand a voice command | The default conversation agent needs the [example sentences](#voice-control) in `<config>/custom_sentences/<language>/` and a restart. "There are several ventilation units": say the entry title or add the names to the sentence file. |
+| A repair issue "… not found" | An entity used in the settings was deleted or its integration is not loaded; see [repair issues](#repair-issues). |
+| Tapping an action does nothing | The answer came late (the warning was already lifted or the unit restarted), or the notification belongs to an entry that was deleted and created again. Use the **Safety override** switch or the **Resume** button. |
 
 For more detail enable debug logging on the integration page (**Enable debug logging**), reproduce the issue, and disable it again to download the log.
 
 ## Removal
 
 1. Press **Resume** and wait until the unit runs, so that it is not left stopped. Removing the integration does not write anything to the unit: it stays at the last written flow, or stopped if a pause had stopped it.
-2. Open the integration page ([see above](#changing-the-settings-later)) and select **Delete** in the entry's menu (⋮). The device, its entities, the readiness conditions and the stored controller state are removed.
+2. Open the integration page ([see above](#changing-the-settings-later)) and select **Delete** in the entry's menu (⋮). The device, its entities, the readiness conditions, the warning sources and the stored controller state are removed.
 3. If you installed with HACS: in HACS, open **Better Home Ventilation** and select **Remove**. If you installed manually: delete the folder `custom_components/better_home_ventilation/`.
 4. Restart Home Assistant.
 5. Re-enable your previous automation if you had one.
@@ -623,11 +839,35 @@ From the repository root:
 |---|---|
 | format | `ruff format --check .` (`ruff format .` to fix) |
 | lint | `ruff check .` |
-| types | `mypy` and `MYPYPATH=custom_components/better_home_ventilation mypy tests/engine` |
+| types | `mypy` and `MYPYPATH=custom_components/better_home_ventilation mypy tests/engine tools tests/tools` |
 | tests | `pytest --cov` (fails below 90 % coverage) |
-| engine tests only (no Home Assistant needed) | `pytest tests/engine` |
+| engine and replay tool tests only (no Home Assistant needed) | `pytest tests/engine tests/tools` |
 
 The control logic lives in `custom_components/better_home_ventilation/engine/` and must not import Home Assistant. Ruff enforces this through `engine/ruff.toml`, and a test imports the engine with Home Assistant blocked. The Home Assistant glue (controller, actuator adapters, entities, actions, logbook, config flow) lives next to it in `custom_components/better_home_ventilation/`.
+
+### Adding a details provider
+
+Details providers live in `custom_components/better_home_ventilation/warning_providers/`, one module per integration, registered in `REGISTRY` by the entity registry platform. A provider is one class:
+
+```python
+class ExampleProvider:
+    name = "example_platform"
+
+    async def async_get_details(
+        self, hass: HomeAssistant, entity_id: str, state: State
+    ) -> list[WarningDetails]:
+        # Called only for an active entity.
+        return [
+            make_details(
+                key=..., headline=..., text=..., actions=..., severity=..., sender=...
+            )
+        ]
+```
+
+- Build every warning with `engine.safety.make_details`; it strips HTML and normalises the severity (CAP words, levels 1–4, Meteoalarm awareness levels).
+- `key` is the provider's identity of the warning (for example a CAP id); warnings with the same key are the same warning across evaluations.
+- Return an empty list when the entity has no details (it then counts as one warning without details). Raise `DetailsError` when the details cannot be fetched; the call must finish within `DETAILS_TIMEOUT` (10 s).
+- Add a test with a recorded state of the integration (see `tests/components/test_warning_providers.py`).
 
 Behavior changes start in the [specification](docs/spec/README.md); see [CLAUDE.md](CLAUDE.md) for the working rules. User-visible changes go into [CHANGELOG.md](CHANGELOG.md).
 

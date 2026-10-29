@@ -71,8 +71,8 @@ Time is always injected (`now` parameter in the engine, `freezer` fixture in com
 | E37 | cooking trigger power 1500 W > 100 | cooking boost until run-on after power drops |
 | E38 | state serialise → deserialise | identical; expired timers ended with `timeout_while_offline` |
 | E39 | startup grace | no WriteFlow effect during grace |
+| E39a | startup grace with an active warning (0.2); then overridden during the grace | safety TurnOff (or the lowest value) still issued during grace, setpoint 0; after the override the setpoint stays 0 (unit stopped by the integration, switching on is held by the grace) until TurnOn and the write after the grace |
 | E39b | restart: unit at the last written 190, target 85 then 240 during the grace; after the grace an evaluation before the actuator confirms the write | setpoint 190 during the grace (target 85, 240); then 240 written and shown, the evaluation before the confirmation holds 240 (not 190); never confirmed: after the window the actuator value 190 counts again. Unavailable actuator: last written value; not ready: actuator value; stopped by the integration and blocked from switching on: 0 |
-| E39a | startup grace with an active warning (0.2) | safety TurnOff still issued during grace |
 | E40 | indefinite pause | reminder after 8 h, then every 24 h |
 | E41 | select actuator stages 50/100/200/300/400, target 230 | stage 300; decreasing to 190 stays at 300 until target ≤ 180 (hysteresis) |
 | E41a | select stages as E41, decreasing from 100 to 50 (or below) | lowest stage `50`; 51 stays at `100` |
@@ -143,6 +143,16 @@ Constructed headlines are marked as such in the fixture. Real messages that were
 - No HA needed. Standard library only.
 
 Use before going live: replay a winter month and compare the shares of `co2` vs. `minimum` and the number of writes with expectations.
+
+Details (decided 2026-10-29 for M10):
+
+- **Usage:** `python tools/replay.py history.csv options.json [--decisions out.csv] [--profile quiet] [--tz Europe/Berlin] [--interval 60] [--stale]`. Exit code 2 with a message for an unusable file.
+- **CSV:** a header row; the time column may be called `time`, `last_changed`, `last_updated` or `_time`, the state column `state`, `value` or `_value` (the history download of Home Assistant, InfluxDB exports). ISO 8601 times; times without offset are in `--tz` (default: the local time zone). All times are converted to that zone, because the engine reads the night window from the wall clock of `now`.
+- **Options:** the `options` of an entry, an object with `options`, or a diagnostics download (`data.entry.options`).
+- **Evaluations** as in Home Assistant: `debounce` after every recorded change, every `evaluation_interval` (or `--interval`) and at every `ScheduleAt`; the startup grace starts with the first row.
+- **Simplifications:** the simulated unit takes every write and every off/on at once (starting at `min_flow`); rows of the actuator and the off actuator are ignored (they show what another controller did); readiness conditions and warning sources are left out; no manual commands. `last_reported` is unknown (never stale) unless `--stale` is given, because recordings usually hold only changes.
+- **Report:** setpoint minimum, p5/p25/p50/p75/p95, maximum and mean, each weighted with the time the decision held; share of time per reason and per mode; writes per local day (mean, maximum, every day); the longest continuous time with the setpoint at `max_flow`. `--decisions` writes one row per evaluation (`time, mode, reason, setpoint, target, written, co2_max, co2_max_entity, humidity_max, humidity_mean, limits, write_blocked_by, invalid_inputs, problems`).
+- **Tests:** `tests/tools/` with a synthetic two-day fixture (`tests/fixtures/replay_history.csv`); they run without Home Assistant, like the engine tests, and the replay tool is type checked with them (`mypy tests/engine tools tests/tools`).
 
 ## Acceptance checklist (real installation)
 

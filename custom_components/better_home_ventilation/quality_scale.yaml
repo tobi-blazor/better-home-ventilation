@@ -15,7 +15,7 @@ rules:
     comment: No external requirements; the manifest has an empty requirements list.
   docs-actions:
     status: done
-    comment: README "Actions" lists every action with its fields, defaults and errors.
+    comment: README "Actions" lists every action with its fields, defaults and errors, including override_safety.
   docs-conditions:
     status: exempt
     comment: The integration does not provide conditions.
@@ -46,7 +46,7 @@ rules:
   config-entry-unloading: done
   docs-configuration-parameters:
     status: done
-    comment: README "Options" documents every field of every options step with UI name, default and meaning, checked against strings.json.
+    comment: README "Options" (including Safety and Notifications), "Readiness conditions" and "Warning sources" document every field of every options step and subentry flow with UI name, default and meaning, checked against strings.json.
   docs-installation-parameters:
     status: done
     comment: README "Setup" documents every field of the three config flow steps.
@@ -63,7 +63,9 @@ rules:
 
   # Gold
   devices: done
-  diagnostics: todo
+  diagnostics:
+    status: done
+    comment: Options, subentries, stored state, used entity states, the last 100 decisions, problems and warnings; notify services redacted, person/device_tracker states reduced to home/not_home.
   discovery:
     status: exempt
     comment: Helper integration without a device or service to discover.
@@ -84,16 +86,16 @@ rules:
     comment: README "Requirements and supported units"; any unit controllable through a number, fan or select entity, no device-specific code.
   docs-supported-functions:
     status: done
-    comment: README "Entities", "Profiles", "How the setpoint is calculated", "Actions" and "Events and logbook".
+    comment: README "Entities", "Profiles", "How the setpoint is calculated", "Notifications", "Actions", "Events and logbook", "Voice control", "Repair issues" and "Diagnostics".
   docs-troubleshooting:
     status: done
-    comment: README "Troubleshooting".
+    comment: README "Troubleshooting", "Repair issues" and "Diagnostics" (download for bug reports, replay of recorded history).
   docs-use-cases:
     status: done
     comment: README "Use cases".
   dynamic-devices:
     status: exempt
-    comment: Exactly one device per config entry, created with the entry.
+    comment: Exactly one device per config entry, created with the entry. Entities added to a warning source device (for example a new NINA slot) are followed without a reload.
   entity-category: done
   entity-device-class: done
   entity-disabled-by-default:
@@ -105,7 +107,9 @@ rules:
   reconfiguration-flow:
     status: exempt
     comment: entry.data is empty; every setting, including the actuator, is changed in the options flow (helper pattern).
-  repair-issues: todo
+  repair-issues:
+    status: done
+    comment: missing_entity (removed or never loaded entity or warning source device, resolved automatically), missing_notify_service and the informational state_reset.
   stale-devices:
     status: exempt
     comment: Exactly one device per config entry, removed together with the entry.

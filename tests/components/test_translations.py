@@ -1,7 +1,8 @@
 """Flow translations (C4c): every form field, section and menu option is translated.
 
-The test walks every 0.1 flow step, takes the schema that is actually shown and
-checks `strings.json`, `translations/en.json` and `translations/de.json`.
+The test walks every flow step, takes the schema that is actually shown and
+checks `strings.json`, `translations/en.json` and `translations/de.json`. The
+notification texts (`common`) and the repair issues are checked as well.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import selector
 import pytest
+from pytest_homeassistant_custom_component.common import async_mock_service
 
 from custom_components.better_home_ventilation.const import (
     CONF_ACTUATOR,
@@ -25,8 +27,15 @@ from custom_components.better_home_ventilation.const import (
     CONF_NAME,
     DOMAIN,
     SUBENTRY_READINESS_CONDITION,
+    SUBENTRY_WARNING_SOURCE,
 )
-from custom_components.better_home_ventilation.engine.models import Mode, Reason
+from custom_components.better_home_ventilation.engine.models import (
+    Mode,
+    ProblemKey,
+    Reason,
+)
+from custom_components.better_home_ventilation.issues import ENTITY_OPTIONS
+from custom_components.better_home_ventilation.notifications import Action
 
 from .common import CONTROL_MODE, NUMBER_FLOW, NUMBER_RAW, mock_entry, schema_fields
 
@@ -63,10 +72,12 @@ OPTIONS_ERRORS = {
     "off_entity_is_actuator",
     "off_entity_not_found",
     "quiet_range",
+    "reminder_too_short",
     "select_mapping",
     "select_options",
     "sensor_not_found",
 }
+OPTIONS_STEPS = ("actuator", "inputs", "control", "boosts", "safety", "notifications")
 
 
 def _load(name: str) -> dict[str, Any]:
@@ -125,7 +136,7 @@ async def _walk_flows(hass: HomeAssistant) -> list[tuple[str, Any]]:
     entry = mock_entry(actuator=NUMBER_FLOW)
     entry.add_to_hass(hass)
     options = hass.config_entries.options
-    for step in ("actuator", "inputs", "control", "boosts"):
+    for step in OPTIONS_STEPS:
         result = await options.async_init(entry.entry_id)
         result = await options.async_configure(
             result["flow_id"], {"next_step_id": step}
@@ -156,6 +167,53 @@ async def _walk_flows(hass: HomeAssistant) -> list[tuple[str, Any]]:
     subentry_id = next(iter(entry.subentries))
     result = await entry.start_subentry_reconfigure_flow(hass, subentry_id)
     shown.append(("readiness", result))
+    shown.extend(("warning", result) for result in await _walk_warning_flows(hass))
+    return shown
+
+
+async def _walk_warning_flows(hass: HomeAssistant) -> list[Any]:
+    """Open every warning source form (with and without filters)."""
+    hass.states.async_set("sensor.example_warning_level", "1")
+    hass.states.async_set("binary_sensor.example_alert", "off")
+    entry = mock_entry(actuator=NUMBER_FLOW)
+    entry.add_to_hass(hass)
+    subentries = hass.config_entries.subentries
+    shown: list[Any] = []
+    result: Any = await subentries.async_init(
+        (entry.entry_id, SUBENTRY_WARNING_SOURCE), context={"source": SOURCE_USER}
+    )
+    shown.append(result)
+    result = await subentries.async_configure(
+        result["flow_id"], {"source_entity": "sensor.example_warning_level"}
+    )
+    shown.append(result)  # trigger
+    result = await subentries.async_configure(
+        result["flow_id"], {"trigger": "numeric", "threshold": 1}
+    )
+    shown.append(result)  # filters with keywords
+    await subentries.async_configure(
+        result["flow_id"], {"details": "auto", "keywords": {}, "min_severity": "none"}
+    )
+    subentry_id = next(iter(entry.subentries))
+    result = await entry.start_subentry_reconfigure_flow(hass, subentry_id)
+    shown.append(result)
+    result = await subentries.async_configure(
+        result["flow_id"], {"source_entity": "sensor.example_warning_level"}
+    )
+    result = await subentries.async_configure(
+        result["flow_id"], {"trigger": "numeric", "threshold": 1}
+    )
+    result = await subentries.async_configure(
+        result["flow_id"], {"details": "none", "keywords": {}, "min_severity": "none"}
+    )
+    result = await entry.start_subentry_reconfigure_flow(hass, subentry_id)
+    result = await subentries.async_configure(
+        result["flow_id"], {"source_entity": "sensor.example_warning_level"}
+    )
+    result = await subentries.async_configure(
+        result["flow_id"], {"trigger": "numeric", "threshold": 1}
+    )
+    shown.append(result)  # filters without keywords (stored `none`)
     return shown
 
 
@@ -165,11 +223,13 @@ async def test_flows_are_translated(hass: HomeAssistant, language: str) -> None:
     """Every field has data and data_description, every section a name (C4c)."""
     hass.states.async_set("binary_sensor.unit_ready", "on")
     hass.states.async_set("number.unit_register", "1")
+    async_mock_service(hass, "notify", "mobile_app_example_phone")
     strings = _load(language)
     steps = {
         "config": strings["config"]["step"],
         "options": strings["options"]["step"],
         "readiness": strings["config_subentries"][SUBENTRY_READINESS_CONDITION]["step"],
+        "warning": strings["config_subentries"][SUBENTRY_WARNING_SOURCE]["step"],
     }
 
     shown = await _walk_flows(hass)
@@ -180,9 +240,13 @@ async def test_flows_are_translated(hass: HomeAssistant, language: str) -> None:
         "inputs",
         "control",
         "boosts",
+        "safety",
+        "notifications",
         "actuator_mapping",
         "state",
         "reconfigure",
+        "trigger",
+        "filters",
     }
     for category, result in shown:
         _assert_form(strings, steps[category], result)
@@ -194,7 +258,7 @@ def test_menu_errors_and_aborts_are_translated(language: str) -> None:
     strings = _load(language)
     menu = strings["options"]["step"]["init"]
     assert menu["title"]
-    for option in ("actuator", "inputs", "control", "boosts"):
+    for option in OPTIONS_STEPS:
         assert menu["menu_options"][option]
         assert menu["menu_option_descriptions"][option]
     assert set(strings["config"]["error"]) == CONFIG_ERRORS
@@ -206,6 +270,93 @@ def test_menu_errors_and_aborts_are_translated(language: str) -> None:
     assert readiness["initiate_flow"]["reconfigure"]
     assert readiness["abort"]["already_configured"]
     assert readiness["error"]["not_correctable"]
+    warning = strings["config_subentries"][SUBENTRY_WARNING_SOURCE]
+    assert warning["entry_type"]
+    assert warning["initiate_flow"]["user"]
+    assert warning["initiate_flow"]["reconfigure"]
+    assert warning["abort"]["already_configured"]
+    assert set(warning["error"]) == {
+        "source_required",
+        "invalid_regex",
+        "keyword_conflict",
+        "numeric_state",
+        "threshold_required",
+        "states_required",
+    }
+    for provider in (
+        "nina",
+        "dwd_weather_warnings",
+        "environment_canada",
+        "attributes",
+        "none",
+    ):
+        assert strings["common"][f"provider_{provider}"]
+
+
+@pytest.mark.parametrize("language", list(FILES))
+def test_notification_texts_and_issues_are_translated(language: str) -> None:
+    """Every notification kind, problem, action and repair issue has a text."""
+    common = _load(language)["common"]
+    for kind in ("safety", "restart", "restarted", "reminder", "problem"):
+        assert common[f"notify_{kind}_title"]
+    for key in (
+        "notify_safety_message_no_details",
+        "notify_restart_message",
+        "notify_restarted_message",
+        "notify_reminder_message",
+    ):
+        assert common[key]
+    for problem in ProblemKey:
+        assert common[f"notify_problem_{problem}"], problem
+    for action in Action:
+        assert common[f"notify_action_{action.lower()}"], action
+    assert set(PLACEHOLDER.findall(common["notify_safety_title"])) == {"headline"}
+    assert set(PLACEHOLDER.findall(common["notify_restart_message"])) == {"time"}
+    assert set(PLACEHOLDER.findall(common["notify_reminder_title"])) == {"time"}
+    issue = _load(language)["issues"]["missing_notify_service"]
+    assert issue["title"]
+    assert set(PLACEHOLDER.findall(issue["description"])) == {"service", "entries"}
+
+
+@pytest.mark.parametrize("language", list(FILES))
+def test_repair_issues_are_translated(language: str) -> None:
+    """`missing_entity` and `state_reset` have a title and their placeholders (BHV-55)."""
+    strings = _load(language)
+    issues = strings["issues"]
+    missing = issues["missing_entity"]
+    assert set(PLACEHOLDER.findall(missing["title"])) == {"entity"}
+    assert set(PLACEHOLDER.findall(missing["description"])) == {"entity", "usages"}
+    reset = issues["state_reset"]
+    assert set(PLACEHOLDER.findall(reset["title"])) == {"entry"}
+    assert set(PLACEHOLDER.findall(reset["description"])) == {"entry"}
+    common = strings["common"]
+    for where in ENTITY_OPTIONS:
+        assert not PLACEHOLDER.findall(common[f"issue_where_{where}"])
+    for where in (SUBENTRY_READINESS_CONDITION, SUBENTRY_WARNING_SOURCE):
+        assert set(PLACEHOLDER.findall(common[f"issue_where_{where}"])) == {"title"}
+
+
+@pytest.mark.parametrize("language", list(FILES))
+def test_intent_texts_are_translated(language: str) -> None:
+    """Every intent speech and error has a text with its placeholders (BHV-22)."""
+    common = _load(language)["common"]
+    expected = {
+        "intent_boost": {"name", "level", "time"},
+        "intent_pause": {"name", "time"},
+        "intent_pause_indefinite": {"name"},
+        "intent_resume": {"name", "mode"},
+        "intent_status": {"name", "mode", "setpoint", "reason"},
+        "intent_status_until": {"name", "mode", "setpoint", "reason", "time"},
+        "intent_status_not_started": {"name"},
+        "intent_error_control_disabled": {"name"},
+        "intent_error_level_out_of_range": {"min", "max"},
+        "intent_error_entry_required": set(),
+        "intent_error_entry_not_found": {"name"},
+        "intent_error_no_entry": set(),
+        "intent_error_entry_not_loaded": {"name"},
+    }
+    for key, placeholders in expected.items():
+        assert set(PLACEHOLDER.findall(common[key])) == placeholders, key
 
 
 @pytest.mark.parametrize("language", list(FILES))

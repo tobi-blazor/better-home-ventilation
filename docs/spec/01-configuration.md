@@ -27,7 +27,7 @@ The design follows the Home Assistant developer documentation and the patterns o
 
 ## Config flow
 
-`ConfigFlow`, `VERSION = 1`, `MINOR_VERSION = 1`. Three short steps, the second only when needed. The entry is created with `data={}`, `options={…all fields and defaults…}`, `title=name`. The name is stored only as the title, not in `options`.
+`ConfigFlow`, `VERSION = 1`, `MINOR_VERSION = 2` (1 in 0.1; the migration 1.1 → 1.2 adds the defaults of the options steps `safety` and `notifications`, `engine/options.py` `migrate_options`). Three short steps, the second only when needed. The entry is created with `data={}`, `options={…all fields and defaults…}`, `title=name`. The name is stored only as the title, not in `options`.
 
 ### Step `user`
 
@@ -175,6 +175,8 @@ The warning sources themselves are subentries, see [below](#warning-sources-conf
 
 Without `notify_services`, a `persistent_notification` is created instead (no actions). A stored service that no longer exists raises the repair issue `missing_notify_service`.
 
+Details (decided 2026-10-29 for M9): `notify_services` stores the service names without the domain (`mobile_app_example_phone`); a stored `notify.` prefix is accepted. A stored service that no longer exists is not pre-selected when the step opens (the selector offers only existing services), so saving the step removes it and resolves the repair issue. `pause_reminder_after` and `off_notice_after` must be at least 1 minute (error `reminder_too_short` on the field); `restart_confirm_timeout` 0 is valid (restart at once). The `safety` step has no cross-field validation; its description links to the integration page through the placeholder `integration_url`.
+
 ## Readiness conditions (config subentries)
 
 `async_get_supported_subentry_types` returns `{"readiness_condition": ReadinessConditionFlow}`. The integration page then shows "Add readiness condition", and each condition is listed with its own reconfigure and delete entries.
@@ -202,9 +204,18 @@ Subentry type `warning_source`, handler `WarningSourceFlow(ConfigSubentryFlow)`.
 | `filters` | `details`: `SelectSelector(["auto","attributes","none"], translation_key="details")`, the detected provider is shown via `description_placeholders`. Section `keywords`: `headline_keywords`, `text_keywords`, `exclude_keywords` (`TextSelector(multiple=True)`). `min_severity`: `SelectSelector(["none","minor","moderate","severe","extreme"], translation_key="severity")` |
 | `reconfigure` | same steps, pre-filled, `async_update_and_abort` |
 
+Details of the steps (decided 2026-10-29 for M8):
+
+- **`trigger`** is one form with all three fields; `trigger` is pre-selected as `numeric` for a `sensor` with a numeric state, otherwise `state_list`. A numeric trigger without `threshold` is rejected with `threshold_required` (on `threshold`), a state list without states with `states_required` (on `states`); `numeric_state` is reported on `trigger`. Only the value of the chosen trigger is stored (`threshold` as a number, `states` as a list).
+- **Detected provider** (placeholder `{provider}`, translated from `common.provider_<name>` in the server language): the entity registry platform of the source entity, or of the first entity of a source device with a registered provider (`nina`, `dwd_weather_warnings`, `environment_canada`). Helpers and indoor detectors never carry details and are `none`: the domains `input_boolean` and `switch`, the platforms `template`, `group`, `threshold`, `input_boolean`, `switch_as_x`, `trend`, `bayesian`, `min_max`, and the device classes `smoke`, `carbon_monoxide`, `gas`. Every other entity is `attributes`. At runtime `auto` uses the registry platform, else `attributes` (03-modes.md#details-providers).
+- **Filters for provider `none`**: the section `keywords` and `min_severity` are not shown (they would never apply) and are stored empty (`[]`, `none`). Choosing `attributes` (or `auto` with a provider that has details) in a form without filters shows the form again with the filters and their suggestions before saving; choosing `none` drops entered filters. The section `keywords` is optional in the schema, so a form without it validates.
+- **Stored data**: `source_entity` or `source_device`, `name`, `trigger`, `threshold` or `states`, `details`, `headline_keywords`, `text_keywords`, `exclude_keywords`, `min_severity`. An empty `name` is replaced by the friendly name of the entity or the device name (`name_by_user`, else `name`, else the device id).
+- **Unique ids across subentry types**: HA rejects a subentry whose `unique_id` is used by any other subentry of the entry, whatever its type (`config_entries._raise_if_subentry_unique_id_exists`, HA 2026.10.1). An entity can therefore not be both a readiness condition and a warning source; the flow aborts with `already_configured`, whose text names both cases.
+
 - Subentry `unique_id` = source entity id or device id (`already_configured` for duplicates).
 - Subentry title = `name`.
-- Adding, changing or removing a source reloads the entry (through the update listener).
+- Adding, changing or removing a source reloads the entry (through the update listener). Entities added to or removed from a source **device** are followed without a reload ([03-modes.md](03-modes.md#triggers)).
+- A renamed source entity is written to the subentry (`source_entity` and `unique_id`), like other renamed entities ([below](#renamed-and-removed-entities)).
 - Translations under `config_subentries.warning_source`.
 
 **Suggested filters**, pre-filled on creation by detected provider and `hass.config.language` (fallback `en`). The `data_description` explains why.
@@ -225,7 +236,7 @@ Basis for the German defaults:
 - Not in the defaults because of false hits: `Feuer` (sender/intro "Feuerwehr"), `Gas` ("Gasse"), `Strahlung` (DWD "UV-Strahlung"), `Fenster und Türen` (also in all-clear messages), `Geruch` alone (e.g. a drinking-water notice about an unusual smell).
 - Checked against 25 sample messages (NRW templates, live messages, constructed headlines) with no wrong decision; the set becomes a test fixture ([06-testing.md](06-testing.md#warning-text-fixture)).
 
-Validation: `source_required`, `invalid_regex` (a `/…/` keyword that does not compile), `keyword_conflict` (same keyword in an include list and in `exclude_keywords`), `numeric_state` (trigger `numeric` on an entity whose current state is not numeric; warning only if the state is `unavailable`).
+Validation: `source_required` (none or both of entity and device, on `base`), `invalid_regex` (a `/…/` keyword that does not compile), `keyword_conflict` (same keyword, ignoring case, in an include list and in `exclude_keywords`), both on the section `keywords`; `numeric_state` (trigger `numeric` on an entity whose current state is not numeric; accepted without error while the state is `unavailable`/`unknown`, because it cannot be checked), `threshold_required`, `states_required`.
 
 ## Validation rules
 
@@ -277,6 +288,7 @@ The controller subscribes to `async_track_entity_registry_updated_event` for eve
 
 - `action == "update"` with `old_entity_id`: replace the id in `options` / the subentry (`async_update_entry` / `async_update_subentry`); the update listener reloads the entry.
 - `action == "remove"`: repair issue `missing_entity` naming the entity and the option it was used in. The entry keeps running with the remaining inputs.
+- Entities that do not exist at all (neither state nor registry entry) are reported 5 min after Home Assistant started, and a warning source device removed from the device registry at once ([04-interface.md](04-interface.md#repairs)).
 
 `async_handle_source_entity_changes` from `helpers/helper_integration.py` handles one source entity per helper and is therefore not used directly; the behavior is the same.
 

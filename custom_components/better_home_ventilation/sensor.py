@@ -81,7 +81,8 @@ def setpoint_attributes(decision: Decision) -> dict[str, Any]:
         attributes["off_method"] = (
             str(decision.off_method) if decision.off_method else None
         )
-    # TODO(0.2, BHV-41): `awaiting_restart` in `safety_off`.
+    if decision.mode is Mode.SAFETY_OFF:
+        attributes["awaiting_restart"] = decision.awaiting_restart
     return attributes
 
 

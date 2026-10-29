@@ -33,6 +33,7 @@ from custom_components.better_home_ventilation.const import (
     CONF_CO2_SENSORS,
     CONF_HUMIDITY_SENSORS,
     CONF_MAX_FLOW,
+    CONF_NOTIFY_SERVICES,
     CONF_PRESENCE_ENTITIES,
     DEFAULTS,
     DOMAIN,
@@ -68,6 +69,7 @@ def entry_options(*remove: str, **overrides: Any) -> dict[str, Any]:
         CONF_CO2_SENSORS: [CO2_LIVING],
         CONF_HUMIDITY_SENSORS: [HUMIDITY_LIVING],
         CONF_PRESENCE_ENTITIES: [],
+        CONF_NOTIFY_SERVICES: [],
         **overrides,
     }
     for key in remove:

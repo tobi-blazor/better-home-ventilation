@@ -166,14 +166,14 @@ Done when: the 0.1 acceptance items pass in a test run of several days, includin
 
 Goal: safety shutdown and reminders as pure engine logic. Spec: [03-modes.md](spec/03-modes.md#safety-shutdown).
 
-- [ ] `ControllerState` extended (safety, `off_since`, `last_reminder`), store version bump with migration and test
-- [ ] Options migration (`MINOR_VERSION` 2) adding the defaults of the 0.2 options (`safety`, `notifications` including `pause_reminder_after`, `off_notice_after`)
-- [ ] `safety.py`: triggers `on_off`/`numeric`/`state_list`, `WarningDetails`, filters (exclude first, headline/advice, regex, severity), severity normalisation, HTML to text, warning key and incident key
-- [ ] `modes.py`: `safety_off` with priority, `override_safety`, `keep_off`, `restart_pending` with timeout, new warning during restart wait, `safety_when_disabled`, load rules (`active` rebuilt, `overridden` kept only with a matching incident) – BHV-40, 42, 43, 44
-- [ ] Reminders for indefinite pause and long off states (including external stops) – BHV-24
-- [ ] Decide Q11 (external start of the unit during `safety_off`) and update the spec
-- [ ] `tests/fixtures/warning_texts_de.json` with the 25 cases
-- [ ] Tests E23–E31 (including E30a–E30i), E39a, E40
+- [x] `ControllerState` extended (safety, `off_since`, `last_reminder`), store version bump (1.2) with migration and test
+- [x] Options migration (`MINOR_VERSION` 2) adding the defaults of the 0.2 options (`safety`, `notifications` including `pause_reminder_after`, `off_notice_after`)
+- [x] `safety.py`: triggers `on_off`/`numeric`/`state_list`, `WarningDetails`, filters (exclude first, headline/advice, regex, severity), severity normalisation, HTML to text, warning key and incident key
+- [x] `modes.py`: `safety_off` with priority, `override_safety`, `keep_off`, `restart_pending` with timeout, new warning during restart wait, `safety_when_disabled`, load rules (`active` rebuilt, `overridden` kept only with a matching incident) – BHV-40, 42, 43, 44
+- [x] Reminders for indefinite pause and long off states (including external stops) – BHV-24
+- [x] Decide Q11 (external start of the unit during `safety_off`) and update the spec: override (owner, 2026-10-29)
+- [x] `tests/fixtures/warning_texts_de.json` with the 25 cases
+- [x] Tests E23–E31 (including E30a–E30i), E39a, E40
 
 Done when: all safety and reminder scenarios pass, migrations tested.
 
@@ -181,13 +181,13 @@ Done when: all safety and reminder scenarios pass, migrations tested.
 
 Goal: warning sources can be configured and deliver warnings into the engine.
 
-- [ ] `WarningSourceFlow`: `user` (entity or device), `trigger` (only for sensor/select), `filters` with suggested keywords per provider and language, `reconfigure`; validation `source_required`, `invalid_regex`, `keyword_conflict`, `numeric_state`, `already_configured`
-- [ ] `warning_providers/`: registry, `nina` (`nina.get_details`, cache per `id`, 10 s timeout, fail-safe), `dwd`, `environment_canada`, `attributes`, `none`
-- [ ] Controller: subscriptions for sources, device sources expanded to all `binary_sensor`s (and updated on registry changes), problems `warning_source_unavailable`, `warning_details_failed`
-- [ ] Entities `safety_warning` and `safety_override`, created only with warning sources
-- [ ] Service `override_safety` with `no_active_warning`
-- [ ] Verify Q8 (Meteoalarm attributes) and record it in the spec
-- [ ] Tests C11a, C11b, C11c
+- [x] `WarningSourceFlow`: `user` (entity or device), `trigger` (only for sensor/select), `filters` with suggested keywords per provider and language, `reconfigure`; validation `source_required`, `invalid_regex`, `keyword_conflict`, `numeric_state`, `already_configured`
+- [x] `warning_providers/`: registry, `nina` (`nina.get_details`, cache per `id`, 10 s timeout, fail-safe), `dwd`, `environment_canada`, `attributes`, `none`
+- [x] Controller: subscriptions for sources, device sources expanded to all `binary_sensor`s (and updated on registry changes), problems `warning_source_unavailable`, `warning_details_failed`
+- [x] Entities `safety_warning` and `safety_override`, created only with warning sources
+- [x] Service `override_safety` with `no_active_warning`
+- [ ] Verify Q8 (Meteoalarm attributes) and record it in the spec (partly: the HA side is confirmed, the keys of `meteoalertapi` 0.3.1 are still to be checked)
+- [x] Tests C11a, C11b, C11c
 
 Done when: a template `binary_sensor` and a NINA entity work as sources in a dev instance.
 
@@ -195,26 +195,28 @@ Done when: a template `binary_sensor` and a NINA entity work as sources in a dev
 
 Goal: actionable notifications for safety, restart, reminders and problems. Spec: [04-interface.md](spec/04-interface.md#notifications).
 
-- [ ] Options steps `safety` and `notifications` (list of `notify.mobile_app_*` services), translations
-- [ ] `notify.py`: send with actions, tags and priority data, clear with `clear_notification`, `persistent_notification` fallback
-- [ ] Listener for `mobile_app_notification_action`, mapping action id → entry and command (`source: notification`)
-- [ ] Texts in the `common` translation category (loading confirmed, Q7)
-- [ ] Problem notifications after `problem_delay`, reminder notifications with "Resume"
-- [ ] Tests C10, C11
+- [x] Options steps `safety` and `notifications` (list of `notify.mobile_app_*` services), translations
+- [x] `notifications.py` (not `notify.py`, the module name of a notify platform): send with actions, tags and priority data, clear with `clear_notification`, `persistent_notification` fallback
+- [x] Listener for `mobile_app_notification_action`, mapping action id → entry and command (`source: notification`)
+- [x] Texts in the `common` translation category (loading confirmed, Q7)
+- [x] Problem notifications after `problem_delay`, reminder notifications with "Resume"
+- [x] Repair issue and problem `missing_notify_service` (the other repairs stay in M10)
+- [x] Tests C10, C11
+- [ ] On a phone: "Keep ventilating", "Restart now", "Keep off" and "Resume" (real installation)
 
 Done when: on a phone, "Keep ventilating", "Restart now", "Keep off" and "Resume" trigger the right commands.
 
 ## M10 Diagnostics, repairs, voice, replay, release 0.2.0
 
-- [ ] `diagnostics.py` with decision log, presence redacted – BHV-54, C13
-- [ ] Repair issues `missing_entity`, `missing_notify_service`, `state_reset` – BHV-55, C4a (removal part), C14
-- [ ] `intent.py`: four intents with `description` and `slot_schema`; verify Q2 and Q3; `examples/custom_sentences/{en,de}/` – BHV-22 (voice), C16
-- [ ] `tools/replay.py` (standard library only), CSV input, report output – BHV-56
+- [x] `diagnostics.py` with decision log, presence redacted – BHV-54, C13
+- [x] Repair issues `missing_entity`, `state_reset` – BHV-55, C4a (removal part), C14 (`missing_notify_service` done in M9)
+- [x] `intent.py`: four intents with `description` and `slot_schema`; verify Q2 and Q3; `examples/custom_sentences/{en,de}/` – BHV-22 (voice), C16 (Q2: `llm.py` platform for HA 2026.10)
+- [x] `tools/replay.py` (standard library only), CSV input, report output – BHV-56
 - [ ] Replay a winter month of recorded data, check reason shares and writes per day
-- [ ] README: warning sources and NINA setup, gas detectors are not a suitable source, provider contract
+- [x] README: warning sources and NINA setup, gas detectors are not a suitable source, provider contract (done in M8)
 - [ ] Acceptance items for safety from [06-testing.md](spec/06-testing.md#acceptance-checklist-real-installation) with a template `binary_sensor` as test warning
 - [ ] Switch over for everyday operation: disable the old automation permanently
-- [ ] `quality_scale.yaml`, `CHANGELOG.md`, tag `v0.2.0`
+- [ ] `quality_scale.yaml`, `CHANGELOG.md`, tag `v0.2.0` (`quality_scale.yaml` and `CHANGELOG.md` done in M10; the tag follows the acceptance)
 
 Done when: all 0.2 acceptance items are checked on the real installation.
 

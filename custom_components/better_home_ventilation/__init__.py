@@ -19,7 +19,10 @@ from .controller import (
     VentilationController,
     create_store,
 )
+from .engine.options import migrate_options
 from .entity import async_remove_stale_entities
+from .intent import async_setup_intents
+from .issues import async_remove_entry_issues, async_setup_issues
 from .services import async_setup_services
 
 _LOGGER = logging.getLogger(__name__)
@@ -38,8 +41,10 @@ PLATFORMS: Final[list[Platform]] = [
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Set up the integration: register the services (BHV-22)."""
+    """Set up the integration: services and intents (BHV-22), repair issues."""
     async_setup_services(hass)
+    await async_setup_intents(hass)
+    async_setup_issues(hass)
     return True
 
 
@@ -75,8 +80,9 @@ async def async_unload_entry(
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Delete the stored controller state of a removed entry (BHV-50)."""
+    """Delete the stored state and the repair issues of a removed entry (BHV-50)."""
     await create_store(hass, entry.entry_id).async_remove()
+    async_remove_entry_issues(hass, entry.entry_id)
 
 
 async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -85,8 +91,10 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> Non
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Migrate an entry to the current version (no migration steps yet).
+    """Migrate an entry to the current version.
 
+    1.1 -> 1.2 (phase 0.2): the defaults of the options steps `safety` and
+    `notifications` are added (`migrate_options`), existing values are kept.
     A major version from the future (a downgrade) cannot be read and fails.
     Minor versions are backwards compatible: a newer minor version of the
     current major version is accepted as is.
@@ -101,4 +109,12 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             current,
         )
         return False
+    target = BetterHomeVentilationConfigFlow.MINOR_VERSION
+    if entry.minor_version < target:
+        hass.config_entries.async_update_entry(
+            entry,
+            options=migrate_options(entry.options, entry.minor_version),
+            minor_version=target,
+        )
+        _LOGGER.debug("Migrated %s to version %s.%s", entry.title, current, target)
     return True

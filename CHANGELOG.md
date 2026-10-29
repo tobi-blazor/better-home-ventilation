@@ -9,17 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Warning sources: **Add warning source** on the integration page adds a hazard signal that switches the ventilation off (safety shutdown). A source is one entity (`binary_sensor`, `input_boolean`, `switch`, a `sensor` with a numeric threshold or a `sensor`/`select` with a list of states) or one device, whose binary sensors all count (for example a NINA region with several message slots; new slots are picked up automatically). Each source has its own name, trigger and filters and can be reconfigured or deleted.
+- Warning details: for NINA the details come from the `nina.get_details` action (Home Assistant 2026.4 reads the attributes instead), for DWD Weather Warnings and Environment Canada from their attributes, for other integrations such as Meteoalarm from generic attributes. Filters per source: event keywords in the headline, advice keywords in the text, exclude keywords for all-clear messages and tests, and a minimum severity. German and English keyword suggestions are filled in for NINA. A source without details, or whose details cannot be fetched within 10 seconds, always counts as a warning.
+- Entities **Safety warning** (on while any warning is active, with the list of warnings as attribute) and **Safety override** (keep ventilating despite the current warnings; turning it off shuts down again), created only when at least one warning source exists.
+- Action `better_home_ventilation.override_safety`.
+- Problems `warning_source_unavailable` and `warning_details_failed` on the problem sensor.
+- Phone notifications through the Home Assistant Companion app: the safety shutdown with **Keep ventilating**, the restart question with **Restart now** and **Keep off** when the warning ends, a notice when the unit restarted by itself, reminders with **Resume** while the unit stays off, and problem notifications after the problem delay. Notifications are removed from the phones when their reason is gone. Safety notifications are time-sensitive on iOS and high priority on Android. Without a phone, persistent notifications are created in Home Assistant instead. Texts in English and German.
+- Options **Safety** (restart confirmation timeout, safety while control is off) and **Notifications** (phones, which notifications they get, reminder times).
+- Repair issue and problem `missing_notify_service` when a selected phone's notify service no longer exists.
+- Voice control: the Assist intents `BetterVentilationBoost`, `BetterVentilationPause`, `BetterVentilationResume` and `BetterVentilationStatus` (optional duration, level and entry name; spoken answers and errors in English and German). LLM conversation agents get them as tools by themselves; for the default agent, example sentences in English and German are in `examples/custom_sentences/` to copy to `<config>/custom_sentences/`.
+- Repair issue and problem `missing_entity` when an entity selected in the settings (or the device of a warning source) no longer exists: 5 minutes after Home Assistant started, or at once when it is deleted from the registry. The issue names the entry and the settings step, and disappears when the entity is back or no longer used.
+- Repair issue `state_reset` (for information) when the stored state could not be read and was reset to the defaults.
+- Diagnostics download with the settings, the stored state, the states of all used entities, the last 100 decisions, problems and warnings; phones are removed and person/device tracker states reduced to home/not home.
+- Replay tool `tools/replay.py`: runs recorded sensor history (CSV) with the settings of an entry (or its diagnostics download) through the control logic and reports setpoint percentiles, the share of time per reason and mode, writes per day and the longest time at max flow, optionally with every decision as CSV. Needs only Python, not Home Assistant.
 - New reason **CO₂ and humidity** (`co2_and_humidity_high`) when CO₂ and humidity-high ask for about the same flow (at most one flow step apart). Before, the reason flipped between CO₂ and humidity with every sensor reading in that case. The setpoint attribute `reasons` lists the single reasons (`co2`, `humidity_high`).
 
 ### Changed
 
 - The profile select shows a short description with each profile (e.g. "Quiet – limited all day"), so the choice is clear in the dropdown.
+- Existing entries and their stored state are migrated for 0.2: the defaults of the new safety and notification settings are added (restart confirmation after 30 minutes, safety also while control is off, reminders after 8 hours of indefinite pause and after 24 hours of any other off state). Nothing changes in operation until warning sources and notifications are available.
 - CO₂ values from 100 ppm (before: 250 ppm) count as plausible. Miscalibrated sensors that read 190–250 ppm at night are no longer ignored, so they raise no problem and do not cause the fallback flow. Values well below ~400 ppm mean the sensor needs calibration (README FAQ).
 
 ### Fixed
 
 - The quiet limit is kept strictly: a flow above the active quiet limit is brought down even when it is less than the dead band down above it. Before, for example, 260 m³/h written in the evening stayed for hours after the quiet limit of 250 m³/h started at 22:00. The minimum write interval and the maximum step down still apply.
-- The setpoint sensor shows what the unit runs at while nothing is written: during the startup grace, while the actuator is unavailable or a readiness condition is not met it keeps the current flow instead of the unshaped target, and right after a write it no longer jumps back to the old value for a moment before a unit that reports on its next poll confirms the new one.
+- The setpoint sensor shows what the unit runs at while nothing is written: during the startup grace, while the actuator is unavailable or a readiness condition is not met it keeps the current flow instead of the unshaped target (a pause or safety shutdown still shows 0), and right after a write it no longer jumps back to the old value for a moment before a unit that reports on its next poll confirms the new one.
 
 ## [0.1.0] - 2026-10-21
 

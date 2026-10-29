@@ -83,6 +83,7 @@
       "off_entity_is_actuator": "The off actuator must be a different entity than the actuator.",
       "off_entity_not_found": "The off actuator entity does not exist.",
       "quiet_range": "The quiet max flow must be between the minimum flow and the max flow.",
+      "reminder_too_short": "A reminder needs at least 1 minute.",
       "select_mapping": "Enter a flow for at least two options, each with a different flow.",
       "select_options": "The select entity needs at least two options.",
       "sensor_not_found": "At least one of the selected sensors does not exist."
@@ -95,13 +96,17 @@
           "actuator": "Actuator",
           "inputs": "Inputs",
           "control": "Control",
-          "boosts": "Boosts"
+          "boosts": "Boosts",
+          "safety": "Safety",
+          "notifications": "Notifications"
         },
         "menu_option_descriptions": {
           "actuator": "Actuator entity, max flow, off actuator and the native range.",
           "inputs": "Room CO₂ and humidity sensors and presence entities.",
           "control": "CO₂ and humidity ramps, flows, quiet and away limits and how calmly the unit runs.",
-          "boosts": "Default duration and level of a manual boost."
+          "boosts": "Default duration and level of a manual boost.",
+          "safety": "Restart confirmation after a warning and safety while control is switched off.",
+          "notifications": "Phones, which notifications they get and when reminders are sent."
         }
       },
       "actuator": {
@@ -313,6 +318,38 @@
             }
           }
         }
+      },
+      "safety": {
+        "title": "Safety",
+        "description": "Warning sources are added as entries of their own: on the [integration page]({integration_url}), choose **Add warning source**. These settings apply to all of them.",
+        "data": {
+          "restart_confirm_timeout": "Restart confirmation timeout",
+          "safety_when_disabled": "Safety while control is off"
+        },
+        "data_description": {
+          "restart_confirm_timeout": "When the last warning ends, the unit stays off and asks on the phones whether to restart. Without an answer it restarts after this time. 0 restarts at once.",
+          "safety_when_disabled": "Also switch the unit off for a warning while the Control switch is off, and back to its previous state after the restart. When off, warnings are only shown on the entities."
+        }
+      },
+      "notifications": {
+        "title": "Notifications",
+        "description": "Notifications go to the selected Home Assistant Companion apps, with actions such as Keep ventilating. Without a selected phone they appear as persistent notifications in Home Assistant, without actions.",
+        "data": {
+          "notify_services": "Phones",
+          "notify_safety": "Safety notifications",
+          "notify_reminders": "Reminders",
+          "notify_problems": "Problem notifications",
+          "pause_reminder_after": "Reminder for an indefinite pause after",
+          "off_notice_after": "Reminder for other off states after"
+        },
+        "data_description": {
+          "notify_services": "The notify.mobile_app services of the Companion apps that get the notifications. A service that no longer exists is not selected here and is removed on saving.",
+          "notify_safety": "Safety shutdown with Keep ventilating, the restart question with Restart now and Keep off, and the restart notice.",
+          "notify_reminders": "Reminder with Resume while the unit stays off (moisture protection is inactive), repeated every 24 hours.",
+          "notify_problems": "A notification when a problem persists longer than the problem delay (Control settings, Advanced); cleared when it is resolved.",
+          "pause_reminder_after": "First reminder after a pause until resumed has lasted this long (at least 1 minute).",
+          "off_notice_after": "First reminder after a timed pause or a safety shutdown has lasted this long (at least 1 minute)."
+        }
       }
     }
   },
@@ -363,6 +400,96 @@
           }
         }
       }
+    },
+    "warning_source": {
+      "entry_type": "Warning source",
+      "initiate_flow": {
+        "user": "Add warning source",
+        "reconfigure": "Reconfigure warning source"
+      },
+      "abort": {
+        "already_configured": "This entity or device is already used by a warning source or readiness condition of this entry."
+      },
+      "error": {
+        "source_required": "Select either an entity or a device (exactly one).",
+        "invalid_regex": "A keyword in /…/ is not a valid regular expression.",
+        "keyword_conflict": "A keyword is in an include list and in the exclude keywords.",
+        "numeric_state": "The current state of the entity is not a number, so it cannot be compared with a threshold. Use a state list instead.",
+        "threshold_required": "Enter a threshold for the numeric trigger.",
+        "states_required": "Enter at least one state for the state list."
+      },
+      "step": {
+        "user": {
+          "title": "Add warning source",
+          "description": "A hazard signal that switches the ventilation off: a smoke or CO detector, an official warning (e.g. NINA), a weather warning or any helper such as a template binary sensor or an input boolean. Choose either one entity or one device. Indoor gas detectors are not a recommended source: with gas in the house, open the windows and leave instead of switching devices.",
+          "data": {
+            "source_entity": "Entity",
+            "source_device": "Device",
+            "name": "Name"
+          },
+          "data_description": {
+            "source_entity": "An on/off entity (on = warning), a sensor with a warning level or count, or a select with states. Leave empty when you choose a device.",
+            "source_device": "A device whose binary sensors are all warnings, e.g. a NINA region with several message slots. All its enabled binary sensors count, and new ones are picked up automatically. Leave empty when you choose an entity.",
+            "name": "Shown on the safety warning entity and in notifications. Default: the name of the entity or device."
+          }
+        },
+        "reconfigure": {
+          "title": "Reconfigure warning source",
+          "description": "A hazard signal that switches the ventilation off: a smoke or CO detector, an official warning (e.g. NINA), a weather warning or any helper such as a template binary sensor or an input boolean. Choose either one entity or one device. Indoor gas detectors are not a recommended source: with gas in the house, open the windows and leave instead of switching devices.",
+          "data": {
+            "source_entity": "Entity",
+            "source_device": "Device",
+            "name": "Name"
+          },
+          "data_description": {
+            "source_entity": "An on/off entity (on = warning), a sensor with a warning level or count, or a select with states. Leave empty when you choose a device.",
+            "source_device": "A device whose binary sensors are all warnings, e.g. a NINA region with several message slots. All its enabled binary sensors count, and new ones are picked up automatically. Leave empty when you choose an entity.",
+            "name": "Shown on the safety warning entity and in notifications. Default: the name of the entity or device."
+          }
+        },
+        "trigger": {
+          "title": "Trigger",
+          "description": "When {entity} counts as an active warning.",
+          "data": {
+            "trigger": "Trigger",
+            "threshold": "Threshold",
+            "states": "States"
+          },
+          "data_description": {
+            "trigger": "Numeric threshold: active while the state is a number at or above the threshold (e.g. a warning level or a number of alerts). State list: active while the state is one of the states.",
+            "threshold": "For a numeric threshold: the lowest state that counts as a warning, e.g. 3 for DWD warning level 3 or 1 for one Environment Canada alert.",
+            "states": "For a state list: the states that count as a warning, e.g. Orange and Red. Case does not matter."
+          }
+        },
+        "filters": {
+          "title": "Filters",
+          "description": "Which warnings of {name} switch the ventilation off. Detected details provider: {provider}.",
+          "data": {
+            "details": "Warning details",
+            "min_severity": "Minimum severity"
+          },
+          "data_description": {
+            "details": "Automatic uses the detected provider. Attributes reads headline and text from the entity's attributes. None: every activation is a warning, keywords and severity do not apply.",
+            "min_severity": "Warnings below this severity are ignored. A warning without a known severity counts as extreme."
+          },
+          "sections": {
+            "keywords": {
+              "name": "Keywords",
+              "description": "Suggested for the detected provider and the server language. A warning counts if it contains no exclude keyword and matches an event or an advice keyword; with both lists empty every warning counts. A warning without details always counts. Keywords ignore case; /…/ is a regular expression.",
+              "data": {
+                "headline_keywords": "Event keywords (headline)",
+                "text_keywords": "Advice keywords (whole text)",
+                "exclude_keywords": "Exclude keywords"
+              },
+              "data_description": {
+                "headline_keywords": "Matched in the headline only, e.g. fire, smoke or chemical. Event words are reliable in the short headline but give false hits in the body, e.g. the fire brigade as sender.",
+                "text_keywords": "Matched in headline, text and recommended actions, e.g. ventilation: authorities only mention ventilation when it must be switched off.",
+                "exclude_keywords": "A warning that contains one of these anywhere never counts, e.g. all-clear messages, tests and exercises. Checked first."
+              }
+            }
+          }
+        }
+      }
     }
   },
   "exceptions": {
@@ -380,6 +507,9 @@
     },
     "entry_not_loaded": {
       "message": "{entry_title} is not loaded."
+    },
+    "no_active_warning": {
+      "message": "There is no active warning to override."
     }
   },
   "selector": {
@@ -400,12 +530,37 @@
         "on": "On (e.g. a standby switch)",
         "off": "Off (e.g. a power switch)"
       }
+    },
+    "trigger": {
+      "options": {
+        "numeric": "Numeric threshold",
+        "state_list": "State list"
+      }
+    },
+    "details": {
+      "options": {
+        "auto": "Automatic",
+        "attributes": "Attributes",
+        "none": "None (on/off only)"
+      }
+    },
+    "severity": {
+      "options": {
+        "none": "No minimum",
+        "minor": "Minor",
+        "moderate": "Moderate",
+        "severe": "Severe",
+        "extreme": "Extreme"
+      }
     }
   },
   "entity": {
     "binary_sensor": {
       "problem": {
         "name": "Problem"
+      },
+      "safety_warning": {
+        "name": "Safety warning"
       }
     },
     "button": {
@@ -495,6 +650,9 @@
     "switch": {
       "control": {
         "name": "Control"
+      },
+      "safety_override": {
+        "name": "Safety override"
       }
     }
   },
@@ -540,6 +698,16 @@
           "description": "The ventilation entry. Optional if only one exists."
         }
       }
+    },
+    "override_safety": {
+      "name": "Override safety shutdown",
+      "description": "Keeps the ventilation running despite the current warnings, or ends the wait for the restart confirmation. A new warning switches it off again.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Entry",
+          "description": "The ventilation entry. Optional if only one exists."
+        }
+      }
     }
   },
   "common": {
@@ -562,6 +730,69 @@
     "logbook_trigger_detector_end": "detection ended",
     "logbook_trigger_inputs_lost": "inputs lost",
     "logbook_trigger_inputs_restored": "inputs restored",
-    "logbook_trigger_control_switch": "control switch"
+    "logbook_trigger_control_switch": "control switch",
+    "provider_nina": "NINA (details from the NINA service)",
+    "provider_dwd_weather_warnings": "DWD Weather Warnings (indexed attributes)",
+    "provider_environment_canada": "Environment Canada (alert titles)",
+    "provider_attributes": "generic attributes (headline, description, severity)",
+    "provider_none": "none (on/off only, filters do not apply)",
+    "notify_safety_title": "Ventilation off: {headline}",
+    "notify_safety_message_no_details": "{source} reports a warning. The ventilation was switched off.",
+    "notify_restart_title": "Warning lifted",
+    "notify_restart_message": "Restart ventilation? Restarts automatically at {time}.",
+    "notify_restarted_title": "Ventilation restarted",
+    "notify_restarted_message": "The warning has ended; the ventilation runs again.",
+    "notify_reminder_title": "Ventilation off since {time}",
+    "notify_reminder_message": "Moisture protection is inactive.",
+    "notify_problem_title": "Ventilation problem",
+    "notify_problem_actuator_unavailable": "{entities} is unavailable; nothing can be written to the unit.",
+    "notify_problem_not_ready": "The readiness condition on {entities} is not met; nothing is written to the unit.",
+    "notify_problem_write_failed": "Writing to the unit failed.",
+    "notify_problem_write_mismatch": "The unit did not take the written value.",
+    "notify_problem_inputs_invalid": "These inputs are invalid and ignored: {entities}.",
+    "notify_problem_no_valid_co2": "No CO₂ sensor has a valid value; the unit runs at the fallback flow.",
+    "notify_problem_warning_source_unavailable": "The warning source {entities} is unavailable and cannot shut down the unit.",
+    "notify_problem_warning_details_failed": "The details of the warning on {entities} could not be fetched; the warning counts without them.",
+    "notify_problem_missing_notify_service": "A configured notify service no longer exists. Check the notification settings.",
+    "notify_action_keep_ventilating": "Keep ventilating",
+    "notify_action_ok": "OK",
+    "notify_action_restart": "Restart now",
+    "notify_action_keep_off": "Keep off",
+    "notify_action_resume": "Resume",
+    "notify_problem_missing_entity": "{entities} no longer exists; the ventilation runs without it. See the repair issue.",
+    "issue_where_actuator": "actuator (step Actuator)",
+    "issue_where_off_entity": "off actuator (step Actuator)",
+    "issue_where_co2_sensors": "CO₂ sensors (step Inputs)",
+    "issue_where_humidity_sensors": "humidity sensors (step Inputs)",
+    "issue_where_presence_entities": "presence (step Inputs)",
+    "issue_where_readiness_condition": "readiness condition {title}",
+    "issue_where_warning_source": "warning source {title}",
+    "intent_boost": "{name} boosted to {level} m³/h until {time}.",
+    "intent_pause": "{name} paused until {time}.",
+    "intent_pause_indefinite": "{name} paused until you resume it.",
+    "intent_resume": "{name} is back to {mode}.",
+    "intent_status": "{name}: {mode}, {setpoint} m³/h, reason: {reason}.",
+    "intent_status_until": "{name}: {mode} until {time}, {setpoint} m³/h, reason: {reason}.",
+    "intent_status_not_started": "{name} has not started yet.",
+    "intent_error_control_disabled": "Control of {name} is switched off.",
+    "intent_error_level_out_of_range": "The level must be between {min} and {max} m³/h.",
+    "intent_error_entry_required": "There are several ventilation units; say which one.",
+    "intent_error_entry_not_found": "There is no ventilation called {name}.",
+    "intent_error_no_entry": "No ventilation is set up.",
+    "intent_error_entry_not_loaded": "{name} is not loaded."
+  },
+  "issues": {
+    "missing_notify_service": {
+      "title": "Notify service {service} not found",
+      "description": "{entries} sends notifications to {service}, which no longer exists (for example because the Companion app was removed or the phone renamed). Open the settings of the entry, choose **Notifications** and select the current phones; saving removes the missing service. Until then the other phones get the notifications, or a persistent notification is created if none is left."
+    },
+    "missing_entity": {
+      "title": "{entity} not found",
+      "description": "{entity} is used in {usages}, but it exists neither as an entity nor in the entity registry (for example because its integration was removed or the entity was deleted). The ventilation keeps running without it. Open the settings of the entry and choose an existing entity in the named step, or delete the readiness condition or warning source. This issue disappears as soon as the entity exists again or is no longer used."
+    },
+    "state_reset": {
+      "title": "Stored state of {entry} was reset",
+      "description": "The stored state of {entry} could not be read (it was damaged or written by a newer version) and was replaced by the defaults: a running boost or pause and overrides of warnings ended, the control switch is on and the profile is Balanced. Check the control switch and the profile. This message is for information only; you can ignore it."
+    }
   }
 }

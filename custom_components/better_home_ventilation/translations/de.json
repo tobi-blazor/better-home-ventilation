@@ -83,6 +83,7 @@
       "off_entity_is_actuator": "Der Aus-Aktor muss eine andere Entität als der Aktor sein.",
       "off_entity_not_found": "Die Entität des Aus-Aktors existiert nicht.",
       "quiet_range": "Der Ruhe-Volumenstrom muss zwischen Mindest- und maximalem Volumenstrom liegen.",
+      "reminder_too_short": "Eine Erinnerung braucht mindestens 1 Minute.",
       "select_mapping": "Bitte für mindestens zwei Optionen einen Volumenstrom eingeben, jeweils mit unterschiedlichem Wert.",
       "select_options": "Die Auswahl-Entität braucht mindestens zwei Optionen.",
       "sensor_not_found": "Mindestens einer der ausgewählten Sensoren existiert nicht."
@@ -95,13 +96,17 @@
           "actuator": "Aktor",
           "inputs": "Eingänge",
           "control": "Regelung",
-          "boosts": "Boost"
+          "boosts": "Boost",
+          "safety": "Sicherheit",
+          "notifications": "Benachrichtigungen"
         },
         "menu_option_descriptions": {
           "actuator": "Aktor-Entität, maximaler Volumenstrom, Aus-Aktor und Wertebereich.",
           "inputs": "CO₂- und Feuchtesensoren der Räume sowie Anwesenheits-Entitäten.",
           "control": "CO₂- und Feuchte-Rampen, Volumenströme, Ruhe- und Abwesenheitsbegrenzung und wie ruhig das Gerät läuft.",
-          "boosts": "Standarddauer und -stufe eines manuellen Boosts."
+          "boosts": "Standarddauer und -stufe eines manuellen Boosts.",
+          "safety": "Bestätigung des Wiedereinschaltens nach einer Warnung und Sicherheit bei ausgeschalteter Regelung.",
+          "notifications": "Telefone, welche Benachrichtigungen sie erhalten und wann Erinnerungen kommen."
         }
       },
       "actuator": {
@@ -313,6 +318,38 @@
             }
           }
         }
+      },
+      "safety": {
+        "title": "Sicherheit",
+        "description": "Warnquellen werden als eigene Einträge hinzugefügt: auf der [Integrationsseite]({integration_url}) **Warnquelle hinzufügen** wählen. Diese Einstellungen gelten für alle.",
+        "data": {
+          "restart_confirm_timeout": "Wartezeit für die Bestätigung",
+          "safety_when_disabled": "Sicherheit bei ausgeschalteter Regelung"
+        },
+        "data_description": {
+          "restart_confirm_timeout": "Endet die letzte Warnung, bleibt das Gerät aus und fragt auf den Telefonen, ob es wieder einschalten soll. Ohne Antwort schaltet es nach dieser Zeit ein. 0 schaltet sofort ein.",
+          "safety_when_disabled": "Das Gerät auch bei ausgeschaltetem Regelungsschalter für eine Warnung ausschalten und nach dem Wiedereinschalten in den vorherigen Zustand bringen. Ausgeschaltet werden Warnungen nur an den Entitäten angezeigt."
+        }
+      },
+      "notifications": {
+        "title": "Benachrichtigungen",
+        "description": "Benachrichtigungen gehen an die gewählten Home Assistant Companion Apps, mit Aktionen wie Weiter lüften. Ohne gewähltes Telefon erscheinen sie als dauerhafte Benachrichtigungen in Home Assistant, ohne Aktionen.",
+        "data": {
+          "notify_services": "Telefone",
+          "notify_safety": "Sicherheitsbenachrichtigungen",
+          "notify_reminders": "Erinnerungen",
+          "notify_problems": "Problembenachrichtigungen",
+          "pause_reminder_after": "Erinnerung bei unbefristeter Pause nach",
+          "off_notice_after": "Erinnerung bei anderen Aus-Zuständen nach"
+        },
+        "data_description": {
+          "notify_services": "Die notify.mobile_app-Dienste der Companion Apps, die die Benachrichtigungen erhalten. Ein Dienst, der nicht mehr existiert, ist hier nicht gewählt und wird beim Speichern entfernt.",
+          "notify_safety": "Sicherheitsabschaltung mit Weiter lüften, die Frage zum Wiedereinschalten mit Jetzt einschalten und Aus lassen sowie der Hinweis auf das Wiedereinschalten.",
+          "notify_reminders": "Erinnerung mit Fortsetzen, solange das Gerät aus bleibt (der Feuchteschutz ist nicht aktiv), alle 24 Stunden wiederholt.",
+          "notify_problems": "Eine Benachrichtigung, wenn ein Problem länger als die Verzögerung für Probleme (Einstellungen unter Regelung) besteht; sie wird entfernt, wenn es behoben ist.",
+          "pause_reminder_after": "Erste Erinnerung, nachdem eine Pause bis zum Fortsetzen so lange gedauert hat (mindestens 1 Minute).",
+          "off_notice_after": "Erste Erinnerung, nachdem eine befristete Pause oder eine Sicherheitsabschaltung so lange gedauert hat (mindestens 1 Minute)."
+        }
       }
     }
   },
@@ -363,6 +400,96 @@
           }
         }
       }
+    },
+    "warning_source": {
+      "entry_type": "Warnquelle",
+      "initiate_flow": {
+        "user": "Warnquelle hinzufügen",
+        "reconfigure": "Warnquelle ändern"
+      },
+      "abort": {
+        "already_configured": "Diese Entität oder dieses Gerät wird bereits von einer Warnquelle oder Bereitschaftsbedingung dieses Eintrags verwendet."
+      },
+      "error": {
+        "source_required": "Wähle entweder eine Entität oder ein Gerät (genau eins).",
+        "invalid_regex": "Ein Stichwort in /…/ ist kein gültiger regulärer Ausdruck.",
+        "keyword_conflict": "Ein Stichwort steht in einer Einschlussliste und in den Ausschluss-Stichwörtern.",
+        "numeric_state": "Der aktuelle Zustand der Entität ist keine Zahl und kann nicht mit einem Schwellwert verglichen werden. Verwende stattdessen eine Zustandsliste.",
+        "threshold_required": "Gib einen Schwellwert für den numerischen Auslöser ein.",
+        "states_required": "Gib mindestens einen Zustand für die Zustandsliste ein."
+      },
+      "step": {
+        "user": {
+          "title": "Warnquelle hinzufügen",
+          "description": "Ein Gefahrensignal, das die Lüftung ausschaltet: ein Rauch- oder CO-Melder, eine amtliche Warnung (z. B. NINA), eine Wetterwarnung oder ein beliebiger Helfer wie ein Template-Binärsensor oder ein Input-Boolean. Wähle entweder eine Entität oder ein Gerät. Gasmelder im Haus sind keine empfohlene Quelle: Bei Gas im Haus Fenster öffnen und das Haus verlassen, statt Geräte zu schalten.",
+          "data": {
+            "source_entity": "Entität",
+            "source_device": "Gerät",
+            "name": "Name"
+          },
+          "data_description": {
+            "source_entity": "Eine Ein/Aus-Entität (ein = Warnung), ein Sensor mit Warnstufe oder Anzahl oder eine Auswahl mit Zuständen. Leer lassen, wenn du ein Gerät wählst.",
+            "source_device": "Ein Gerät, dessen Binärsensoren alle Warnungen sind, z. B. eine NINA-Region mit mehreren Meldungsplätzen. Alle aktivierten Binärsensoren zählen, neue werden automatisch übernommen. Leer lassen, wenn du eine Entität wählst.",
+            "name": "Wird an der Entität Sicherheitswarnung und in Benachrichtigungen angezeigt. Standard: der Name der Entität oder des Geräts."
+          }
+        },
+        "reconfigure": {
+          "title": "Warnquelle ändern",
+          "description": "Ein Gefahrensignal, das die Lüftung ausschaltet: ein Rauch- oder CO-Melder, eine amtliche Warnung (z. B. NINA), eine Wetterwarnung oder ein beliebiger Helfer wie ein Template-Binärsensor oder ein Input-Boolean. Wähle entweder eine Entität oder ein Gerät. Gasmelder im Haus sind keine empfohlene Quelle: Bei Gas im Haus Fenster öffnen und das Haus verlassen, statt Geräte zu schalten.",
+          "data": {
+            "source_entity": "Entität",
+            "source_device": "Gerät",
+            "name": "Name"
+          },
+          "data_description": {
+            "source_entity": "Eine Ein/Aus-Entität (ein = Warnung), ein Sensor mit Warnstufe oder Anzahl oder eine Auswahl mit Zuständen. Leer lassen, wenn du ein Gerät wählst.",
+            "source_device": "Ein Gerät, dessen Binärsensoren alle Warnungen sind, z. B. eine NINA-Region mit mehreren Meldungsplätzen. Alle aktivierten Binärsensoren zählen, neue werden automatisch übernommen. Leer lassen, wenn du eine Entität wählst.",
+            "name": "Wird an der Entität Sicherheitswarnung und in Benachrichtigungen angezeigt. Standard: der Name der Entität oder des Geräts."
+          }
+        },
+        "trigger": {
+          "title": "Auslöser",
+          "description": "Wann {entity} als aktive Warnung zählt.",
+          "data": {
+            "trigger": "Auslöser",
+            "threshold": "Schwellwert",
+            "states": "Zustände"
+          },
+          "data_description": {
+            "trigger": "Numerischer Schwellwert: aktiv, solange der Zustand eine Zahl ab dem Schwellwert ist (z. B. eine Warnstufe oder eine Anzahl Meldungen). Zustandsliste: aktiv, solange der Zustand einer der Zustände ist.",
+            "threshold": "Für einen numerischen Schwellwert: der niedrigste Zustand, der als Warnung zählt, z. B. 3 für DWD-Warnstufe 3 oder 1 für eine Meldung von Environment Canada.",
+            "states": "Für eine Zustandsliste: die Zustände, die als Warnung zählen, z. B. Orange und Rot. Groß- und Kleinschreibung spielt keine Rolle."
+          }
+        },
+        "filters": {
+          "title": "Filter",
+          "description": "Welche Warnungen von {name} die Lüftung ausschalten. Erkannter Detail-Anbieter: {provider}.",
+          "data": {
+            "details": "Warnungsdetails",
+            "min_severity": "Mindest-Schweregrad"
+          },
+          "data_description": {
+            "details": "Automatisch verwendet den erkannten Anbieter. Attribute liest Überschrift und Text aus den Attributen der Entität. Keine: jede Aktivierung ist eine Warnung, Stichwörter und Schweregrad gelten nicht.",
+            "min_severity": "Warnungen unter diesem Schweregrad werden ignoriert. Eine Warnung ohne bekannten Schweregrad zählt als extrem."
+          },
+          "sections": {
+            "keywords": {
+              "name": "Stichwörter",
+              "description": "Vorschläge für den erkannten Anbieter und die Sprache des Servers. Eine Warnung zählt, wenn sie kein Ausschluss-Stichwort enthält und zu einem Ereignis- oder Hinweis-Stichwort passt; sind beide Listen leer, zählt jede Warnung. Eine Warnung ohne Details zählt immer. Groß- und Kleinschreibung spielt keine Rolle; /…/ ist ein regulärer Ausdruck.",
+              "data": {
+                "headline_keywords": "Ereignis-Stichwörter (Überschrift)",
+                "text_keywords": "Hinweis-Stichwörter (ganzer Text)",
+                "exclude_keywords": "Ausschluss-Stichwörter"
+              },
+              "data_description": {
+                "headline_keywords": "Nur in der Überschrift gesucht, z. B. Brand, Rauch oder Gefahrstoff. Ereignis-Wörter sind in der kurzen Überschrift zuverlässig, im Text aber oft Fehltreffer, z. B. die Feuerwehr als Absender.",
+                "text_keywords": "In Überschrift, Text und Handlungsempfehlungen gesucht, z. B. Lüftung: Behörden erwähnen die Lüftung nur, wenn sie abgeschaltet werden soll.",
+                "exclude_keywords": "Eine Warnung, die eines dieser Wörter irgendwo enthält, zählt nie, z. B. Entwarnungen, Probealarme und Übungen. Wird zuerst geprüft."
+              }
+            }
+          }
+        }
+      }
     }
   },
   "exceptions": {
@@ -380,6 +507,9 @@
     },
     "entry_not_loaded": {
       "message": "{entry_title} ist nicht geladen."
+    },
+    "no_active_warning": {
+      "message": "Es gibt keine aktive Warnung, die übersteuert werden kann."
     }
   },
   "selector": {
@@ -400,12 +530,37 @@
         "on": "An (z. B. ein Standby-Schalter)",
         "off": "Aus (z. B. ein Netzschalter)"
       }
+    },
+    "trigger": {
+      "options": {
+        "numeric": "Numerischer Schwellwert",
+        "state_list": "Zustandsliste"
+      }
+    },
+    "details": {
+      "options": {
+        "auto": "Automatisch",
+        "attributes": "Attribute",
+        "none": "Keine (nur ein/aus)"
+      }
+    },
+    "severity": {
+      "options": {
+        "none": "Kein Minimum",
+        "minor": "Gering",
+        "moderate": "Mäßig",
+        "severe": "Schwer",
+        "extreme": "Extrem"
+      }
     }
   },
   "entity": {
     "binary_sensor": {
       "problem": {
         "name": "Problem"
+      },
+      "safety_warning": {
+        "name": "Sicherheitswarnung"
       }
     },
     "button": {
@@ -495,6 +650,9 @@
     "switch": {
       "control": {
         "name": "Regelung"
+      },
+      "safety_override": {
+        "name": "Warnung übersteuern"
       }
     }
   },
@@ -540,6 +698,16 @@
           "description": "Der Lüftungseintrag. Optional, wenn nur einer existiert."
         }
       }
+    },
+    "override_safety": {
+      "name": "Sicherheitsabschaltung übersteuern",
+      "description": "Lässt die Lüftung trotz der aktuellen Warnungen weiterlaufen oder beendet das Warten auf die Bestätigung des Neustarts. Eine neue Warnung schaltet sie wieder aus.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Eintrag",
+          "description": "Der Lüftungseintrag. Optional, wenn nur einer existiert."
+        }
+      }
     }
   },
   "common": {
@@ -562,6 +730,69 @@
     "logbook_trigger_detector_end": "Erkennung beendet",
     "logbook_trigger_inputs_lost": "Eingänge verloren",
     "logbook_trigger_inputs_restored": "Eingänge wieder gültig",
-    "logbook_trigger_control_switch": "Regelungsschalter"
+    "logbook_trigger_control_switch": "Regelungsschalter",
+    "provider_nina": "NINA (Details vom NINA-Dienst)",
+    "provider_dwd_weather_warnings": "DWD-Wetterwarnungen (nummerierte Attribute)",
+    "provider_environment_canada": "Environment Canada (Titel der Meldungen)",
+    "provider_attributes": "allgemeine Attribute (Überschrift, Beschreibung, Schweregrad)",
+    "provider_none": "keiner (nur ein/aus, Filter gelten nicht)",
+    "notify_safety_title": "Lüftung aus: {headline}",
+    "notify_safety_message_no_details": "{source} meldet eine Warnung. Die Lüftung wurde ausgeschaltet.",
+    "notify_restart_title": "Warnung aufgehoben",
+    "notify_restart_message": "Lüftung wieder einschalten? Sie startet automatisch um {time}.",
+    "notify_restarted_title": "Lüftung wieder eingeschaltet",
+    "notify_restarted_message": "Die Warnung ist vorbei; die Lüftung läuft wieder.",
+    "notify_reminder_title": "Lüftung aus seit {time}",
+    "notify_reminder_message": "Der Feuchteschutz ist nicht aktiv.",
+    "notify_problem_title": "Problem mit der Lüftung",
+    "notify_problem_actuator_unavailable": "{entities} ist nicht verfügbar; es kann nichts an das Gerät geschrieben werden.",
+    "notify_problem_not_ready": "Die Bereitschaftsbedingung an {entities} ist nicht erfüllt; es wird nichts an das Gerät geschrieben.",
+    "notify_problem_write_failed": "Das Schreiben an das Gerät ist fehlgeschlagen.",
+    "notify_problem_write_mismatch": "Das Gerät hat den geschriebenen Wert nicht übernommen.",
+    "notify_problem_inputs_invalid": "Diese Eingänge sind ungültig und werden ignoriert: {entities}.",
+    "notify_problem_no_valid_co2": "Kein CO₂-Sensor liefert einen gültigen Wert; das Gerät läuft mit dem Ersatz-Volumenstrom.",
+    "notify_problem_warning_source_unavailable": "Die Warnquelle {entities} ist nicht verfügbar und kann das Gerät nicht abschalten.",
+    "notify_problem_warning_details_failed": "Die Details der Warnung an {entities} konnten nicht abgerufen werden; die Warnung zählt ohne sie.",
+    "notify_problem_missing_notify_service": "Ein eingestellter Benachrichtigungsdienst existiert nicht mehr. Prüfe die Benachrichtigungseinstellungen.",
+    "notify_action_keep_ventilating": "Weiter lüften",
+    "notify_action_ok": "OK",
+    "notify_action_restart": "Jetzt einschalten",
+    "notify_action_keep_off": "Aus lassen",
+    "notify_action_resume": "Fortsetzen",
+    "notify_problem_missing_entity": "{entities} existiert nicht mehr; die Lüftung läuft ohne sie weiter. Siehe die Reparaturmeldung.",
+    "issue_where_actuator": "Aktor (Schritt Aktor)",
+    "issue_where_off_entity": "Aus-Aktor (Schritt Aktor)",
+    "issue_where_co2_sensors": "CO₂-Sensoren (Schritt Eingänge)",
+    "issue_where_humidity_sensors": "Feuchtesensoren (Schritt Eingänge)",
+    "issue_where_presence_entities": "Anwesenheit (Schritt Eingänge)",
+    "issue_where_readiness_condition": "Bereitschaftsbedingung {title}",
+    "issue_where_warning_source": "Warnquelle {title}",
+    "intent_boost": "{name} läuft bis {time} verstärkt mit {level} m³/h.",
+    "intent_pause": "{name} ist bis {time} pausiert.",
+    "intent_pause_indefinite": "{name} ist pausiert, bis du sie wieder fortsetzt.",
+    "intent_resume": "{name} ist wieder im Modus {mode}.",
+    "intent_status": "{name}: {mode}, {setpoint} m³/h, Grund: {reason}.",
+    "intent_status_until": "{name}: {mode} bis {time}, {setpoint} m³/h, Grund: {reason}.",
+    "intent_status_not_started": "{name} ist noch nicht gestartet.",
+    "intent_error_control_disabled": "Die Regelung von {name} ist ausgeschaltet.",
+    "intent_error_level_out_of_range": "Die Stufe muss zwischen {min} und {max} m³/h liegen.",
+    "intent_error_entry_required": "Es gibt mehrere Lüftungen; sag, welche du meinst.",
+    "intent_error_entry_not_found": "Es gibt keine Lüftung namens {name}.",
+    "intent_error_no_entry": "Es ist keine Lüftung eingerichtet.",
+    "intent_error_entry_not_loaded": "{name} ist nicht geladen."
+  },
+  "issues": {
+    "missing_notify_service": {
+      "title": "Benachrichtigungsdienst {service} nicht gefunden",
+      "description": "{entries} sendet Benachrichtigungen an {service}, den es nicht mehr gibt (zum Beispiel, weil die Companion App entfernt oder das Telefon umbenannt wurde). Öffne die Einstellungen des Eintrags, wähle **Benachrichtigungen** und wähle die aktuellen Telefone; beim Speichern wird der fehlende Dienst entfernt. Bis dahin erhalten die anderen Telefone die Benachrichtigungen, oder es wird eine dauerhafte Benachrichtigung erstellt, wenn keines mehr übrig ist."
+    },
+    "missing_entity": {
+      "title": "{entity} nicht gefunden",
+      "description": "{entity} wird in {usages} verwendet, existiert aber weder als Entität noch in der Entitätsregistrierung (zum Beispiel, weil ihre Integration entfernt oder die Entität gelöscht wurde). Die Lüftung läuft ohne sie weiter. Öffne die Einstellungen des Eintrags und wähle im genannten Schritt eine vorhandene Entität, oder lösche die Bereitschaftsbedingung oder Warnquelle. Diese Meldung verschwindet, sobald die Entität wieder existiert oder nicht mehr verwendet wird."
+    },
+    "state_reset": {
+      "title": "Gespeicherter Zustand von {entry} zurückgesetzt",
+      "description": "Der gespeicherte Zustand von {entry} konnte nicht gelesen werden (er war beschädigt oder stammt von einer neueren Version) und wurde durch die Standardwerte ersetzt: ein laufender Boost oder eine Pause und Übersteuerungen von Warnungen sind beendet, die Regelung ist eingeschaltet und das Profil ist Ausgewogen. Prüfe die Regelung und das Profil. Diese Meldung dient nur zur Information; du kannst sie ignorieren."
+    }
   }
 }

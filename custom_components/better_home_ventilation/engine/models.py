@@ -23,8 +23,8 @@ from . import options as opt
 class Mode(StrEnum):
     """Resolved operating mode (docs/spec/03-modes.md#mode-resolution).
 
-    ``shower``, ``cooking`` and ``safety_off`` belong to phases 0.2/0.3; they
-    are listed for the entity options but never resolved by the 0.1 engine.
+    ``shower`` and ``cooking`` belong to phase 0.3; they are listed for the
+    entity options but never resolved by the engine yet.
     """
 
     AUTOMATIC = "automatic"
@@ -41,6 +41,9 @@ class Mode(StrEnum):
 RUNNING_MODES: Final = frozenset(
     {Mode.AUTOMATIC, Mode.FALLBACK, Mode.BOOST, Mode.SHOWER, Mode.COOKING}
 )
+
+#: Off states (CONTEXT.md): the modes that stop the unit.
+OFF_MODES: Final = frozenset({Mode.OFF, Mode.SAFETY_OFF})
 
 
 class Reason(StrEnum):
@@ -124,10 +127,13 @@ class Limit(StrEnum):
 
 
 class ProblemKey(StrEnum):
-    """Problems known to the 0.1 engine (04-interface.md#problem-attributes).
+    """Problems known to the engine (04-interface.md#problem-attributes).
 
-    ``write_failed`` and ``write_mismatch`` are detected by the glue and passed
-    in through :attr:`Snapshot.reported_problems`.
+    ``write_failed``, ``write_mismatch`` and ``missing_notify_service`` are
+    detected by the glue and passed in through
+    :attr:`Snapshot.reported_problems`; ``warning_details_failed`` comes from
+    :attr:`Snapshot.details_failed`, ``missing_entity`` from
+    :attr:`Snapshot.missing_entities`.
     """
 
     ACTUATOR_UNAVAILABLE = "actuator_unavailable"
@@ -136,6 +142,58 @@ class ProblemKey(StrEnum):
     WRITE_MISMATCH = "write_mismatch"
     INPUTS_INVALID = "inputs_invalid"
     NO_VALID_CO2 = "no_valid_co2"
+    WARNING_SOURCE_UNAVAILABLE = "warning_source_unavailable"
+    WARNING_DETAILS_FAILED = "warning_details_failed"
+    MISSING_ENTITY = "missing_entity"
+    MISSING_NOTIFY_SERVICE = "missing_notify_service"
+
+
+class Severity(StrEnum):
+    """Normalised severity of a warning (03-modes.md#details-providers)."""
+
+    MINOR = "minor"
+    MODERATE = "moderate"
+    SEVERE = "severe"
+    EXTREME = "extreme"
+
+    @property
+    def rank(self) -> int:
+        """Order of the severity: minor 1 … extreme 4."""
+        return _SEVERITY_RANK[self]
+
+
+_SEVERITY_RANK: Final = {
+    Severity.MINOR: 1,
+    Severity.MODERATE: 2,
+    Severity.SEVERE: 3,
+    Severity.EXTREME: 4,
+}
+
+
+class NotifyKind(StrEnum):
+    """Kind of a notification (04-interface.md#notifications)."""
+
+    SAFETY = "safety"
+    RESTART = "restart"
+    RESTARTED = "restarted"
+    REMINDER = "reminder"
+
+
+class NotificationTag(StrEnum):
+    """Logical notification tag; the glue sends it as ``bhv_<entry8>_<tag>``."""
+
+    SAFETY = "safety"
+    REMINDER = "reminder"
+
+
+#: Tag of each notification kind (``restart`` and ``restarted`` replace
+#: ``safety``).
+NOTIFY_TAGS: Final = {
+    NotifyKind.SAFETY: NotificationTag.SAFETY,
+    NotifyKind.RESTART: NotificationTag.SAFETY,
+    NotifyKind.RESTARTED: NotificationTag.SAFETY,
+    NotifyKind.REMINDER: NotificationTag.REMINDER,
+}
 
 
 class OffMethod(StrEnum):
@@ -204,6 +262,76 @@ def _entity_list(value: Any) -> tuple[str, ...]:
     return tuple(str(item) for item in value)
 
 
+def _keywords(value: Any) -> tuple[str, ...]:
+    """Keyword list without empty entries (surrounding blanks removed)."""
+    return tuple(item.strip() for item in _entity_list(value) if item.strip())
+
+
+def parse_min_severity(value: Any) -> Severity | None:
+    """Return the ``min_severity`` option; ``none``/missing disables the filter."""
+    if value is None or str(value) in ("", opt.MIN_SEVERITY_NONE):
+        return None
+    return Severity(str(value))
+
+
+@dataclass(frozen=True, kw_only=True)
+class WarningSource:
+    """One warning source (a ``warning_source`` config subentry, BHV-40).
+
+    ``entities`` are the entities whose state the trigger checks: the source
+    entity, or all enabled ``binary_sensor`` entities of a source device
+    (expanded by the glue). ``details`` is the configured mode
+    (``auto``/``attributes``/``none``); the glue picks the provider from it.
+    """
+
+    subentry_id: str
+    name: str
+    entities: tuple[str, ...]
+    trigger: str = opt.TRIGGER_ON_OFF
+    threshold: float | None = None
+    states: tuple[str, ...] = ()
+    details: str = opt.DETAILS_AUTO
+    headline_keywords: tuple[str, ...] = ()
+    text_keywords: tuple[str, ...] = ()
+    exclude_keywords: tuple[str, ...] = ()
+    min_severity: Severity | None = None
+
+    @classmethod
+    def from_mapping(
+        cls,
+        subentry_id: str,
+        data: Mapping[str, Any],
+        *,
+        title: str | None = None,
+        entities: Sequence[str] | None = None,
+    ) -> WarningSource:
+        """Build a source from the subentry data.
+
+        ``entities`` defaults to the ``source_entity``; a device source passes
+        its expanded entities. The name is ``name``, else ``title``, else the
+        first entity id.
+        """
+        members = (
+            tuple(entities)
+            if entities is not None
+            else _entity_list(data.get(opt.CONF_SOURCE_ENTITY))
+        )
+        name = data.get(opt.CONF_NAME) or title or (members[0] if members else "")
+        return cls(
+            subentry_id=subentry_id,
+            name=str(name),
+            entities=members,
+            trigger=str(data.get(opt.CONF_TRIGGER) or opt.TRIGGER_ON_OFF),
+            threshold=_optional_float(data.get(opt.CONF_THRESHOLD)),
+            states=_keywords(data.get(opt.CONF_STATES)),
+            details=str(data.get(opt.CONF_DETAILS) or opt.DETAILS_AUTO),
+            headline_keywords=_keywords(data.get(opt.CONF_HEADLINE_KEYWORDS)),
+            text_keywords=_keywords(data.get(opt.CONF_TEXT_KEYWORDS)),
+            exclude_keywords=_keywords(data.get(opt.CONF_EXCLUDE_KEYWORDS)),
+            min_severity=parse_min_severity(data.get(opt.CONF_MIN_SEVERITY)),
+        )
+
+
 @dataclass(frozen=True, kw_only=True)
 class Options:
     """Typed view of ``entry.options`` plus the readiness subentries.
@@ -251,7 +379,12 @@ class Options:
     boost_default_duration: timedelta
     boost_default_level: float
     boost_max_duration: timedelta
+    restart_confirm_timeout: timedelta
+    safety_when_disabled: bool
+    pause_reminder_after: timedelta
+    off_notice_after: timedelta
     readiness_conditions: tuple[ReadinessCondition, ...] = ()
+    warning_sources: tuple[WarningSource, ...] = ()
 
     @property
     def actuator_domain(self) -> str:
@@ -268,6 +401,7 @@ class Options:
         cls,
         data: Mapping[str, Any],
         readiness_conditions: Sequence[ReadinessCondition] = (),
+        warning_sources: Sequence[WarningSource] = (),
     ) -> Options:
         """Build the options from the stored ``entry.options`` dict.
 
@@ -325,7 +459,12 @@ class Options:
             boost_default_duration=_seconds(values[opt.CONF_BOOST_DEFAULT_DURATION]),
             boost_default_level=float(values[opt.CONF_BOOST_DEFAULT_LEVEL]),
             boost_max_duration=_seconds(values[opt.CONF_BOOST_MAX_DURATION]),
+            restart_confirm_timeout=_seconds(values[opt.CONF_RESTART_CONFIRM_TIMEOUT]),
+            safety_when_disabled=bool(values[opt.CONF_SAFETY_WHEN_DISABLED]),
+            pause_reminder_after=_seconds(values[opt.CONF_PAUSE_REMINDER_AFTER]),
+            off_notice_after=_seconds(values[opt.CONF_OFF_NOTICE_AFTER]),
             readiness_conditions=tuple(readiness_conditions),
+            warning_sources=tuple(warning_sources),
         )
 
 
@@ -387,6 +526,24 @@ class OffActuatorSnapshot:
 
 
 @dataclass(frozen=True, kw_only=True)
+class WarningDetails:
+    """One warning behind an active source, as delivered by a details provider.
+
+    Text fields are plain text (providers build them with
+    :func:`.safety.make_details`, which strips HTML and normalises the
+    severity). ``key`` is the provider's identity of the warning: the NINA or
+    CAP ``id``, ``headline + ":" + start`` for DWD, None if unknown.
+    """
+
+    key: str | None = None
+    headline: str | None = None
+    text: str | None = None
+    actions: str | None = None
+    severity: Severity | None = None
+    sender: str | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
 class Snapshot:
     """Everything one evaluation needs from the outside world.
 
@@ -398,6 +555,17 @@ class Snapshot:
     as not existing. ``reported_problems`` are problems detected by the glue
     (``write_failed``, ``write_mismatch``); the glue keeps reporting them while
     they persist.
+
+    Warning sources (0.2): the states of their entities are in ``states``.
+    ``warning_details`` holds, per active source entity, the warnings its
+    details provider returned; a missing entry, None or an empty tuple means
+    "no details" and the entity counts as one warning without details
+    (fail-safe). ``details_failed`` lists the entities whose details call
+    failed (problem ``warning_details_failed``; they count without details).
+
+    ``missing_entities`` are configured entities (or warning source devices)
+    the glue found neither in the state machine nor in the registry (0.2,
+    BHV-55); each raises the problem ``missing_entity``.
     """
 
     now: datetime
@@ -406,6 +574,11 @@ class Snapshot:
     actuator: ActuatorSnapshot
     off_actuator: OffActuatorSnapshot | None = None
     reported_problems: frozenset[ProblemKey] = frozenset()
+    warning_details: Mapping[str, tuple[WarningDetails, ...] | None] = field(
+        default_factory=dict
+    )
+    details_failed: frozenset[str] = frozenset()
+    missing_entities: frozenset[str] = frozenset()
 
 
 # --- Controller state --------------------------------------------------------
@@ -442,8 +615,77 @@ type ProblemId = tuple[ProblemKey, str | None]
 
 
 @dataclass(frozen=True, kw_only=True)
+class WarningInfo:
+    """An active warning in ``safety.active`` (03-modes.md#controller-state).
+
+    ``details`` is False for a warning without details (provider ``none``, a
+    failed details call, a smoke detector); such a warning always counts.
+    """
+
+    source_id: str
+    source_name: str
+    entity_id: str
+    incident_key: str
+    headline: str | None
+    text: str | None
+    recommended_actions: str | None
+    severity: Severity | None
+    sender: str | None
+    since: datetime
+    details: bool = True
+
+
+@dataclass(frozen=True, kw_only=True)
+class RestartPending:
+    """The restart wait after the last warning ended (BHV-43)."""
+
+    deadline: datetime
+
+
+@dataclass(frozen=True, kw_only=True)
+class SafetyState:
+    """Safety part of the controller state (BHV-40, BHV-42, BHV-43).
+
+    ``active`` maps warning keys to the warnings currently active;
+    ``overridden`` holds the incident keys lifted by the user.
+    """
+
+    active: Mapping[str, WarningInfo] = field(default_factory=dict)
+    overridden: frozenset[str] = frozenset()
+    restart_pending: RestartPending | None = None
+
+    @property
+    def blocking(self) -> dict[str, WarningInfo]:
+        """Active warnings whose incident is not overridden."""
+        return {
+            key: warning
+            for key, warning in self.active.items()
+            if warning.incident_key not in self.overridden
+        }
+
+    @property
+    def shuts_down(self) -> bool:
+        """True if safety asks for ``safety_off`` (blocking warning or restart wait)."""
+        return bool(self.blocking) or self.restart_pending is not None
+
+
+@dataclass(frozen=True, kw_only=True)
+class SafetyRestore:
+    """How to restore the unit after a safety off while control is disabled.
+
+    ``safety_when_disabled`` (03-modes.md#mode-resolution): the integration
+    switches the unit off and, after the restart confirmation, back on to the
+    state it had before. ``turn_on``: switch the off actuator to running
+    again; ``flow``: write this flow again (off as lowest value).
+    """
+
+    turn_on: bool = False
+    flow: float | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
 class ControllerState:
-    """State of the controller (docs/spec/03-modes.md#controller-state, 0.1 part).
+    """State of the controller (docs/spec/03-modes.md#controller-state).
 
     The first group is persisted (:mod:`.serialize`); the second group is
     runtime bookkeeping that starts fresh after every load.
@@ -453,8 +695,12 @@ class ControllerState:
     control_enabled: bool = True
     profile: Profile = Profile.BALANCED
     manual: Boost | Pause | None = None
+    safety: SafetyState = field(default_factory=SafetyState)
+    safety_restore: SafetyRestore | None = None
     dry_active: bool = False
     dry_humidity_high_since: datetime | None = None
+    off_since: datetime | None = None
+    last_reminder: datetime | None = None
     stopped_by_integration: bool = False
     last_write: datetime | None = None
     last_written_flow: float | None = None
@@ -468,6 +714,13 @@ class ControllerState:
     unit_running_seen: bool | None = None
     readiness: Mapping[str, ReadinessTracker] = field(default_factory=dict)
     problem_since: Mapping[ProblemId, datetime] = field(default_factory=dict)
+    #: Keys of warnings loaded from the store that no source has reported
+    #: again yet; they count until the startup grace ends
+    #: (03-modes.md#persistence).
+    safety_unconfirmed: frozenset[str] = frozenset()
+    #: The restart wait ended by its timeout; the next evaluation sends
+    #: "restarted".
+    restarted_pending: bool = False
 
 
 # --- Decision ----------------------------------------------------------------
@@ -516,6 +769,10 @@ class Decision:
     ``target`` the flow before shaping, ``written`` the flow
     sent to the actuator in this evaluation (None if nothing was written).
     ``problem`` is True if any problem persists longer than ``problem_delay``.
+
+    Safety (0.2): ``warnings`` are all active warnings (overridden or not),
+    ``overridden_incidents`` the overridden incident keys, ``awaiting_restart``
+    is True while ``safety_off`` is caused only by the restart wait.
     """
 
     time: datetime
@@ -537,6 +794,9 @@ class Decision:
     actuator_value: float | str | None
     last_write: datetime | None
     last_written_flow: float | None
+    warnings: tuple[WarningInfo, ...] = ()
+    overridden_incidents: frozenset[str] = frozenset()
+    awaiting_restart: bool = False
 
     @property
     def reasons(self) -> tuple[Reason, ...]:
@@ -602,7 +862,48 @@ class ScheduleAt:
     when: datetime
 
 
-type Effect = WriteFlow | TurnOff | TurnOn | CorrectReadiness | FireEvent | ScheduleAt
+@dataclass(frozen=True, kw_only=True)
+class Notify:
+    """Send a notification (04-interface.md#notifications); the glue formats it.
+
+    - ``safety``: ``warnings`` are the blocking warnings, most severe and
+      newest first (the title uses the first one).
+    - ``restart``: ``restart_at`` is the deadline of the restart wait.
+    - ``restarted``: no data.
+    - ``reminder``: ``off_since`` is the start of the off state.
+
+    The engine always emits them; the glue sends nothing if the matching
+    ``notify_*`` option is off.
+    """
+
+    kind: NotifyKind
+    warnings: tuple[WarningInfo, ...] = ()
+    restart_at: datetime | None = None
+    off_since: datetime | None = None
+
+    @property
+    def tag(self) -> NotificationTag:
+        """Tag of the notification; a new one replaces the last with the same tag."""
+        return NOTIFY_TAGS[self.kind]
+
+
+@dataclass(frozen=True, kw_only=True)
+class ClearNotification:
+    """Clear the notification with this tag (its reason disappeared)."""
+
+    tag: NotificationTag
+
+
+type Effect = (
+    WriteFlow
+    | TurnOff
+    | TurnOn
+    | CorrectReadiness
+    | FireEvent
+    | ScheduleAt
+    | Notify
+    | ClearNotification
+)
 
 
 # --- Commands ----------------------------------------------------------------
@@ -655,8 +956,36 @@ class ProfileCommand:
     profile: Profile
 
 
+@dataclass(frozen=True, kw_only=True)
+class OverrideSafetyCommand:
+    """``override_safety()``: lift the shutdown for the current warnings (BHV-42)."""
+
+    source: Source
+
+
+@dataclass(frozen=True, kw_only=True)
+class RemoveOverrideCommand:
+    """Remove all overrides (``safety_override`` switch turned off)."""
+
+    source: Source
+
+
+@dataclass(frozen=True, kw_only=True)
+class KeepOffCommand:
+    """``keep_off()``: the answer "Keep off" to the restart question (BHV-43)."""
+
+    source: Source
+
+
 type Command = (
-    BoostCommand | PauseCommand | ResumeCommand | ControlSwitchCommand | ProfileCommand
+    BoostCommand
+    | PauseCommand
+    | ResumeCommand
+    | ControlSwitchCommand
+    | ProfileCommand
+    | OverrideSafetyCommand
+    | RemoveOverrideCommand
+    | KeepOffCommand
 )
 
 
@@ -664,7 +993,8 @@ class CommandRejected(Exception):  # noqa: N818 - a rejection, not an error
     """A command is not allowed in the current state.
 
     ``code`` is the translation key the glue uses for its
-    ``ServiceValidationError`` (``control_disabled``, ``level_out_of_range``).
+    ``ServiceValidationError`` (``control_disabled``, ``level_out_of_range``,
+    ``no_active_warning``).
     """
 
     def __init__(self, code: str) -> None:

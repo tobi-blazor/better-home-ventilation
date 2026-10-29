@@ -32,7 +32,7 @@ Each evaluation:
 ## Startup
 
 - The controller starts when HA has started (`EVENT_HOMEASSISTANT_STARTED`, or immediately if already running).
-- During `startup_grace` (default 60 s) evaluations run and entities show values, but **nothing is written** and no "inputs lost" problem or notification is raised. Reason: many sensors become available a few seconds after start. The setpoint shows `current` (what the unit runs at), the `target` attribute the value the inputs ask for ([setpoint](#output-shaping)).
+- During `startup_grace` (default 60 s) evaluations run and entities show values, but **nothing is written** and no "inputs lost" problem or notification is raised. Reason: many sensors become available a few seconds after start. The setpoint shows `current` (what the unit runs at), the `target` attribute the value the inputs ask for ([setpoint](#output-shaping)); in the off modes it is 0.
 - Exception: an active safety shutdown is applied immediately, including during the grace period.
 - After the grace period the first write ignores `min_write_interval`.
 
@@ -190,8 +190,8 @@ Then the written value is quantised again and mapped to the actuator.
 | shaping holds (`interval`, `deadband`, or nothing to change) | `current` |
 | a gate blocks the write (`grace`, `unavailable`, `not_ready`, see [readiness](#readiness-and-availability)) | `current`; 0 if the unit was stopped by the integration and is still waiting to be switched on ([off and on](#off-and-on)) |
 | `current` is None (no actuator value and nothing written yet) | `target` |
-| off modes | 0 |
-| `disabled` | `target` (the demand, shown not written; this is the shadow run, BHV-03) |
+| off modes | 0, also during the startup grace (the safety off passes it, [startup](#startup)) and while a gate blocks the off |
+| `disabled` | `target` (the demand, shown not written; this is the shadow run, BHV-03), also when the restore after a safety off is written (`safety_when_disabled`, [03-modes.md](03-modes.md#mode-resolution)) |
 
 So during the startup grace the setpoint stays at the value the unit runs at while the target follows the inputs, and the first write after the grace is the first change of the setpoint. Every evaluation publishes exactly one decision, after its effects have been executed; an evaluation that runs before the actuator confirms a write (e.g. a periodic evaluation right after the write) shows the written value, not the old actuator value.
 
@@ -233,6 +233,7 @@ Readiness and availability are checked in **every** evaluation, not only when a 
    - After a successful correction the next write uses `bypass`: the unit may have run at another flow in the meantime.
    - Not met after 3 correction attempts, or not met without `auto_correct`: no write, problem `not_ready` (with the entity id). Retries continue every 5 min. A condition that cannot be corrected right now (entity unavailable, no `auto_correct`, control disabled, startup grace) is reported as `not_ready` at once; the `problem` sensor still waits `problem_delay`.
    - Readiness gates every write, including TurnOff/TurnOn.
+   - SPEC-GAP: this includes the safety TurnOff (implemented so in 0.2). An unmet readiness condition (e.g. a wrong control mode during the startup grace, when no correction is issued) therefore delays a safety shutdown; an off actuator may well work without the readiness condition. To decide whether the safety off should bypass the readiness gate.
 
 Problems are cleared automatically once the condition is resolved.
 
@@ -248,7 +249,7 @@ Logging follows the quality rule `log-when-unavailable`: one `info` message when
 
   Rule 2 covers devices that report a command only on their next poll with a new context, e.g. an ESPHome Modbus device polled every 30 s. The expectation is set with every command (also the verification retry), a newer command for the same entity replaces it, and it is not set when the entity already shows the commanded state. It ends with the first state change that reaches the commanded state (own context or not) or when the window ends. Every other change is **external**: another value or state inside the window, the commanded state after the window or a second time. `unavailable`/`unknown` never confirm a command. The window is the verification plus the retry verification (2 × 30 s): a write confirmed later than 30 s is sent once more with the same value, and the retry verification at 60 s finds it, so a confirmation inside the window never ends in `write_mismatch`.
 - An external change of the actuator is accepted as the new `current`. The next write follows the normal shaping rules. Pausing control after manual changes is backlog BHV-94.
-- An external change of the **off actuator** between the stopped and the running state (e.g. standby set at the unit for a filter change) is a command with source `external`: a stop becomes `pause()` without duration, a start becomes `resume()`. The same applies to a `fan` actuator without off actuator: an external `off` is a stop, an external `on` is a start. Changes from or to `unavailable`/`unknown` are not commands (e.g. a restart of the device). While control is disabled external changes are ignored. During `safety_off`: see [Q11](README.md#open-questions).
+- An external change of the **off actuator** between the stopped and the running state (e.g. standby set at the unit for a filter change) is a command with source `external`: a stop becomes `pause()` without duration, a start becomes `resume()`. The same applies to a `fan` actuator without off actuator: an external `off` is a stop, an external `on` is a start. Changes from or to `unavailable`/`unknown` are not commands (e.g. a restart of the device). While control is disabled external changes are ignored. During `safety_off` an external start is an **override** of the current warnings (source `external`, trigger `override`), also while control is disabled; a new warning shuts down again ([Q11](README.md#open-questions), owner decision 2026-10-29, [03-modes.md](03-modes.md#flow)).
 - Exceptions from service calls are caught and logged (`warning` once, then `debug` while the error persists), the evaluation continues and problem `write_failed` is raised. This covers every service call of the integration (actuator, off actuator, readiness corrections); the next successful call clears it.
 
 ## Decision record

@@ -1,4 +1,4 @@
-"""Config flow, options flow and readiness condition subentries (BHV-53).
+"""Config flow, options flow and the subentry flows (BHV-53).
 
 Spec: docs/spec/01-configuration.md. Everything is stored in ``entry.options``;
 ``entry.data`` stays empty. The entry is reloaded by one update listener
@@ -6,7 +6,8 @@ Spec: docs/spec/01-configuration.md. Everything is stored in ``entry.options``;
 ``OptionsFlow`` and subentry flows finish with ``async_update_and_abort``
 (docs/adr/0001-update-listener-instead-of-options-flow-with-reload.md).
 
-Only the options of phase 0.1 appear in the forms.
+Subentries: readiness conditions (0.1) and warning sources (0.2). Options
+steps `safety` and `notifications` (0.2).
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from enum import StrEnum
 from functools import partial
+import math
 from typing import TYPE_CHECKING, Any, Final, Literal
 
 from homeassistant.config_entries import (
@@ -34,7 +36,12 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant, callback, split_entity_id, valid_entity_id
 from homeassistant.data_entry_flow import section
-from homeassistant.helpers import entity_registry as er, selector
+from homeassistant.helpers import (
+    device_registry as dr,
+    entity_registry as er,
+    selector,
+)
+from homeassistant.helpers.translation import async_get_translations
 
 if TYPE_CHECKING:
     # Since HA 2026.9 `voluptuous` is an alias of `probatio` at runtime
@@ -62,14 +69,17 @@ from .const import (
     CONF_DEADBAND_DOWN,
     CONF_DEADBAND_UP,
     CONF_DEBOUNCE,
+    CONF_DETAILS,
     CONF_DRYNESS_HUMIDITY_HIGH_LIMIT,
     CONF_DRYNESS_HYSTERESIS,
     CONF_DRYNESS_THRESHOLD,
     CONF_ENTITY_ID,
     CONF_EVALUATION_INTERVAL,
+    CONF_EXCLUDE_KEYWORDS,
     CONF_EXPECTED_STATE,
     CONF_FALLBACK_FLOW,
     CONF_FLOW_QUANTUM,
+    CONF_HEADLINE_KEYWORDS,
     CONF_HUMIDITY_HIGH_END,
     CONF_HUMIDITY_HIGH_START,
     CONF_HUMIDITY_SENSORS,
@@ -77,29 +87,63 @@ from .const import (
     CONF_MAX_STEP_DOWN,
     CONF_MAX_STEP_UP,
     CONF_MIN_FLOW,
+    CONF_MIN_SEVERITY,
     CONF_MIN_WRITE_INTERVAL,
     CONF_NAME,
     CONF_NIGHT_ENABLED,
     CONF_NIGHT_END,
     CONF_NIGHT_START,
+    CONF_NOTIFY_PROBLEMS,
+    CONF_NOTIFY_REMINDERS,
+    CONF_NOTIFY_SAFETY,
+    CONF_NOTIFY_SERVICES,
     CONF_OFF_ENTITY,
+    CONF_OFF_NOTICE_AFTER,
     CONF_OFF_STATE,
+    CONF_PAUSE_REMINDER_AFTER,
     CONF_PRESENCE_ENTITIES,
     CONF_PROBLEM_DELAY,
     CONF_QUIET_HUMIDITY_OVERRIDE,
     CONF_QUIET_MAX_FLOW,
+    CONF_RESTART_CONFIRM_TIMEOUT,
+    CONF_SAFETY_WHEN_DISABLED,
     CONF_SELECT_MAPPING,
+    CONF_SOURCE_DEVICE,
+    CONF_SOURCE_ENTITY,
     CONF_STALE_TIMEOUT,
     CONF_STARTUP_GRACE,
+    CONF_STATES,
+    CONF_TEXT_KEYWORDS,
+    CONF_THRESHOLD,
+    CONF_TRIGGER,
     DEFAULT_NAME,
     DEFAULTS,
+    DETAILS_ATTRIBUTES,
+    DETAILS_AUTO,
+    DETAILS_MODES,
+    DETAILS_NONE,
     DOMAIN,
+    MIN_SEVERITY_NONE,
     OFF_STATE_OFF,
     OFF_STATE_ON,
     OFF_STATES,
+    OPTIONS_MINOR_VERSION,
     SUBENTRY_READINESS_CONDITION,
+    SUBENTRY_WARNING_SOURCE,
+    TRIGGER_NUMERIC,
+    TRIGGER_ON_OFF,
+    TRIGGER_STATE_LIST,
     defaults_for_max_flow,
 )
+from .engine.models import Severity, is_unavailable
+from .engine.safety import (
+    PROVIDER_ATTRIBUTES,
+    PROVIDER_NONE,
+    invalid_regex as is_invalid_regex,
+    suggested_filters,
+)
+from .notifications import mobile_app_services, service_name
+from .warning_providers import detect_provider, device_entities
 
 # --- Selector building blocks -------------------------------------------------
 
@@ -148,7 +192,16 @@ STEP_ACTUATOR: Final = "actuator"
 STEP_INPUTS: Final = "inputs"
 STEP_CONTROL: Final = "control"
 STEP_BOOSTS: Final = "boosts"
-OPTIONS_MENU: Final = [STEP_ACTUATOR, STEP_INPUTS, STEP_CONTROL, STEP_BOOSTS]
+STEP_SAFETY: Final = "safety"
+STEP_NOTIFICATIONS: Final = "notifications"
+OPTIONS_MENU: Final = [
+    STEP_ACTUATOR,
+    STEP_INPUTS,
+    STEP_CONTROL,
+    STEP_BOOSTS,
+    STEP_SAFETY,
+    STEP_NOTIFICATIONS,
+]
 
 SECTION_OFF: Final = "off"
 SECTION_RANGE: Final = "range"
@@ -191,8 +244,18 @@ DURATION_KEYS: Final = frozenset(
         CONF_PROBLEM_DELAY,
         CONF_BOOST_DEFAULT_DURATION,
         CONF_BOOST_MAX_DURATION,
+        CONF_RESTART_CONFIRM_TIMEOUT,
+        CONF_PAUSE_REMINDER_AFTER,
+        CONF_OFF_NOTICE_AFTER,
     }
 )
+
+#: Integration page with "Add warning source" (description of the step `safety`).
+INTEGRATION_URL: Final = f"/config/integrations/integration/{DOMAIN}"
+
+#: Shortest reminder threshold in seconds (`pause_reminder_after`,
+#: `off_notice_after`).
+MIN_REMINDER_AFTER: Final = 60
 
 
 def _number_selector(
@@ -547,6 +610,20 @@ def _validate_boosts(values: Mapping[str, Any]) -> dict[str, str]:
     return {}
 
 
+def _validate_notifications(values: Mapping[str, Any]) -> dict[str, str]:
+    """Validate the `notifications` step: reminders need at least one minute."""
+    return {
+        key: "reminder_too_short"
+        for key in (CONF_PAUSE_REMINDER_AFTER, CONF_OFF_NOTICE_AFTER)
+        if values[key] < MIN_REMINDER_AFTER
+    }
+
+
+def _no_validation(_values: Mapping[str, Any]) -> dict[str, str]:
+    """Accept every input (the selectors validate the fields)."""
+    return {}
+
+
 # --- Form helpers ---------------------------------------------------------------
 
 
@@ -644,7 +721,9 @@ class BetterHomeVentilationConfigFlow(ConfigFlow, domain=DOMAIN):
     """Create a Better Home Ventilation entry: `user` → `actuator` → `inputs`."""
 
     VERSION = 1
-    MINOR_VERSION = 1
+    #: 2 since phase 0.2 (options `safety` and `notifications`, migrated in
+    #: `async_migrate_entry`).
+    MINOR_VERSION = OPTIONS_MINOR_VERSION
 
     def __init__(self) -> None:
         """Initialize the flow."""
@@ -663,8 +742,11 @@ class BetterHomeVentilationConfigFlow(ConfigFlow, domain=DOMAIN):
     def async_get_supported_subentry_types(
         cls, config_entry: ConfigEntry
     ) -> dict[str, type[ConfigSubentryFlow]]:
-        """Return the supported subentry types (readiness conditions in 0.1)."""
-        return {SUBENTRY_READINESS_CONDITION: ReadinessConditionFlow}
+        """Return the supported subentry types (readiness conditions, warning sources)."""
+        return {
+            SUBENTRY_READINESS_CONDITION: ReadinessConditionFlow,
+            SUBENTRY_WARNING_SOURCE: WarningSourceFlow,
+        }
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -737,6 +819,7 @@ class BetterHomeVentilationConfigFlow(ConfigFlow, domain=DOMAIN):
                     CONF_CO2_SENSORS: user_input[CONF_CO2_SENSORS],
                     CONF_HUMIDITY_SENSORS: user_input[CONF_HUMIDITY_SENSORS],
                     CONF_PRESENCE_ENTITIES: [],
+                    CONF_NOTIFY_SERVICES: [],
                 }
                 return self.async_create_entry(
                     title=self._title, data={}, options=options
@@ -869,6 +952,40 @@ def _boosts_options_schema(max_flow: float) -> vol.Schema:
     )
 
 
+SAFETY_OPTIONS_SCHEMA: Final = vol.Schema(
+    {
+        vol.Required(CONF_RESTART_CONFIRM_TIMEOUT): DURATION_SELECTOR,
+        vol.Required(CONF_SAFETY_WHEN_DISABLED): BOOLEAN_SELECTOR,
+    }
+)
+
+
+def _notifications_options_schema(services: list[str]) -> vol.Schema:
+    """Return the schema of the options step `notifications`.
+
+    ``services`` are the ``notify.mobile_app_*`` services when the step opens.
+    """
+    return vol.Schema(
+        {
+            vol.Optional(CONF_NOTIFY_SERVICES, default=list): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        selector.SelectOptionDict(value=service, label=service)
+                        for service in services
+                    ],
+                    multiple=True,
+                    mode=selector.SelectSelectorMode.LIST,
+                )
+            ),
+            vol.Required(CONF_NOTIFY_SAFETY): BOOLEAN_SELECTOR,
+            vol.Required(CONF_NOTIFY_REMINDERS): BOOLEAN_SELECTOR,
+            vol.Required(CONF_NOTIFY_PROBLEMS): BOOLEAN_SELECTOR,
+            vol.Required(CONF_PAUSE_REMINDER_AFTER): DURATION_SELECTOR,
+            vol.Required(CONF_OFF_NOTICE_AFTER): DURATION_SELECTOR,
+        }
+    )
+
+
 #: Options named in the max-flow hint of the options step `actuator`.
 MAX_FLOW_HINT_KEYS: Final = (
     CONF_MAX_FLOW,
@@ -984,19 +1101,62 @@ class BetterHomeVentilationOptionsFlow(OptionsFlow):
             STEP_BOOSTS, schema, user_input, _validate_boosts
         )
 
+    async def async_step_safety(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Change the restart confirmation and the safety while disabled."""
+        return await self._async_options_form(
+            STEP_SAFETY,
+            SAFETY_OPTIONS_SCHEMA,
+            user_input,
+            _no_validation,
+            description_placeholders={"integration_url": INTEGRATION_URL},
+        )
+
+    async def async_step_notifications(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Choose the phones and which notifications they get.
+
+        The list shows the ``notify.mobile_app_*`` services that exist now;
+        stored services that no longer exist are not pre-selected, so saving
+        removes them (repair issue ``missing_notify_service``).
+        """
+        services = mobile_app_services(self.hass)
+        options = self.config_entry.options
+        stored = [
+            service_name(str(service))
+            for service in options.get(CONF_NOTIFY_SERVICES) or []
+        ]
+        return await self._async_options_form(
+            STEP_NOTIFICATIONS,
+            _notifications_options_schema(services),
+            user_input,
+            _validate_notifications,
+            options={
+                **options,
+                CONF_NOTIFY_SERVICES: [s for s in stored if s in services],
+            },
+        )
+
     async def _async_options_form(
         self,
         step_id: str,
         schema: vol.Schema,
         user_input: dict[str, Any] | None,
         validate: Callable[[Mapping[str, Any]], dict[str, str]],
+        *,
+        options: Mapping[str, Any] | None = None,
+        description_placeholders: Mapping[str, str] | None = None,
     ) -> ConfigFlowResult:
         """Show a one-form options step and save it when the input is valid.
 
         ``validate`` gets the stored options merged with the flattened input
-        and returns errors per field (or ``base``).
+        and returns errors per field (or ``base``). ``options`` replaces the
+        stored options as the base of the form (pre-filled values).
         """
-        options = self.config_entry.options
+        if options is None:
+            options = self.config_entry.options
         errors: dict[str, str] = {}
         if user_input is not None:
             merged = _merge_options(options, schema, user_input)
@@ -1011,6 +1171,7 @@ class BetterHomeVentilationOptionsFlow(OptionsFlow):
             step_id=step_id,
             data_schema=self.add_suggested_values_to_schema(schema, suggested),
             errors=errors,
+            description_placeholders=description_placeholders,
         )
 
     def _actuator_in_use(self, actuator: str) -> bool:
@@ -1184,3 +1345,412 @@ class ReadinessConditionFlow(ConfigSubentryFlow):
             errors=errors,
             description_placeholders={"entity": name},
         )
+
+
+# --- Warning source subentries --------------------------------------------------------
+
+#: Domains of a source entity (01-configuration.md#warning-sources-config-subentries).
+SOURCE_DOMAINS: Final = [
+    "binary_sensor",
+    "input_boolean",
+    "switch",
+    "sensor",
+    "select",
+    "input_select",
+]
+#: Source domains with a `trigger` step; all others use the trigger `on_off`.
+TRIGGER_DOMAINS: Final = frozenset({"sensor", "select", "input_select"})
+SECTION_KEYWORDS: Final = "keywords"
+KEYWORD_KEYS: Final = (
+    CONF_HEADLINE_KEYWORDS,
+    CONF_TEXT_KEYWORDS,
+    CONF_EXCLUDE_KEYWORDS,
+)
+SEVERITY_OPTIONS: Final = [
+    MIN_SEVERITY_NONE,
+    *(severity.value for severity in Severity),
+]
+#: Keys of the step `filters` in the subentry data.
+FILTER_KEYS: Final = (CONF_DETAILS, *KEYWORD_KEYS, CONF_MIN_SEVERITY)
+
+WARNING_SOURCE_SCHEMA: Final = vol.Schema(
+    {
+        vol.Optional(CONF_SOURCE_ENTITY): _entity_selector(SOURCE_DOMAINS),
+        vol.Optional(CONF_SOURCE_DEVICE): selector.DeviceSelector(
+            selector.DeviceSelectorConfig(entity=[{"domain": "binary_sensor"}])
+        ),
+        vol.Optional(CONF_NAME): selector.TextSelector(),
+    }
+)
+KEYWORDS_SELECTOR: Final = selector.TextSelector(
+    selector.TextSelectorConfig(multiple=True)
+)
+
+
+def _select(options: list[str], translation_key: str) -> selector.SelectSelector:
+    """Return a translated single-choice selector."""
+    return selector.SelectSelector(
+        selector.SelectSelectorConfig(
+            options=options,
+            translation_key=translation_key,
+            mode=selector.SelectSelectorMode.LIST,
+        )
+    )
+
+
+def _is_number(value: str) -> bool:
+    """Return True if ``value`` is a finite number."""
+    number = _as_float(value)
+    return number is not None and math.isfinite(number)
+
+
+def _entity_options(hass: HomeAssistant, entity_id: str) -> list[str]:
+    """Return the options of a select or enum sensor (for the state list)."""
+    state = hass.states.get(entity_id)
+    options = state.attributes.get("options") if state is not None else None
+    return [str(option) for option in options] if options else []
+
+
+def _trigger_schema(hass: HomeAssistant, entity_id: str) -> vol.Schema:
+    """Return the schema of the step `trigger` (sensor, select, input_select)."""
+    return vol.Schema(
+        {
+            vol.Required(CONF_TRIGGER): _select(
+                [TRIGGER_NUMERIC, TRIGGER_STATE_LIST], CONF_TRIGGER
+            ),
+            vol.Optional(CONF_THRESHOLD): _number_selector(None, None, "any", None),
+            vol.Optional(CONF_STATES): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=_entity_options(hass, entity_id),
+                    multiple=True,
+                    custom_value=True,
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
+        }
+    )
+
+
+def _filters_schema(*, with_filters: bool) -> vol.Schema:
+    """Return the schema of the step `filters`.
+
+    The keyword lists and the severity minimum are only shown when the
+    source has details (provider other than `none`).
+    """
+    fields: dict[Any, Any] = {
+        vol.Required(CONF_DETAILS, default=DETAILS_AUTO): _select(
+            list(DETAILS_MODES), CONF_DETAILS
+        ),
+    }
+    if with_filters:
+        fields[vol.Optional(SECTION_KEYWORDS)] = _section(
+            {vol.Optional(key): KEYWORDS_SELECTOR for key in KEYWORD_KEYS}
+        )
+        fields[vol.Required(CONF_MIN_SEVERITY, default=MIN_SEVERITY_NONE)] = _select(
+            SEVERITY_OPTIONS, "severity"
+        )
+    return vol.Schema(fields)
+
+
+def _keywords(value: Any) -> list[str]:
+    """Return a keyword list without empty entries."""
+    if not value:
+        return []
+    items = [value] if isinstance(value, str) else value
+    return [str(item).strip() for item in items if str(item).strip()]
+
+
+def _validate_keywords(values: Mapping[str, list[str]]) -> str | None:
+    """Return `invalid_regex` or `keyword_conflict`, or None if the lists are fine."""
+    if any(is_invalid_regex(item) for key in KEYWORD_KEYS for item in values[key]):
+        return "invalid_regex"
+    include = {
+        item.casefold()
+        for key in (CONF_HEADLINE_KEYWORDS, CONF_TEXT_KEYWORDS)
+        for item in values[key]
+    }
+    if include & {item.casefold() for item in values[CONF_EXCLUDE_KEYWORDS]}:
+        return "keyword_conflict"
+    return None
+
+
+def _effective_provider(details: str, detected: str) -> str:
+    """Return the provider for the `details` option and the detected provider."""
+    if details == DETAILS_NONE:
+        return PROVIDER_NONE
+    if details == DETAILS_ATTRIBUTES:
+        return PROVIDER_ATTRIBUTES
+    return detected
+
+
+class WarningSourceFlow(ConfigSubentryFlow):
+    """Add or reconfigure a warning source (BHV-40, BHV-45).
+
+    Steps `user` (entity or device, optional name), `trigger` (only for
+    `sensor`, `select`, `input_select`) and `filters` (details provider,
+    keywords, severity). Subentry data: `source_entity` or `source_device`,
+    `name`, `trigger` (+ `threshold` or `states`), `details`, the three keyword
+    lists and `min_severity`. The unique id is the entity id or device id, the
+    title is the name.
+    """
+
+    def __init__(self) -> None:
+        """Initialize the flow."""
+        self._data: dict[str, Any] = {}
+        self._current: Mapping[str, Any] = {}
+        self._filters_shown = False
+
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """Choose the entity or device of a new warning source."""
+        return await self._async_step_source("user", user_input)
+
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """Change an existing warning source (same steps, pre-filled)."""
+        self._current = self._get_reconfigure_subentry().data
+        return await self._async_step_source("reconfigure", user_input)
+
+    # --- step `user` / `reconfigure` ----------------------------------------------
+
+    def _unique_id(self) -> str:
+        return str(self._data.get(CONF_SOURCE_ENTITY) or self._data[CONF_SOURCE_DEVICE])
+
+    def _same_source(self) -> bool:
+        """Return True if the source is the one being reconfigured."""
+        return bool(self._current) and all(
+            self._current.get(key) == self._data.get(key)
+            for key in (CONF_SOURCE_ENTITY, CONF_SOURCE_DEVICE)
+        )
+
+    def _default_name(self) -> str:
+        if entity_id := self._data.get(CONF_SOURCE_ENTITY):
+            return _friendly_name(self.hass, entity_id)
+        device_id = str(self._data[CONF_SOURCE_DEVICE])
+        device = dr.async_get(self.hass).async_get(device_id)
+        if device is None:
+            return device_id
+        return device.name_by_user or device.name or device_id
+
+    async def _async_step_source(
+        self, step_id: str, user_input: dict[str, Any] | None
+    ) -> SubentryFlowResult:
+        """Show or handle the source form of `user` and `reconfigure`."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            entity_id = user_input.get(CONF_SOURCE_ENTITY)
+            device_id = user_input.get(CONF_SOURCE_DEVICE)
+            if bool(entity_id) == bool(device_id):
+                errors["base"] = "source_required"
+            else:
+                self._data = (
+                    {CONF_SOURCE_ENTITY: entity_id}
+                    if entity_id
+                    else {CONF_SOURCE_DEVICE: device_id}
+                )
+                if self._duplicate(self._unique_id()):
+                    return self.async_abort(reason="already_configured")
+                self._data[CONF_NAME] = (
+                    str(user_input.get(CONF_NAME) or "").strip() or self._default_name()
+                )
+                if entity_id and split_entity_id(entity_id)[0] in TRIGGER_DOMAINS:
+                    return await self.async_step_trigger()
+                self._data[CONF_TRIGGER] = TRIGGER_ON_OFF
+                return await self.async_step_filters()
+            suggested: Mapping[str, Any] = user_input
+        else:
+            suggested = {
+                key: self._current[key]
+                for key in (CONF_SOURCE_ENTITY, CONF_SOURCE_DEVICE, CONF_NAME)
+                if key in self._current
+            }
+        return self.async_show_form(
+            step_id=step_id,
+            data_schema=self.add_suggested_values_to_schema(
+                WARNING_SOURCE_SCHEMA, suggested
+            ),
+            errors=errors,
+        )
+
+    def _duplicate(self, unique_id: str) -> bool:
+        """Return True if another subentry has ``unique_id``.
+
+        HA checks subentry unique ids across all subentry types of an entry
+        (`config_entries._raise_if_subentry_unique_id_exists`).
+        """
+        own_id = (
+            self._get_reconfigure_subentry().subentry_id
+            if self.source == SOURCE_RECONFIGURE
+            else None
+        )
+        return any(
+            subentry.unique_id == unique_id and subentry.subentry_id != own_id
+            for subentry in self._get_entry().subentries.values()
+        )
+
+    # --- step `trigger` ---------------------------------------------------------------
+
+    async def async_step_trigger(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """Choose a numeric threshold or a list of states (sensor, select)."""
+        entity_id: str = self._data[CONF_SOURCE_ENTITY]
+        schema = _trigger_schema(self.hass, entity_id)
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            trigger = user_input[CONF_TRIGGER]
+            threshold = user_input.get(CONF_THRESHOLD)
+            states = _keywords(user_input.get(CONF_STATES))
+            state = self.hass.states.get(entity_id)
+            if trigger == TRIGGER_NUMERIC:
+                if threshold is None:
+                    errors[CONF_THRESHOLD] = "threshold_required"
+                elif (
+                    state is not None
+                    and not is_unavailable(state.state)
+                    and not _is_number(state.state)
+                ):
+                    errors[CONF_TRIGGER] = "numeric_state"
+            elif not states:
+                errors[CONF_STATES] = "states_required"
+            if not errors:
+                self._data[CONF_TRIGGER] = trigger
+                if trigger == TRIGGER_NUMERIC:
+                    self._data[CONF_THRESHOLD] = _normalize_number(
+                        float(str(threshold))
+                    )
+                else:
+                    self._data[CONF_STATES] = states
+                return await self.async_step_filters()
+            suggested: Mapping[str, Any] = user_input
+        elif self._same_source() and self._current.get(CONF_TRIGGER) in (
+            TRIGGER_NUMERIC,
+            TRIGGER_STATE_LIST,
+        ):
+            suggested = {
+                key: self._current[key]
+                for key in (CONF_TRIGGER, CONF_THRESHOLD, CONF_STATES)
+                if key in self._current
+            }
+        else:
+            state = self.hass.states.get(entity_id)
+            numeric = (
+                split_entity_id(entity_id)[0] == "sensor"
+                and state is not None
+                and _is_number(state.state)
+            )
+            suggested = {
+                CONF_TRIGGER: TRIGGER_NUMERIC if numeric else TRIGGER_STATE_LIST
+            }
+        return self.async_show_form(
+            step_id="trigger",
+            data_schema=self.add_suggested_values_to_schema(schema, suggested),
+            errors=errors,
+            description_placeholders={"entity": _friendly_name(self.hass, entity_id)},
+        )
+
+    # --- step `filters` ---------------------------------------------------------------
+
+    def _detected_provider(self) -> str:
+        if entity_id := self._data.get(CONF_SOURCE_ENTITY):
+            return detect_provider(self.hass, [entity_id])
+        return detect_provider(
+            self.hass, device_entities(self.hass, self._data[CONF_SOURCE_DEVICE])
+        )
+
+    async def _provider_label(self, provider: str) -> str:
+        """Return the translated name of a provider (server language)."""
+        translations = await async_get_translations(
+            self.hass, self.hass.config.language, "common", [DOMAIN]
+        )
+        return translations.get(
+            f"component.{DOMAIN}.common.provider_{provider}", provider
+        )
+
+    def _suggested_filters(self, provider: str) -> dict[str, Any]:
+        """Return the pre-filled filter values (stored ones on reconfigure)."""
+        if self._same_source() and CONF_DETAILS in self._current:
+            stored: Mapping[str, Any] = self._current
+        else:
+            lists = suggested_filters(provider, self.hass.config.language) or {}
+            stored = {key: list(lists.get(key, ())) for key in KEYWORD_KEYS}
+        return {
+            CONF_DETAILS: stored.get(CONF_DETAILS, DETAILS_AUTO),
+            SECTION_KEYWORDS: {
+                key: list(stored[key]) for key in KEYWORD_KEYS if stored.get(key)
+            },
+            CONF_MIN_SEVERITY: stored.get(CONF_MIN_SEVERITY, MIN_SEVERITY_NONE),
+        }
+
+    async def async_step_filters(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """Choose the details provider and the filters, then save the source.
+
+        The keyword lists are pre-filled per provider and server language
+        (`engine.safety.suggested_filters`). For provider `none` they are not
+        shown; choosing a provider with details shows them first.
+        """
+        detected = self._detected_provider()
+        errors: dict[str, str] = {}
+        suggested: dict[str, Any]
+        if user_input is None:
+            suggested = self._suggested_filters(detected)
+            provider = _effective_provider(suggested[CONF_DETAILS], detected)
+        else:
+            details = user_input[CONF_DETAILS]
+            provider = _effective_provider(details, detected)
+            if provider != PROVIDER_NONE and not self._filters_shown:
+                # The filters were hidden (provider `none`): show them first.
+                suggested = self._suggested_filters(provider)
+                suggested[CONF_DETAILS] = details
+            else:
+                section_input = user_input.get(SECTION_KEYWORDS) or {}
+                values = {
+                    key: _keywords(section_input.get(key)) for key in KEYWORD_KEYS
+                }
+                min_severity = user_input.get(CONF_MIN_SEVERITY, MIN_SEVERITY_NONE)
+                if provider == PROVIDER_NONE:
+                    values = {key: [] for key in KEYWORD_KEYS}
+                    min_severity = MIN_SEVERITY_NONE
+                if error := _validate_keywords(values):
+                    errors[SECTION_KEYWORDS] = error
+                    suggested = dict(user_input)
+                else:
+                    return self._async_save(
+                        {
+                            **self._data,
+                            CONF_DETAILS: details,
+                            **values,
+                            CONF_MIN_SEVERITY: min_severity,
+                        }
+                    )
+        with_filters = provider != PROVIDER_NONE
+        self._filters_shown = with_filters
+        return self.async_show_form(
+            step_id="filters",
+            data_schema=self.add_suggested_values_to_schema(
+                _filters_schema(with_filters=with_filters), suggested
+            ),
+            errors=errors,
+            description_placeholders={
+                "name": self._data[CONF_NAME],
+                "provider": await self._provider_label(detected),
+            },
+        )
+
+    def _async_save(self, data: dict[str, Any]) -> SubentryFlowResult:
+        """Create the subentry or update the reconfigured one."""
+        title = data[CONF_NAME]
+        unique_id = self._unique_id()
+        if self.source == SOURCE_RECONFIGURE:
+            return self.async_update_and_abort(
+                self._get_entry(),
+                self._get_reconfigure_subentry(),
+                title=title,
+                unique_id=unique_id,
+                data=data,
+            )
+        return self.async_create_entry(title=title, data=data, unique_id=unique_id)
