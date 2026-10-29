@@ -288,6 +288,7 @@ The controller subscribes to `async_track_entity_registry_updated_event` for eve
 
 - `action == "update"` with `old_entity_id`: replace the id in `options` / the subentry (`async_update_entry` / `async_update_subentry`); the update listener reloads the entry.
 - `action == "remove"`: repair issue `missing_entity` naming the entity and the option it was used in. The entry keeps running with the remaining inputs.
+- Entities that do not exist at all (neither state nor registry entry) are reported 5 min after Home Assistant started, and a warning source device removed from the device registry at once ([04-interface.md](04-interface.md#repairs)).
 
 `async_handle_source_entity_changes` from `helpers/helper_integration.py` handles one source entity per helper and is therefore not used directly; the behavior is the same.
 

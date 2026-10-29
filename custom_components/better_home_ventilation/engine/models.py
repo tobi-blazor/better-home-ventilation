@@ -124,7 +124,8 @@ class ProblemKey(StrEnum):
     ``write_failed``, ``write_mismatch`` and ``missing_notify_service`` are
     detected by the glue and passed in through
     :attr:`Snapshot.reported_problems`; ``warning_details_failed`` comes from
-    :attr:`Snapshot.details_failed`.
+    :attr:`Snapshot.details_failed`, ``missing_entity`` from
+    :attr:`Snapshot.missing_entities`.
     """
 
     ACTUATOR_UNAVAILABLE = "actuator_unavailable"
@@ -135,6 +136,7 @@ class ProblemKey(StrEnum):
     NO_VALID_CO2 = "no_valid_co2"
     WARNING_SOURCE_UNAVAILABLE = "warning_source_unavailable"
     WARNING_DETAILS_FAILED = "warning_details_failed"
+    MISSING_ENTITY = "missing_entity"
     MISSING_NOTIFY_SERVICE = "missing_notify_service"
 
 
@@ -546,6 +548,10 @@ class Snapshot:
     "no details" and the entity counts as one warning without details
     (fail-safe). ``details_failed`` lists the entities whose details call
     failed (problem ``warning_details_failed``; they count without details).
+
+    ``missing_entities`` are configured entities (or warning source devices)
+    the glue found neither in the state machine nor in the registry (0.2,
+    BHV-55); each raises the problem ``missing_entity``.
     """
 
     now: datetime
@@ -558,6 +564,7 @@ class Snapshot:
         default_factory=dict
     )
     details_failed: frozenset[str] = frozenset()
+    missing_entities: frozenset[str] = frozenset()
 
 
 # --- Controller state --------------------------------------------------------

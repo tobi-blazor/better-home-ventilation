@@ -1,0 +1,9 @@
+{
+  "actuator": "number.unit_flow",
+  "max_flow": 400,
+  "actuator_unit": "flow",
+  "co2_sensors": ["sensor.living_room_co2", "sensor.bedroom_co2"],
+  "humidity_sensors": ["sensor.living_room_humidity"],
+  "presence_entities": ["person.resident"],
+  "away_enabled": true
+}

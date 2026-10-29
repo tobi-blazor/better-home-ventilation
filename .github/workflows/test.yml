@@ -51,7 +51,7 @@ jobs:
           if-no-files-found: ignore
 
   engine:
-    name: pytest tests/engine (without Home Assistant)
+    name: pytest tests/engine and tests/tools (without Home Assistant)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -66,5 +66,5 @@ jobs:
       - name: Home Assistant must not be installed
         run: python -c "import importlib.util, sys; sys.exit(importlib.util.find_spec('homeassistant') is not None)"
 
-      - name: pytest tests/engine
-        run: pytest tests/engine
+      - name: pytest tests/engine and tests/tools
+        run: pytest tests/engine tests/tools

@@ -1,0 +1,84 @@
+# Beispielsätze für den Standard-Konversationsagenten von Home Assistant (Assist).
+#
+# Kopiere diese Datei nach <config>/custom_sentences/de/better_home_ventilation.yaml
+# und starte Home Assistant neu. Eine Custom Integration kann dem
+# Standard-Agenten selbst keine Sätze hinzufügen (docs/spec/README.md, Q3).
+# LLM-Konversationsagenten brauchen die Datei nicht: Sie rufen die Intents als
+# Werkzeuge auf.
+#
+# Die Sätze haben keinen Namens-Slot und funktionieren daher mit genau einem
+# Lüftungseintrag. Bei mehreren Einträgen die Liste `ventilation_name` unten
+# einkommentieren (Werte = Titel der Einträge) und in den Sätzen
+# "[die] {ventilation_name:name}" statt "[die] Lüftung" verwenden.
+language: "de"
+intents:
+  BetterVentilationBoost:
+    data:
+      - sentences:
+          - "Lüftung (Boost|Turbo|stärker|hoch)"
+          - "[die] Lüftung (verstärken|hochdrehen|aufdrehen)"
+          - "Lüftung {bhv_minutes:duration} Minuten (stärker|Boost)"
+          - "Lüftung {bhv_hours:duration} (Stunde|Stunden) (stärker|Boost)"
+          - "[die] Lüftung [für] {bhv_minutes:duration} Minuten (verstärken|hochdrehen)"
+          - "[die] Lüftung auf {bhv_level:level} [Kubikmeter]"
+          - "mehr (Frischluft|Lüftung)"
+  BetterVentilationPause:
+    data:
+      - sentences:
+          - "Lüftung (aus|pausieren|Pause)"
+          - "[die] Lüftung (ausschalten|anhalten|pausieren)"
+          - "Lüftung [für] {bhv_pause_minutes:duration} Minuten (aus|pausieren)"
+          - "Lüftung [für] {bhv_pause_hours:duration} (Stunde|Stunden) (aus|pausieren)"
+          - "[die] Lüftung [für] {bhv_pause_hours:duration} (Stunde|Stunden) (ausschalten|anhalten)"
+  BetterVentilationResume:
+    data:
+      - sentences:
+          - "Lüftung wieder (normal|an|ein|automatisch)"
+          - "[die] Lüftung wieder (einschalten|anschalten|starten)"
+          - "Lüftung (fortsetzen|weiter)"
+          - "Lüftung [auf] Automatik"
+  BetterVentilationStatus:
+    data:
+      - sentences:
+          - "was macht die Lüftung"
+          - "wie (stark|schnell) läuft die Lüftung"
+          - "warum läuft die Lüftung [so stark]"
+          - "[wie ist der] Status der Lüftung"
+          - "Lüftung Status"
+lists:
+  bhv_minutes:
+    range:
+      from: 5
+      to: 720
+  bhv_hours:
+    range:
+      from: 1
+      to: 12
+      multiplier: 60
+  bhv_pause_minutes:
+    range:
+      from: 1
+      to: 10080
+  bhv_pause_hours:
+    range:
+      from: 1
+      to: 168
+      multiplier: 60
+  bhv_level:
+    range:
+      from: 50
+      to: 1000
+      step: 5
+  # ventilation_name:
+  #   values:
+  #     - "Lüftung"
+  #     - "Dachlüftung"
+responses:
+  # Gesprochen, wenn ein Intent scheitert (die Integration meldet diese Schlüssel).
+  errors:
+    better_home_ventilation_control_disabled: "Die Regelung der Lüftung ist ausgeschaltet."
+    better_home_ventilation_level_out_of_range: "Diese Stufe liegt außerhalb des Volumenstrombereichs der Lüftung."
+    better_home_ventilation_entry_required: "Es gibt mehrere Lüftungen; sag, welche du meinst."
+    better_home_ventilation_entry_not_found: "Es gibt keine Lüftung mit diesem Namen."
+    better_home_ventilation_no_entry: "Es ist keine Lüftung eingerichtet."
+    better_home_ventilation_entry_not_loaded: "Die Lüftung ist nicht geladen."

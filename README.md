@@ -24,6 +24,10 @@ One integration instead of a pile of helpers, template sensors and automations: 
 - [Entities](#entities)
 - [Actions](#actions)
 - [Events and logbook](#events-and-logbook)
+- [Voice control](#voice-control)
+- [Repair issues](#repair-issues)
+- [Diagnostics](#diagnostics)
+- [Replay of recorded history](#replay-of-recorded-history)
 - [Examples](#examples)
 - [Limitations and FAQ](#limitations-and-faq)
 - [Troubleshooting](#troubleshooting)
@@ -536,6 +540,7 @@ The **Problem** sensor's attribute `problems` lists `{key, entity_id, since}` fo
 | `no_valid_co2` | CO₂ sensors are configured but none is valid; the fallback flow is used |
 | `warning_source_unavailable` | an entity of a warning source is unavailable (one entry per source) |
 | `warning_details_failed` | the details of an active warning could not be fetched; it counts as a warning without details |
+| `missing_entity` | a configured entity (or the device of a warning source) no longer exists (one entry per entity, see the [repair issue](#repair-issues)) |
 | `missing_notify_service` | a phone selected in **Notifications** no longer exists (see the repair issue) |
 
 ## Actions
@@ -569,9 +574,100 @@ Between boost and pause the last command wins. A boost or pause that ends while 
 | `better_home_ventilation_mode_changed` | the mode changed | `entry_id`, `device_id`, `name`, `from_mode`, `to_mode`, `reason`, `setpoint`, `trigger`, `source`, `warning` (headline of the warning, or the source name, when the new mode is `safety_off`), `ends_at` (end of a new boost or timed pause, ISO 8601) |
 | `better_home_ventilation_readiness_corrected` | a readiness condition was corrected automatically | `entry_id`, `entity_id`, `from_state`, `to_state` |
 
-`trigger` is one of `startup`, `command`, `timeout`, `timeout_while_offline`, `inputs_lost`, `inputs_restored`, `control_switch`, and with warning sources `warning`, `warning_ended` and `override`. `source` (for commands) is `button`, `service` or `external` (at the unit).
+`trigger` is one of `startup`, `command`, `timeout`, `timeout_while_offline`, `inputs_lost`, `inputs_restored`, `control_switch`, and with warning sources `warning`, `warning_ended` and `override`. `source` (for commands) is `button`, `service`, `voice`, `notification` or `external` (at the unit).
 
 Every mode change appears in the logbook of the device, linked to the **Mode** sensor, for example "Ventilation switched to Boost (button, until 18:30)" or "Ventilation back to Automatic (timeout)". The text is in the server language. The setpoint itself is not logged per write; its history is in the **Setpoint** sensor.
+
+## Voice control
+
+> **Unreleased (0.2, in development).**
+
+The integration registers four intents for Assist. They have no entity target; they act on the ventilation entry.
+
+| Intent | Slots | Does | Answer (example) |
+|---|---|---|---|
+| `BetterVentilationBoost` | `duration` (minutes, 5–720), `level` (m³/h), `name` – all optional | boost like the action; without slots the **Boost duration** and **Boost level** entities | "Ventilation boosted to 300 m³/h until 18:30." |
+| `BetterVentilationPause` | `duration` (minutes, 1–10080), `name` – optional | pause; without a duration until resumed | "Ventilation paused until 19:30." |
+| `BetterVentilationResume` | `name` (optional) | ends a boost or pause | "Ventilation is back to Automatic." |
+| `BetterVentilationStatus` | `name` (optional) | nothing, it answers | "Ventilation: Automatic, 165 m³/h, reason: CO₂." |
+
+`name` is the title of the entry (case does not matter); it is only needed with more than one entry. Answers are in the language of the request (English and German). Errors are spoken too: control switched off, a level outside minimum to max flow, no or several matching entries. The logbook shows the source "voice".
+
+**LLM conversation agents** (OpenAI, Google, Anthropic, Ollama and others with the Assist API enabled) get the four intents as tools by themselves, with a description of each and its slots: "Boost the ventilation for 45 minutes", "Why is the ventilation so loud?". Nothing has to be exposed. In Home Assistant 2026.10 and later the tools are called `better_home_ventilation__BetterVentilationBoost` and so on.
+
+**The default conversation agent** ("Home Assistant") only understands sentences it knows. A custom integration cannot add sentences to it, so copy the example sentences:
+
+1. Copy [`examples/custom_sentences/en/better_home_ventilation.yaml`](examples/custom_sentences/en/better_home_ventilation.yaml) (or [`de`](examples/custom_sentences/de/better_home_ventilation.yaml)) to `<config>/custom_sentences/en/` (or `de/`) of your Home Assistant, for example with the File editor or Samba add-on. Keep the folder name of the language.
+2. Restart Home Assistant.
+3. Try "boost the ventilation for 30 minutes", "ventilation off for 2 hours", "ventilation back to normal", "what is the ventilation doing" (German: „Lüftung Boost“, „Lüftung 30 Minuten stärker“, „Lüftung für 2 Stunden aus“, „Lüftung wieder normal“, „Was macht die Lüftung?“).
+
+The files also contain the spoken error answers. Adapt the sentences as you like. They have no `name` slot, so they work with one entry; the file explains how to add the names of several entries. If a sentence collides with a built-in one (for example "turn off the ventilation" when an entity is called "Ventilation"), rephrase it in the file.
+
+Independently of the intents, every button and switch of the integration can be exposed to Assist like any entity.
+
+## Repair issues
+
+> **Unreleased (0.2, in development).**
+
+Repair issues appear under **Settings → System → Repairs**.
+
+| Issue | When | Fix |
+|---|---|---|
+| **<entity> not found** | an entity selected in the settings (actuator, off actuator, sensors, presence, a readiness condition or warning source entity) exists neither as an entity nor in the entity registry 5 minutes after Home Assistant started, or it was deleted from the entity registry; also a warning source device that was deleted. The issue names each entry and the step it is used in. The ventilation keeps running with the remaining entities, and the problem `missing_entity` is raised | open the settings of the entry and choose an existing entity in the named step (or delete the readiness condition or warning source); the issue disappears by itself when the entity exists again or is no longer used. A renamed entity is followed automatically and raises no issue |
+| **Notify service … not found** | a phone selected in **Notifications** no longer exists | open **Notifications** and save |
+| **Stored state of … was reset** | the stored state could not be read (damaged, or written by a newer version after a downgrade) and was replaced by the defaults: boost, pause and overrides ended, the control switch is on, the profile is Balanced | check the **Control** switch and the **Profile**; the issue is for information only, ignore it (it is gone after the next restart) |
+
+## Diagnostics
+
+> **Unreleased (0.2, in development).**
+
+**Download diagnostics** in the entry's menu (⋮) on the integration page gives a JSON file for bug reports and for the [replay](#replay-of-recorded-history):
+
+- the settings (options) and all readiness conditions and warning sources,
+- the stored state (boost, pause, profile, control switch, warnings, overrides),
+- the current state, `last_changed` and `last_reported` of every entity the integration reads,
+- the last 100 decisions (mode, reason, setpoint, every contribution, limits, invalid inputs, problems, why nothing was written),
+- the current problems and warnings.
+
+The selected phones (notify services) are removed from the file, entity attributes are not included, and the states of `person` and `device_tracker` entities are reduced to `home` / `not_home`. Warning texts are included as received.
+
+## Replay of recorded history
+
+> **Unreleased (0.2, in development).**
+
+`tools/replay.py` runs recorded sensor history through the same control logic and reports what the integration would have done, before you let it write to your unit. It needs only Python 3.14, not Home Assistant. Run it from a clone of the repository:
+
+```bash
+python tools/replay.py history.csv options.json --tz Europe/Berlin --decisions decisions.csv
+```
+
+- `history.csv`: one row per recorded state with a header row and the columns `time`, `entity_id`, `state` (ISO 8601 times; times without offset are in `--tz`). The history download of Home Assistant (`entity_id,state,last_changed`) and InfluxDB exports (`_time`, `_value`) work as they are. Include the CO₂ and humidity sensors and the presence entities; the actuator is simulated.
+- `options.json`: the [diagnostics download](#diagnostics) of the entry (or just its options). Edit the options in the file to try other settings.
+- `--profile balanced|air_quality|quiet|winter` (default balanced), `--interval` (seconds between periodic evaluations, default the evaluation interval of the options), `--stale` (a sensor without a recorded state for the stale timeout counts as invalid; off by default, because recordings usually hold only changes), `--decisions` (one CSV row per evaluation).
+
+Example output:
+
+```text
+Replay 2026-01-12 01:00 - 2026-01-14 00:50 (2.0 days), 3154 evaluations, profile balanced
+Setpoint (m³/h, time-weighted): min 80, p5 80, p25 80, p50 165, p75 250, p95 340, max 340, mean 178
+Time per reason:
+  co2                   40.1 %
+  minimum               21.3 %
+  away                  17.8 %
+  quiet_limit           12.5 %
+  humidity_high          6.3 %
+  fallback               2.1 %
+Time per mode:
+  automatic             97.9 %
+  fallback               2.1 %
+Writes per day: mean 32.7, max 52 (2026-01-12), total 98
+  2026-01-12  52
+  2026-01-13  46
+  2026-01-14  0
+Longest at max flow (400 m³/h): never
+```
+
+The replay assumes that the unit takes every written value at once. It leaves out readiness conditions, warning sources and manual commands (boost, pause). Replay a winter month before going live and check the share of `co2` against `minimum` and the writes per day.
 
 ## Examples
 
@@ -644,7 +740,7 @@ While nobody is home, CO₂ is ignored and the flow drops to the minimum flow, b
 
 Failed, stale or implausible values are ignored, never read as 0. If one of several CO₂ sensors fails, the others are used. If CO₂ sensors are configured and none is valid, the mode becomes **Fallback** and the fallback flow (150 m³/h) is used, also while away; the quiet limit still applies. Without any valid input and without CO₂ sensors, the minimum flow is used. Every invalid sensor is listed in `invalid_inputs` and, after the problem delay, turns the problem sensor on. When the actuator itself is unavailable, nothing is written until it is back.
 
-A sensor that is removed from Home Assistant counts as invalid; a repair issue for it comes in 0.2. A renamed sensor (new entity id) is followed automatically.
+A sensor that is removed from Home Assistant counts as invalid and raises a [repair issue](#repair-issues). A renamed sensor (new entity id) is followed automatically.
 
 ### Pause does not stop the unit
 
@@ -672,6 +768,8 @@ Only one controller may write to the unit. If an existing automation, blueprint 
 - A pause without an off actuator writes the lowest actuator value, which may not stop the unit completely (`off_method: minimum`, see [Pause does not stop the unit](#pause-does-not-stop-the-unit)).
 - Changing the max flow does not change the flows derived from it; adjust them in **Control** and **Boosts**.
 - The logbook text is in the server language, not in each user's language.
+- An entity without an entity registry entry (for example a YAML template sensor without `unique_id`) that disappears while Home Assistant runs is reported as missing only after the next restart.
+- The place in the text of the repair issue "… not found" (for example "step Inputs") is in the server language.
 
 ## Troubleshooting
 
@@ -688,6 +786,8 @@ Only one controller may write to the unit. If an existing automation, blueprint 
 | The unit went into a pause by itself | It was stopped at the unit or by another integration ([external stop](#stopping-the-unit-at-the-unit-counts-as-a-pause)); the logbook shows "at the unit". |
 | Entity ids differ from this README | They depend on the device name and the server language. |
 | No notification arrives on the phone | The phone is selected in **Notifications** and the kind is switched on; the Companion app may notify (test with **Developer tools → Actions**, `notify.mobile_app_…`); a repair issue `missing_notify_service` means the service was renamed or removed. Without a reachable phone a persistent notification is created; a failed send is in the log. |
+| Assist does not understand a voice command | The default conversation agent needs the [example sentences](#voice-control) in `<config>/custom_sentences/<language>/` and a restart. "There are several ventilation units": say the entry title or add the names to the sentence file. |
+| A repair issue "… not found" | An entity used in the settings was deleted or its integration is not loaded; see [repair issues](#repair-issues). |
 | Tapping an action does nothing | The answer came late (the warning was already lifted or the unit restarted), or the notification belongs to an entry that was deleted and created again. Use the **Safety override** switch or the **Resume** button. |
 
 For more detail enable debug logging on the integration page (**Enable debug logging**), reproduce the issue, and disable it again to download the log.
@@ -731,9 +831,9 @@ From the repository root:
 |---|---|
 | format | `ruff format --check .` (`ruff format .` to fix) |
 | lint | `ruff check .` |
-| types | `mypy` and `MYPYPATH=custom_components/better_home_ventilation mypy tests/engine` |
+| types | `mypy` and `MYPYPATH=custom_components/better_home_ventilation mypy tests/engine tools tests/tools` |
 | tests | `pytest --cov` (fails below 90 % coverage) |
-| engine tests only (no Home Assistant needed) | `pytest tests/engine` |
+| engine and replay tool tests only (no Home Assistant needed) | `pytest tests/engine tests/tools` |
 
 The control logic lives in `custom_components/better_home_ventilation/engine/` and must not import Home Assistant. Ruff enforces this through `engine/ruff.toml`, and a test imports the engine with Home Assistant blocked. The Home Assistant glue (controller, actuator adapters, entities, actions, logbook, config flow) lives next to it in `custom_components/better_home_ventilation/`.
 

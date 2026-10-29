@@ -757,12 +757,41 @@
     "notify_action_ok": "OK",
     "notify_action_restart": "Jetzt einschalten",
     "notify_action_keep_off": "Aus lassen",
-    "notify_action_resume": "Fortsetzen"
+    "notify_action_resume": "Fortsetzen",
+    "notify_problem_missing_entity": "{entities} existiert nicht mehr; die Lüftung läuft ohne sie weiter. Siehe die Reparaturmeldung.",
+    "issue_where_actuator": "Aktor (Schritt Aktor)",
+    "issue_where_off_entity": "Aus-Aktor (Schritt Aktor)",
+    "issue_where_co2_sensors": "CO₂-Sensoren (Schritt Eingänge)",
+    "issue_where_humidity_sensors": "Feuchtesensoren (Schritt Eingänge)",
+    "issue_where_presence_entities": "Anwesenheit (Schritt Eingänge)",
+    "issue_where_readiness_condition": "Bereitschaftsbedingung {title}",
+    "issue_where_warning_source": "Warnquelle {title}",
+    "intent_boost": "{name} läuft bis {time} verstärkt mit {level} m³/h.",
+    "intent_pause": "{name} ist bis {time} pausiert.",
+    "intent_pause_indefinite": "{name} ist pausiert, bis du sie wieder fortsetzt.",
+    "intent_resume": "{name} ist wieder im Modus {mode}.",
+    "intent_status": "{name}: {mode}, {setpoint} m³/h, Grund: {reason}.",
+    "intent_status_until": "{name}: {mode} bis {time}, {setpoint} m³/h, Grund: {reason}.",
+    "intent_status_not_started": "{name} ist noch nicht gestartet.",
+    "intent_error_control_disabled": "Die Regelung von {name} ist ausgeschaltet.",
+    "intent_error_level_out_of_range": "Die Stufe muss zwischen {min} und {max} m³/h liegen.",
+    "intent_error_entry_required": "Es gibt mehrere Lüftungen; sag, welche du meinst.",
+    "intent_error_entry_not_found": "Es gibt keine Lüftung namens {name}.",
+    "intent_error_no_entry": "Es ist keine Lüftung eingerichtet.",
+    "intent_error_entry_not_loaded": "{name} ist nicht geladen."
   },
   "issues": {
     "missing_notify_service": {
       "title": "Benachrichtigungsdienst {service} nicht gefunden",
       "description": "{entries} sendet Benachrichtigungen an {service}, den es nicht mehr gibt (zum Beispiel, weil die Companion App entfernt oder das Telefon umbenannt wurde). Öffne die Einstellungen des Eintrags, wähle **Benachrichtigungen** und wähle die aktuellen Telefone; beim Speichern wird der fehlende Dienst entfernt. Bis dahin erhalten die anderen Telefone die Benachrichtigungen, oder es wird eine dauerhafte Benachrichtigung erstellt, wenn keines mehr übrig ist."
+    },
+    "missing_entity": {
+      "title": "{entity} nicht gefunden",
+      "description": "{entity} wird in {usages} verwendet, existiert aber weder als Entität noch in der Entitätsregistrierung (zum Beispiel, weil ihre Integration entfernt oder die Entität gelöscht wurde). Die Lüftung läuft ohne sie weiter. Öffne die Einstellungen des Eintrags und wähle im genannten Schritt eine vorhandene Entität, oder lösche die Bereitschaftsbedingung oder Warnquelle. Diese Meldung verschwindet, sobald die Entität wieder existiert oder nicht mehr verwendet wird."
+    },
+    "state_reset": {
+      "title": "Gespeicherter Zustand von {entry} zurückgesetzt",
+      "description": "Der gespeicherte Zustand von {entry} konnte nicht gelesen werden (er war beschädigt oder stammt von einer neueren Version) und wurde durch die Standardwerte ersetzt: ein laufender Boost oder eine Pause und Übersteuerungen von Warnungen sind beendet, die Regelung ist eingeschaltet und das Profil ist Ausgewogen. Prüfe die Regelung und das Profil. Diese Meldung dient nur zur Information; du kannst sie ignorieren."
     }
   }
 }

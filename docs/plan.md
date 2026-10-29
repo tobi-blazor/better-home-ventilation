@@ -208,15 +208,15 @@ Done when: on a phone, "Keep ventilating", "Restart now", "Keep off" and "Resume
 
 ## M10 Diagnostics, repairs, voice, replay, release 0.2.0
 
-- [ ] `diagnostics.py` with decision log, presence redacted – BHV-54, C13
-- [ ] Repair issues `missing_entity`, `state_reset` – BHV-55, C4a (removal part), C14 (`missing_notify_service` done in M9)
-- [ ] `intent.py`: four intents with `description` and `slot_schema`; verify Q2 and Q3; `examples/custom_sentences/{en,de}/` – BHV-22 (voice), C16
-- [ ] `tools/replay.py` (standard library only), CSV input, report output – BHV-56
+- [x] `diagnostics.py` with decision log, presence redacted – BHV-54, C13
+- [x] Repair issues `missing_entity`, `state_reset` – BHV-55, C4a (removal part), C14 (`missing_notify_service` done in M9)
+- [x] `intent.py`: four intents with `description` and `slot_schema`; verify Q2 and Q3; `examples/custom_sentences/{en,de}/` – BHV-22 (voice), C16 (Q2: `llm.py` platform for HA 2026.10)
+- [x] `tools/replay.py` (standard library only), CSV input, report output – BHV-56
 - [ ] Replay a winter month of recorded data, check reason shares and writes per day
 - [x] README: warning sources and NINA setup, gas detectors are not a suitable source, provider contract (done in M8)
 - [ ] Acceptance items for safety from [06-testing.md](spec/06-testing.md#acceptance-checklist-real-installation) with a template `binary_sensor` as test warning
 - [ ] Switch over for everyday operation: disable the old automation permanently
-- [ ] `quality_scale.yaml`, `CHANGELOG.md`, tag `v0.2.0`
+- [ ] `quality_scale.yaml`, `CHANGELOG.md`, tag `v0.2.0` (`quality_scale.yaml` and `CHANGELOG.md` done in M10; the tag follows the acceptance)
 
 Done when: all 0.2 acceptance items are checked on the real installation.
 

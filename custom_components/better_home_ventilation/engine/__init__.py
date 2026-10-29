@@ -529,7 +529,9 @@ def _problem_ids(
     """List the current problems; input problems are not raised during the grace.
 
     An unavailable warning source is an input problem as well (one per
-    source, 03-modes.md#triggers); a failed details call is raised at once.
+    source, 03-modes.md#triggers); a failed details call is raised at once,
+    and so is a missing entity (the glue reports it only after its own check,
+    BHV-55).
     """
     ids: list[ProblemId] = []
     if is_unavailable(snapshot.actuator.state):
@@ -550,6 +552,10 @@ def _problem_ids(
     ids.extend(
         (ProblemKey.WARNING_DETAILS_FAILED, entity_id)
         for entity_id in safety.details_failed
+    )
+    ids.extend(
+        (ProblemKey.MISSING_ENTITY, entity_id)
+        for entity_id in sorted(snapshot.missing_entities)
     )
     ids.extend((key, None) for key in sorted(snapshot.reported_problems))
     return ids
