@@ -20,6 +20,7 @@ Time is always injected (`now` parameter in the engine, `freezer` fixture in com
 | E1 | CO₂ 700, 850, 1125, 1400, 1600 ppm, defaults, max 400 | 80, 80, 240, 400, 400 m³/h (before shaping) |
 | E2 | two CO₂ sensors 900 / 1200 | ramp uses 1200, `co2_max_entity` = second |
 | E3 | one CO₂ sensor `unavailable`, other 900 | uses 900, entity listed in `invalid_inputs` |
+| E3a | CO₂ sensors 189 / 249 ppm (miscalibrated, at night); then both 99 ppm | valid: automatic, minimum, no `invalid_inputs`; 99 ppm: invalid, fallback |
 | E4 | all CO₂ sensors invalid | mode `fallback`, setpoint 150, reason `fallback` |
 | E5 | CO₂ value unchanged but `last_reported` older than 30 min | invalid |
 | E6 | humidity max 62 % | humidity ramp ≈ 229 m³/h (quantised 230), reason `humidity_high` if above CO₂ demand |

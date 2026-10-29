@@ -58,7 +58,9 @@ A numeric input value is **valid** if all of the following hold:
 - state is not `unavailable`, `unknown` or empty
 - state parses as a finite float
 - `now - state.last_reported ≤ stale_timeout` (default 30 min). `last_reported` is updated by HA even when the value does not change (since HA 2024.4, `States.async_set_internal`; checked on 2026.10.0).
-- plausibility range: CO₂ 250–10000 ppm, humidity 0–100 %. Values outside are invalid.
+- plausibility range: CO₂ 100–10000 ppm, humidity 0–100 %. Values outside are invalid.
+
+The CO₂ lower bound is far below outdoor air (about 420 ppm) on purpose (owner decision 2026-10-29). Sensors with automatic baseline calibration that drifted read 189–249 ppm at night in a test run; with a bound of 250 ppm they were invalid, raised `inputs_invalid`, and with all CO₂ sensors invalid the fallback flow would have ventilated needlessly. Such a sensor still shows the rise of CO₂ when a room is occupied, so its values are used; only clearly broken values (below 100 ppm, e.g. 0) are invalid. The documentation says that values well below ~400 ppm indicate a sensor that needs calibration.
 
 Invalid values are **excluded** from every calculation. They are listed in the attribute `invalid_inputs` of the setpoint sensor and, after `problem_delay`, reported as problem `inputs_invalid`.
 

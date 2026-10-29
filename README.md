@@ -377,7 +377,7 @@ The integration is event driven; it does not poll anything.
 
 Control starts once Home Assistant has started. During the startup grace (1 min) the entities show values but nothing is written and no input problems are raised, because many sensors become available a few seconds after start. The setpoint keeps the flow the unit runs at until the first write after the grace.
 
-Input values count only when they are **valid**: not `unavailable`, `unknown` or empty; numeric; reported within the stale timeout (30 min, also when the value did not change); and plausible (CO₂ 250–10000 ppm, humidity 0–100 %). Invalid values are left out of every calculation, listed in the setpoint attribute `invalid_inputs`, and reported as a problem after the problem delay.
+Input values count only when they are **valid**: not `unavailable`, `unknown` or empty; numeric; reported within the stale timeout (30 min, also when the value did not change); and plausible (CO₂ 100–10000 ppm, humidity 0–100 %). Invalid values are left out of every calculation, listed in the setpoint attribute `invalid_inputs`, and reported as a problem after the problem delay.
 
 ## Entities
 
@@ -534,6 +534,10 @@ Failed, stale or implausible values are ignored, never read as 0. If one of seve
 
 A sensor that is removed from Home Assistant counts as invalid; a repair issue for it comes in 0.2. A renamed sensor (new entity id) is followed automatically.
 
+### My CO₂ sensor shows less than 400 ppm
+
+Outdoor air has about 420 ppm, so a room cannot really be lower. Values well below ~400 ppm (for example 190–250 ppm at night) mean the sensor needs calibration: sensors with automatic baseline calibration drift when the room never gets fresh air, or they were calibrated in a closed room. The integration still uses such values (CO₂ from 100 ppm counts as valid), because the rise in an occupied room still shows, but the CO₂ ramp then starts later than it should. Calibrate the sensor outdoors or at an open window as its manual describes.
+
 ### Pause does not stop the unit
 
 Without an off actuator, a pause (and every other "off") writes the lowest actuator value: 0 % for a `fan`, the lowest value of a `number` (**Actuator minimum** if set, else its `min` attribute, else 0), the lowest mapped stage for a `select`. The setpoint attribute `off_method` is then `minimum`. Many units do not stop at that value: they ignore flows below their own minimum (for example 50 m³/h) and keep running.
@@ -568,7 +572,7 @@ Only one controller may write to the unit. If an existing automation, blueprint 
 | The target changes but the setpoint and the unit do not | Setpoint attribute `write_blocked_by`: `disabled` (Control switch off; the setpoint shows the demand), `not_ready` (readiness condition, for example the control mode), `unavailable` (actuator), `grace` (just started), `interval` / `deadband` (shaping holds on purpose). Then the **Problem** sensor's `problems` attribute. |
 | The unit runs at another value than the setpoint | Another automation or the unit's own program writes too ([two controllers](#running-two-controllers)); the problem `write_mismatch` appears. Or the unit needs a readiness condition. |
 | `write_failed` | A service call to the unit failed; the Home Assistant log has the error. |
-| A sensor is in `invalid_inputs` | It is unavailable, not numeric, has not reported within the stale timeout, or is outside the plausible range (CO₂ 250–10000 ppm, humidity 0–100 %). |
+| A sensor is in `invalid_inputs` | It is unavailable, not numeric, has not reported within the stale timeout, or is outside the plausible range (CO₂ 100–10000 ppm, humidity 0–100 %). |
 | The flow reacts slowly | That is the output shaping: one change per 5 minutes, at most 50 m³/h per change by default. Boosts, pauses and profile changes act at once. Tune the **Output shaping** section if needed. |
 | The flow stays low although CO₂ is high | Look at `limits` and the reason: `away` (nobody home), `quiet_limit` (night window or quiet profile) or `dryness_protection` (winter profile). |
 | The mode is Fallback | No CO₂ sensor is valid; see `invalid_inputs`. |

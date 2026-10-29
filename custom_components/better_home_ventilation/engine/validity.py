@@ -13,8 +13,10 @@ from typing import Final
 
 from .models import InputSummary, InputValue, Options, is_unavailable
 
-#: Plausibility range of CO₂ values in ppm (inclusive).
-CO2_RANGE: Final = (250.0, 10000.0)
+#: Plausibility range of CO₂ values in ppm (inclusive). The lower bound is far
+#: below outdoor air (about 420 ppm) on purpose: a miscalibrated sensor that
+#: reads 190-250 ppm at night still shows a rise in CO₂ and stays usable.
+CO2_RANGE: Final = (100.0, 10000.0)
 #: Plausibility range of relative humidity in % (inclusive).
 HUMIDITY_RANGE: Final = (0.0, 100.0)
 

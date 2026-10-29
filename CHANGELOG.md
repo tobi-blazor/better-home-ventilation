@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - The profile select shows a short description with each profile (e.g. "Quiet – limited all day"), so the choice is clear in the dropdown.
+- CO₂ values from 100 ppm (before: 250 ppm) count as plausible. Miscalibrated sensors that read 190–250 ppm at night are no longer ignored, so they raise no problem and do not cause the fallback flow. Values well below ~400 ppm mean the sensor needs calibration (README FAQ).
 
 ### Fixed
 
