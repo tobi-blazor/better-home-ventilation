@@ -446,6 +446,31 @@ def warning_title(warning: WarningInfo) -> str:
     return warning.headline or warning.source_name
 
 
+#: Maximum length of the warning text in a safety notification
+#: (04-interface.md#notifications).
+NOTIFICATION_TEXT_MAX: Final = 300
+
+
+def notification_text(
+    warning: WarningInfo, max_length: int = NOTIFICATION_TEXT_MAX
+) -> str | None:
+    """Body of the safety notification of ``warning`` (BHV-41).
+
+    The recommended actions, otherwise the description (both already plain
+    text), shortened to ``max_length`` characters with an ellipsis, followed
+    by the sender in brackets. None if the warning has neither actions nor a
+    description; the glue then uses its own wording.
+    """
+    text = warning.recommended_actions or warning.text
+    if not text:
+        return None
+    if len(text) > max_length:
+        text = text[: max_length - 1].rstrip() + "…"
+    if warning.sender:
+        text = f"{text} ({warning.sender})"
+    return text
+
+
 # --- Suggested filters -------------------------------------------------------
 
 PROVIDER_NINA: Final = "nina"

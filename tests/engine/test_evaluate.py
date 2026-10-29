@@ -350,6 +350,15 @@ def test_reported_problems_pass_through() -> None:
     assert [(p.key, p.entity_id) for p in decision.problems] == [
         (ProblemKey.WRITE_FAILED, None)
     ]
+    # A missing notify service (0.2) is reported by the glue the same way.
+    sim.reported_problems = frozenset(
+        {ProblemKey.WRITE_FAILED, ProblemKey.MISSING_NOTIFY_SERVICE}
+    )
+    decision, _ = sim.run()
+    assert [(p.key, p.entity_id) for p in decision.problems] == [
+        (ProblemKey.MISSING_NOTIFY_SERVICE, None),
+        (ProblemKey.WRITE_FAILED, None),
+    ]
 
 
 def test_no_valid_co2_problem() -> None:

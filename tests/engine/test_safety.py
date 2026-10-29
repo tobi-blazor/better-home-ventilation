@@ -38,6 +38,7 @@ from engine.safety import (
     keyword_matches,
     make_details,
     normalise_severity,
+    notification_text,
     suggested_filters,
     warning_counts,
     warning_key,
@@ -474,3 +475,58 @@ def test_warning_source_from_subentry_data() -> None:
         "sub4", {opt.CONF_SOURCE_ENTITY: "binary_sensor.smoke"}
     )
     assert named_by_entity.name == "binary_sensor.smoke"
+
+
+# --- Notification text (BHV-41, 04-interface.md#notifications) -----------------
+
+
+def _warning(**overrides: Any) -> WarningInfo:
+    values: dict[str, Any] = {
+        "source_id": "s",
+        "source_name": "Outdoor smoke",
+        "entity_id": "binary_sensor.example_smoke",
+        "incident_key": "s:1",
+        "headline": "Fire nearby",
+        "text": "Large fire in the industrial area.",
+        "recommended_actions": "Close windows and doors.",
+        "severity": Severity.SEVERE,
+        "sender": "Fire brigade",
+        "since": T0,
+    }
+    values.update(overrides)
+    return WarningInfo(**values)
+
+
+def test_bhv41_notification_text_prefers_recommended_actions() -> None:
+    """Recommended actions first, then the description; the sender in brackets."""
+    assert notification_text(_warning()) == "Close windows and doors. (Fire brigade)"
+    assert (
+        notification_text(_warning(recommended_actions=None, sender=None))
+        == "Large fire in the industrial area."
+    )
+
+
+def test_bhv41_notification_text_without_text_is_none() -> None:
+    """A warning without actions and description has no text (the glue words it)."""
+    assert notification_text(_warning(recommended_actions=None, text=None)) is None
+    assert (
+        notification_text(
+            _warning(recommended_actions=None, text=None, sender=None, details=False)
+        )
+        is None
+    )
+
+
+def test_bhv41_notification_text_is_shortened_to_300_chars() -> None:
+    """The text is cut to 300 characters (with an ellipsis) before the sender."""
+    long_text = "word " * 100
+    text = notification_text(_warning(recommended_actions=long_text, sender=None))
+    assert text is not None
+    assert len(text) == 300
+    assert text.endswith("…")
+    assert not text[:-1].endswith(" ")
+    with_sender = notification_text(_warning(recommended_actions=long_text))
+    assert with_sender is not None
+    assert with_sender.endswith("… (Fire brigade)")
+    exact = "x" * 300
+    assert notification_text(_warning(recommended_actions=exact, sender=None)) == exact
