@@ -136,6 +136,16 @@ Constructed headlines are marked as such in the fixture. Real messages that were
 
 Use before going live: replay a winter month and compare the shares of `co2` vs. `minimum` and the number of writes with expectations.
 
+Details (decided 2026-10-29 for M10):
+
+- **Usage:** `python tools/replay.py history.csv options.json [--decisions out.csv] [--profile quiet] [--tz Europe/Berlin] [--interval 60] [--stale]`. Exit code 2 with a message for an unusable file.
+- **CSV:** a header row; the time column may be called `time`, `last_changed`, `last_updated` or `_time`, the state column `state`, `value` or `_value` (the history download of Home Assistant, InfluxDB exports). ISO 8601 times; times without offset are in `--tz` (default: the local time zone). All times are converted to that zone, because the engine reads the night window from the wall clock of `now`.
+- **Options:** the `options` of an entry, an object with `options`, or a diagnostics download (`data.entry.options`).
+- **Evaluations** as in Home Assistant: `debounce` after every recorded change, every `evaluation_interval` (or `--interval`) and at every `ScheduleAt`; the startup grace starts with the first row.
+- **Simplifications:** the simulated unit takes every write and every off/on at once (starting at `min_flow`); rows of the actuator and the off actuator are ignored (they show what another controller did); readiness conditions and warning sources are left out; no manual commands. `last_reported` is unknown (never stale) unless `--stale` is given, because recordings usually hold only changes.
+- **Report:** setpoint minimum, p5/p25/p50/p75/p95, maximum and mean, each weighted with the time the decision held; share of time per reason and per mode; writes per local day (mean, maximum, every day); the longest continuous time with the setpoint at `max_flow`. `--decisions` writes one row per evaluation (`time, mode, reason, setpoint, target, written, co2_max, co2_max_entity, humidity_max, humidity_mean, limits, write_blocked_by, invalid_inputs, problems`).
+- **Tests:** `tests/tools/` with a synthetic two-day fixture (`tests/fixtures/replay_history.csv`); they run without Home Assistant, like the engine tests, and the replay tool is type checked with them (`mypy tests/engine tools tests/tools`).
+
 ## Acceptance checklist (real installation)
 
 - [ ] Boost via button and via voice; extend by pressing again; cancel; after expiry back to automatic

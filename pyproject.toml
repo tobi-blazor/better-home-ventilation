@@ -79,16 +79,17 @@ ignore = [
 [tool.ruff.lint.isort]
 force-sort-within-sections = true
 combine-as-imports = true
-known-first-party = ["custom_components", "engine", "tests"]
+known-first-party = ["custom_components", "engine", "tests", "tools"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "pep257"
 
 # ---------------------------------------------------------------------------
 # mypy
-# `mypy` checks the integration and the component tests. The engine tests
-# import the engine as the top-level package `engine` and are checked in a
-# second run: `MYPYPATH=custom_components/better_home_ventilation mypy tests/engine`.
+# `mypy` checks the integration and the component tests. The engine tests and
+# the replay tool import the engine as the top-level package `engine` and are
+# checked in a second run:
+# `MYPYPATH=custom_components/better_home_ventilation mypy tests/engine tools tests/tools`.
 # ---------------------------------------------------------------------------
 [tool.mypy]
 python_version = "3.14"
@@ -131,7 +132,7 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 
 [tool.coverage.run]
-source = ["custom_components/better_home_ventilation"]
+source = ["custom_components/better_home_ventilation", "tools"]
 branch = true
 
 [tool.coverage.report]
