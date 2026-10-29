@@ -1324,7 +1324,7 @@ def _filters_schema(*, with_filters: bool) -> vol.Schema:
         ),
     }
     if with_filters:
-        fields[vol.Required(SECTION_KEYWORDS)] = _section(
+        fields[vol.Optional(SECTION_KEYWORDS)] = _section(
             {vol.Optional(key): KEYWORDS_SELECTOR for key in KEYWORD_KEYS}
         )
         fields[vol.Required(CONF_MIN_SEVERITY, default=MIN_SEVERITY_NONE)] = _select(

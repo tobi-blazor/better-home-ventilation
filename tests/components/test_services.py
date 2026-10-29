@@ -218,12 +218,14 @@ def test_every_exception_is_translated() -> None:
             "entry_not_loaded",
             "level_out_of_range",
             "control_disabled",
+            "no_active_warning",
         ):
             assert strings["exceptions"][key]["message"], (name, key)
         for service, fields in (
             ("boost", {"config_entry_id", "duration", "level"}),
             ("pause", {"config_entry_id", "duration"}),
             ("resume", {"config_entry_id"}),
+            ("override_safety", {"config_entry_id"}),
         ):
             translated = strings["services"][service]
             assert translated["name"]
