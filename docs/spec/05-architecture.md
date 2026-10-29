@@ -44,7 +44,8 @@ custom_components/better_home_ventilation/
   warning_providers/   details providers (HA glue): __init__.py (registry), nina.py, dwd.py, environment_canada.py, attributes.py
   entity.py            BetterVentilationEntity base (device info, listener registration)
   sensor.py  binary_sensor.py  button.py  select.py  number.py  switch.py
-  intent.py            intent handlers (0.2)
+  intent.py            intent handlers (0.2); also the integration's `intent` platform
+  llm.py               LLM tools of the intents for the Assist API (HA 2026.10+, `llm` platform)
   logbook.py           describe mode_changed events
   diagnostics.py
   services.yaml  strings.json  icons.json  translations/en.json  translations/de.json
@@ -94,7 +95,7 @@ examples/
 | notification actions | listen to `mobile_app_notification_action` |
 | warning details | `hass.services.async_call("nina", "get_details", target=…, blocking=True, return_response=True)` |
 | repairs | `helpers.issue_registry.async_create_issue` |
-| intents | `helpers.intent.async_register`, `IntentHandler` |
+| intents | `helpers.intent.async_register`, `IntentHandler`; LLM tools through the `llm` platform (`homeassistant.components.llm.LLMTools`, `helpers.llm.IntentTool`, HA 2026.10) |
 | translations for logbook/services/errors | `strings.json`, `translation_key` on exceptions |
 
 No polling of external systems, no `requirements` in the manifest.

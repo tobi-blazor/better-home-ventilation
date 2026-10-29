@@ -21,6 +21,7 @@ from .controller import (
 )
 from .engine.options import migrate_options
 from .entity import async_remove_stale_entities
+from .intent import async_setup_intents
 from .issues import async_remove_entry_issues, async_setup_issues
 from .services import async_setup_services
 
@@ -40,8 +41,9 @@ PLATFORMS: Final[list[Platform]] = [
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Set up the integration: services (BHV-22) and repair issues (BHV-55)."""
+    """Set up the integration: services and intents (BHV-22), repair issues."""
     async_setup_services(hass)
+    await async_setup_intents(hass)
     async_setup_issues(hass)
     return True
 

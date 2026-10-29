@@ -1,0 +1,81 @@
+# Example sentences for the Home Assistant default conversation agent (Assist).
+#
+# Copy this file to <config>/custom_sentences/en/better_home_ventilation.yaml
+# and restart Home Assistant. A custom integration cannot add sentences to the
+# default agent itself (docs/spec/README.md, Q3). LLM conversation agents do
+# not need this file: they call the intents as tools.
+#
+# The sentences have no name slot, so they work with exactly one ventilation
+# entry. With several entries, add the list `ventilation_name` below (values =
+# the entry titles) and put "[the] {ventilation_name:name}" into the sentences
+# instead of "[the] ventilation".
+language: "en"
+intents:
+  BetterVentilationBoost:
+    data:
+      - sentences:
+          - "(boost|turbo) [the] (ventilation|air)"
+          - "ventilation (boost|turbo)"
+          - "(boost|increase) [the] ventilation [for] {bhv_minutes:duration} minutes"
+          - "(boost|increase) [the] ventilation [for] {bhv_hours:duration} (hour|hours)"
+          - "(boost|set) [the] ventilation to {bhv_level:level} [cubic meters]"
+          - "ventilation (stronger|faster) [for] {bhv_minutes:duration} minutes"
+          - "more (fresh air|ventilation)"
+  BetterVentilationPause:
+    data:
+      - sentences:
+          - "(pause|stop|turn off|switch off) [the] ventilation"
+          - "(pause|stop|turn off|switch off) [the] ventilation [for] {bhv_pause_minutes:duration} minutes"
+          - "(pause|stop|turn off|switch off) [the] ventilation [for] {bhv_pause_hours:duration} (hour|hours)"
+          - "ventilation off [for] {bhv_pause_hours:duration} (hour|hours)"
+  BetterVentilationResume:
+    data:
+      - sentences:
+          - "(resume|restart) [the] ventilation"
+          - "[turn|switch] [the] ventilation back on"
+          - "ventilation [back] to normal"
+          - "ventilation (automatic|normal) [again]"
+  BetterVentilationStatus:
+    data:
+      - sentences:
+          - "what is the ventilation doing"
+          - "(ventilation status|status of [the] ventilation)"
+          - "how (fast|strong|hard) is the ventilation [running]"
+          - "why is the ventilation (running|off|so loud)"
+lists:
+  bhv_minutes:
+    range:
+      from: 5
+      to: 720
+  bhv_hours:
+    range:
+      from: 1
+      to: 12
+      multiplier: 60
+  bhv_pause_minutes:
+    range:
+      from: 1
+      to: 10080
+  bhv_pause_hours:
+    range:
+      from: 1
+      to: 168
+      multiplier: 60
+  bhv_level:
+    range:
+      from: 50
+      to: 1000
+      step: 5
+  # ventilation_name:
+  #   values:
+  #     - "ventilation"
+  #     - "attic ventilation"
+responses:
+  # Spoken when an intent fails (the integration raises these response keys).
+  errors:
+    better_home_ventilation_control_disabled: "Control of the ventilation is switched off."
+    better_home_ventilation_level_out_of_range: "That level is outside the flow range of the ventilation."
+    better_home_ventilation_entry_required: "There are several ventilation units; say which one."
+    better_home_ventilation_entry_not_found: "There is no ventilation with that name."
+    better_home_ventilation_no_entry: "No ventilation is set up."
+    better_home_ventilation_entry_not_loaded: "The ventilation is not loaded."

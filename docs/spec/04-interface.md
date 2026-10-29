@@ -129,9 +129,17 @@ Phase 0.2. Registered with `homeassistant.helpers.intent.async_register` in `asy
 | `BetterVentilationResume` | `name` | `resume()` |
 | `BetterVentilationStatus` | `name` | speech with mode, setpoint, reason, end time |
 
-Each handler sets `description` and `slot_schema` so that LLM agents can use it, if the Assist API exposes intents of custom integrations ([Q2](README.md#open-questions)).
+Each handler sets `description` and `slot_schema` so that LLM agents can use it. The Assist API offers custom intents to LLM agents ([Q2](README.md#open-questions)): up to HA 2026.4 by itself, from HA 2026.10 through the integration's `llm` platform (`llm.py`), which returns the four intents as `IntentTool`s named `better_home_ventilation__<intent>`.
 
-For the default conversation agent the repository ships example sentence files `examples/custom_sentences/{en,de}/better_home_ventilation.yaml` that users copy to `config/custom_sentences/<lang>/` ([Q3](README.md#open-questions)). Examples (de): „Lüftung Boost“, „Lüftung 30 Minuten stärker“, „Lüftung für 2 Stunden aus“, „Lüftung wieder normal“, „Was macht die Lüftung?“.
+For the default conversation agent the repository ships example sentence files `examples/custom_sentences/{en,de}/better_home_ventilation.yaml` that users copy to `config/custom_sentences/<lang>/` (a custom integration cannot add sentences itself, [Q3](README.md#open-questions)). Examples (de): „Lüftung Boost“, „Lüftung 30 Minuten stärker“, „Lüftung für 2 Stunden aus“, „Lüftung wieder normal“, „Was macht die Lüftung?“.
+
+Details (decided 2026-10-29 for M10):
+
+- **Registration:** `intent.py` is also the integration's `intent` platform: the `intent` integration calls its `async_setup_intents` for every loaded integration (`homeassistant.components.intent`, `_async_process_intent`, HA 2026.4 and 2026.10). The same function is called in `async_setup`; it skips handlers that are registered already, so the intents exist with and without the `intent` integration and are never overwritten.
+- **Slots:** `duration` in minutes, 5–720 for boost and 1–10080 for pause (as the services); `level` in m³/h (range checked by the engine, `level_out_of_range`). `name` is compared with the entry titles, ignoring case and blanks; without `name` exactly one enabled entry must exist. Commands carry `source: voice`; boost without slots uses the parameter entities like the button.
+- **Speech:** in the language of the request (its base language, `de-CH` → `de`; English as fallback) from `common` (`intent_boost`, `intent_pause`, `intent_pause_indefinite`, `intent_resume`, `intent_status`, `intent_status_until`, `intent_status_not_started`); mode and reason names from the state translations of the `mode` and `reason` sensors. Status is a `query_answer` response, the others `action_done`. Flows are spoken without decimals, times as `HH:MM` (with the date if not today).
+- **Errors:** `IntentHandleError` with the translated text `common.intent_error_<code>` and `response_key` `better_home_ventilation_<code>`; codes `control_disabled`, `level_out_of_range`, `entry_required`, `entry_not_found`, `no_entry`, `entry_not_loaded`. LLM agents get the text (`error_text` of the tool result). The default agent speaks the error response of the key, so the example sentence files define `responses.errors` for every code.
+- **LLM tools (2026.10):** offered for the Assist API only and only while at least one entry is loaded, with titles and annotations (all `open_world: false`, not destructive; status `read_only`; pause and resume idempotent). They do not depend on exposed entities, like the intents in 2026.4 (`platforms` is None).
 
 Independently of intents, all buttons and switches can be exposed to Assist like any entity.
 
