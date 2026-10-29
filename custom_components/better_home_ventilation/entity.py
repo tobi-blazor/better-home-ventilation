@@ -14,7 +14,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import Entity
 
-from .const import DOMAIN, ENTITY_KEYS
+from .const import DOMAIN, ENTITY_KEYS, SAFETY_ENTITY_KEYS
 from .controller import BetterVentilationConfigEntry, VentilationController
 from .engine.models import Decision
 
@@ -32,10 +32,17 @@ def async_remove_stale_entities(
 
     docs/spec/04-interface.md#entities ("Only what is configured"): entities of
     features that were removed (or of older versions) are removed from the
-    entity registry during setup.
+    entity registry during setup. The safety entities exist only with at
+    least one warning source, so they are removed with the last one.
     """
+    platforms = [ENTITY_KEYS]
+    if entry.runtime_data.has_warning_sources:
+        platforms.append(SAFETY_ENTITY_KEYS)
     expected = {
-        unique_id(entry.entry_id, key) for keys in ENTITY_KEYS.values() for key in keys
+        unique_id(entry.entry_id, key)
+        for keys_by_platform in platforms
+        for keys in keys_by_platform.values()
+        for key in keys
     }
     registry = er.async_get(hass)
     for registry_entry in er.async_entries_for_config_entry(registry, entry.entry_id):

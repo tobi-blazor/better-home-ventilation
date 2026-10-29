@@ -363,6 +363,96 @@
           }
         }
       }
+    },
+    "warning_source": {
+      "entry_type": "Warning source",
+      "initiate_flow": {
+        "user": "Add warning source",
+        "reconfigure": "Reconfigure warning source"
+      },
+      "abort": {
+        "already_configured": "This entity or device is already used by a warning source or readiness condition of this entry."
+      },
+      "error": {
+        "source_required": "Select either an entity or a device (exactly one).",
+        "invalid_regex": "A keyword in /…/ is not a valid regular expression.",
+        "keyword_conflict": "A keyword is in an include list and in the exclude keywords.",
+        "numeric_state": "The current state of the entity is not a number, so it cannot be compared with a threshold. Use a state list instead.",
+        "threshold_required": "Enter a threshold for the numeric trigger.",
+        "states_required": "Enter at least one state for the state list."
+      },
+      "step": {
+        "user": {
+          "title": "Add warning source",
+          "description": "A hazard signal that switches the ventilation off: a smoke or CO detector, an official warning (e.g. NINA), a weather warning or any helper such as a template binary sensor or an input boolean. Choose either one entity or one device. Indoor gas detectors are not a recommended source: with gas in the house, open the windows and leave instead of switching devices.",
+          "data": {
+            "source_entity": "Entity",
+            "source_device": "Device",
+            "name": "Name"
+          },
+          "data_description": {
+            "source_entity": "An on/off entity (on = warning), a sensor with a warning level or count, or a select with states. Leave empty when you choose a device.",
+            "source_device": "A device whose binary sensors are all warnings, e.g. a NINA region with several message slots. All its enabled binary sensors count, and new ones are picked up automatically. Leave empty when you choose an entity.",
+            "name": "Shown on the safety warning entity and in notifications. Default: the name of the entity or device."
+          }
+        },
+        "reconfigure": {
+          "title": "Reconfigure warning source",
+          "description": "A hazard signal that switches the ventilation off: a smoke or CO detector, an official warning (e.g. NINA), a weather warning or any helper such as a template binary sensor or an input boolean. Choose either one entity or one device. Indoor gas detectors are not a recommended source: with gas in the house, open the windows and leave instead of switching devices.",
+          "data": {
+            "source_entity": "Entity",
+            "source_device": "Device",
+            "name": "Name"
+          },
+          "data_description": {
+            "source_entity": "An on/off entity (on = warning), a sensor with a warning level or count, or a select with states. Leave empty when you choose a device.",
+            "source_device": "A device whose binary sensors are all warnings, e.g. a NINA region with several message slots. All its enabled binary sensors count, and new ones are picked up automatically. Leave empty when you choose an entity.",
+            "name": "Shown on the safety warning entity and in notifications. Default: the name of the entity or device."
+          }
+        },
+        "trigger": {
+          "title": "Trigger",
+          "description": "When {entity} counts as an active warning.",
+          "data": {
+            "trigger": "Trigger",
+            "threshold": "Threshold",
+            "states": "States"
+          },
+          "data_description": {
+            "trigger": "Numeric threshold: active while the state is a number at or above the threshold (e.g. a warning level or a number of alerts). State list: active while the state is one of the states.",
+            "threshold": "For a numeric threshold: the lowest state that counts as a warning, e.g. 3 for DWD warning level 3 or 1 for one Environment Canada alert.",
+            "states": "For a state list: the states that count as a warning, e.g. Orange and Red. Case does not matter."
+          }
+        },
+        "filters": {
+          "title": "Filters",
+          "description": "Which warnings of {name} switch the ventilation off. Detected details provider: {provider}.",
+          "data": {
+            "details": "Warning details",
+            "min_severity": "Minimum severity"
+          },
+          "data_description": {
+            "details": "Automatic uses the detected provider. Attributes reads headline and text from the entity's attributes. None: every activation is a warning, keywords and severity do not apply.",
+            "min_severity": "Warnings below this severity are ignored. A warning without a known severity counts as extreme."
+          },
+          "sections": {
+            "keywords": {
+              "name": "Keywords",
+              "description": "Suggested for the detected provider and the server language. A warning counts if it contains no exclude keyword and matches an event or an advice keyword; with both lists empty every warning counts. A warning without details always counts. Keywords ignore case; /…/ is a regular expression.",
+              "data": {
+                "headline_keywords": "Event keywords (headline)",
+                "text_keywords": "Advice keywords (whole text)",
+                "exclude_keywords": "Exclude keywords"
+              },
+              "data_description": {
+                "headline_keywords": "Matched in the headline only, e.g. fire, smoke or chemical. Event words are reliable in the short headline but give false hits in the body, e.g. the fire brigade as sender.",
+                "text_keywords": "Matched in headline, text and recommended actions, e.g. ventilation: authorities only mention ventilation when it must be switched off.",
+                "exclude_keywords": "A warning that contains one of these anywhere never counts, e.g. all-clear messages, tests and exercises. Checked first."
+              }
+            }
+          }
+        }
+      }
     }
   },
   "exceptions": {
@@ -380,6 +470,9 @@
     },
     "entry_not_loaded": {
       "message": "{entry_title} is not loaded."
+    },
+    "no_active_warning": {
+      "message": "There is no active warning to override."
     }
   },
   "selector": {
@@ -400,12 +493,37 @@
         "on": "On (e.g. a standby switch)",
         "off": "Off (e.g. a power switch)"
       }
+    },
+    "trigger": {
+      "options": {
+        "numeric": "Numeric threshold",
+        "state_list": "State list"
+      }
+    },
+    "details": {
+      "options": {
+        "auto": "Automatic",
+        "attributes": "Attributes",
+        "none": "None (on/off only)"
+      }
+    },
+    "severity": {
+      "options": {
+        "none": "No minimum",
+        "minor": "Minor",
+        "moderate": "Moderate",
+        "severe": "Severe",
+        "extreme": "Extreme"
+      }
     }
   },
   "entity": {
     "binary_sensor": {
       "problem": {
         "name": "Problem"
+      },
+      "safety_warning": {
+        "name": "Safety warning"
       }
     },
     "button": {
@@ -494,6 +612,9 @@
     "switch": {
       "control": {
         "name": "Control"
+      },
+      "safety_override": {
+        "name": "Safety override"
       }
     }
   },
@@ -539,6 +660,16 @@
           "description": "The ventilation entry. Optional if only one exists."
         }
       }
+    },
+    "override_safety": {
+      "name": "Override safety shutdown",
+      "description": "Keeps the ventilation running despite the current warnings, or ends the wait for the restart confirmation. A new warning switches it off again.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Entry",
+          "description": "The ventilation entry. Optional if only one exists."
+        }
+      }
     }
   },
   "common": {
@@ -561,6 +692,11 @@
     "logbook_trigger_detector_end": "detection ended",
     "logbook_trigger_inputs_lost": "inputs lost",
     "logbook_trigger_inputs_restored": "inputs restored",
-    "logbook_trigger_control_switch": "control switch"
+    "logbook_trigger_control_switch": "control switch",
+    "provider_nina": "NINA (details from the NINA service)",
+    "provider_dwd_weather_warnings": "DWD Weather Warnings (indexed attributes)",
+    "provider_environment_canada": "Environment Canada (alert titles)",
+    "provider_attributes": "generic attributes (headline, description, severity)",
+    "provider_none": "none (on/off only, filters do not apply)"
   }
 }

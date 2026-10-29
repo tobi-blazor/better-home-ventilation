@@ -1,4 +1,4 @@
-"""Services ``boost``, ``pause`` and ``resume`` (BHV-22).
+"""Services ``boost``, ``pause``, ``resume`` and ``override_safety`` (BHV-22, BHV-42).
 
 docs/spec/04-interface.md#services: registered once in ``async_setup``. Every
 service takes an optional ``config_entry_id``; without it the only entry is
@@ -28,11 +28,18 @@ from .const import (
     ATTR_LEVEL,
     DOMAIN,
     SERVICE_BOOST,
+    SERVICE_OVERRIDE_SAFETY,
     SERVICE_PAUSE,
     SERVICE_RESUME,
 )
 from .controller import BetterVentilationConfigEntry, VentilationController
-from .engine.models import BoostCommand, PauseCommand, ResumeCommand, Source
+from .engine.models import (
+    BoostCommand,
+    OverrideSafetyCommand,
+    PauseCommand,
+    ResumeCommand,
+    Source,
+)
 
 _ENTRY = {vol.Optional(ATTR_CONFIG_ENTRY_ID): cv.string}
 
@@ -56,6 +63,7 @@ PAUSE_SCHEMA = vol.Schema(
     }
 )
 RESUME_SCHEMA = vol.Schema(_ENTRY)
+OVERRIDE_SAFETY_SCHEMA = vol.Schema(_ENTRY)
 
 
 def _error(key: str, **placeholders: str) -> ServiceValidationError:
@@ -129,9 +137,23 @@ async def _async_resume(call: ServiceCall) -> None:
     await controller.async_command(ResumeCommand(source=Source.SERVICE))
 
 
+async def _async_override_safety(call: ServiceCall) -> None:
+    """Lift the safety shutdown for the current warnings (``no_active_warning``)."""
+    controller = async_resolve_controller(
+        call.hass, call.data.get(ATTR_CONFIG_ENTRY_ID)
+    )
+    await controller.async_command(OverrideSafetyCommand(source=Source.SERVICE))
+
+
 @callback
 def async_setup_services(hass: HomeAssistant) -> None:
     """Register the services of the integration."""
     hass.services.async_register(DOMAIN, SERVICE_BOOST, _async_boost, BOOST_SCHEMA)
     hass.services.async_register(DOMAIN, SERVICE_PAUSE, _async_pause, PAUSE_SCHEMA)
     hass.services.async_register(DOMAIN, SERVICE_RESUME, _async_resume, RESUME_SCHEMA)
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_OVERRIDE_SAFETY,
+        _async_override_safety,
+        OVERRIDE_SAFETY_SCHEMA,
+    )

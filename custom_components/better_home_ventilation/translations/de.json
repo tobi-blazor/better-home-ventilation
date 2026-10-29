@@ -363,6 +363,96 @@
           }
         }
       }
+    },
+    "warning_source": {
+      "entry_type": "Warnquelle",
+      "initiate_flow": {
+        "user": "Warnquelle hinzufügen",
+        "reconfigure": "Warnquelle ändern"
+      },
+      "abort": {
+        "already_configured": "Diese Entität oder dieses Gerät wird bereits von einer Warnquelle oder Bereitschaftsbedingung dieses Eintrags verwendet."
+      },
+      "error": {
+        "source_required": "Wähle entweder eine Entität oder ein Gerät (genau eins).",
+        "invalid_regex": "Ein Stichwort in /…/ ist kein gültiger regulärer Ausdruck.",
+        "keyword_conflict": "Ein Stichwort steht in einer Einschlussliste und in den Ausschluss-Stichwörtern.",
+        "numeric_state": "Der aktuelle Zustand der Entität ist keine Zahl und kann nicht mit einem Schwellwert verglichen werden. Verwende stattdessen eine Zustandsliste.",
+        "threshold_required": "Gib einen Schwellwert für den numerischen Auslöser ein.",
+        "states_required": "Gib mindestens einen Zustand für die Zustandsliste ein."
+      },
+      "step": {
+        "user": {
+          "title": "Warnquelle hinzufügen",
+          "description": "Ein Gefahrensignal, das die Lüftung ausschaltet: ein Rauch- oder CO-Melder, eine amtliche Warnung (z. B. NINA), eine Wetterwarnung oder ein beliebiger Helfer wie ein Template-Binärsensor oder ein Input-Boolean. Wähle entweder eine Entität oder ein Gerät. Gasmelder im Haus sind keine empfohlene Quelle: Bei Gas im Haus Fenster öffnen und das Haus verlassen, statt Geräte zu schalten.",
+          "data": {
+            "source_entity": "Entität",
+            "source_device": "Gerät",
+            "name": "Name"
+          },
+          "data_description": {
+            "source_entity": "Eine Ein/Aus-Entität (ein = Warnung), ein Sensor mit Warnstufe oder Anzahl oder eine Auswahl mit Zuständen. Leer lassen, wenn du ein Gerät wählst.",
+            "source_device": "Ein Gerät, dessen Binärsensoren alle Warnungen sind, z. B. eine NINA-Region mit mehreren Meldungsplätzen. Alle aktivierten Binärsensoren zählen, neue werden automatisch übernommen. Leer lassen, wenn du eine Entität wählst.",
+            "name": "Wird an der Entität Sicherheitswarnung und in Benachrichtigungen angezeigt. Standard: der Name der Entität oder des Geräts."
+          }
+        },
+        "reconfigure": {
+          "title": "Warnquelle ändern",
+          "description": "Ein Gefahrensignal, das die Lüftung ausschaltet: ein Rauch- oder CO-Melder, eine amtliche Warnung (z. B. NINA), eine Wetterwarnung oder ein beliebiger Helfer wie ein Template-Binärsensor oder ein Input-Boolean. Wähle entweder eine Entität oder ein Gerät. Gasmelder im Haus sind keine empfohlene Quelle: Bei Gas im Haus Fenster öffnen und das Haus verlassen, statt Geräte zu schalten.",
+          "data": {
+            "source_entity": "Entität",
+            "source_device": "Gerät",
+            "name": "Name"
+          },
+          "data_description": {
+            "source_entity": "Eine Ein/Aus-Entität (ein = Warnung), ein Sensor mit Warnstufe oder Anzahl oder eine Auswahl mit Zuständen. Leer lassen, wenn du ein Gerät wählst.",
+            "source_device": "Ein Gerät, dessen Binärsensoren alle Warnungen sind, z. B. eine NINA-Region mit mehreren Meldungsplätzen. Alle aktivierten Binärsensoren zählen, neue werden automatisch übernommen. Leer lassen, wenn du eine Entität wählst.",
+            "name": "Wird an der Entität Sicherheitswarnung und in Benachrichtigungen angezeigt. Standard: der Name der Entität oder des Geräts."
+          }
+        },
+        "trigger": {
+          "title": "Auslöser",
+          "description": "Wann {entity} als aktive Warnung zählt.",
+          "data": {
+            "trigger": "Auslöser",
+            "threshold": "Schwellwert",
+            "states": "Zustände"
+          },
+          "data_description": {
+            "trigger": "Numerischer Schwellwert: aktiv, solange der Zustand eine Zahl ab dem Schwellwert ist (z. B. eine Warnstufe oder eine Anzahl Meldungen). Zustandsliste: aktiv, solange der Zustand einer der Zustände ist.",
+            "threshold": "Für einen numerischen Schwellwert: der niedrigste Zustand, der als Warnung zählt, z. B. 3 für DWD-Warnstufe 3 oder 1 für eine Meldung von Environment Canada.",
+            "states": "Für eine Zustandsliste: die Zustände, die als Warnung zählen, z. B. Orange und Rot. Groß- und Kleinschreibung spielt keine Rolle."
+          }
+        },
+        "filters": {
+          "title": "Filter",
+          "description": "Welche Warnungen von {name} die Lüftung ausschalten. Erkannter Detail-Anbieter: {provider}.",
+          "data": {
+            "details": "Warnungsdetails",
+            "min_severity": "Mindest-Schweregrad"
+          },
+          "data_description": {
+            "details": "Automatisch verwendet den erkannten Anbieter. Attribute liest Überschrift und Text aus den Attributen der Entität. Keine: jede Aktivierung ist eine Warnung, Stichwörter und Schweregrad gelten nicht.",
+            "min_severity": "Warnungen unter diesem Schweregrad werden ignoriert. Eine Warnung ohne bekannten Schweregrad zählt als extrem."
+          },
+          "sections": {
+            "keywords": {
+              "name": "Stichwörter",
+              "description": "Vorschläge für den erkannten Anbieter und die Sprache des Servers. Eine Warnung zählt, wenn sie kein Ausschluss-Stichwort enthält und zu einem Ereignis- oder Hinweis-Stichwort passt; sind beide Listen leer, zählt jede Warnung. Eine Warnung ohne Details zählt immer. Groß- und Kleinschreibung spielt keine Rolle; /…/ ist ein regulärer Ausdruck.",
+              "data": {
+                "headline_keywords": "Ereignis-Stichwörter (Überschrift)",
+                "text_keywords": "Hinweis-Stichwörter (ganzer Text)",
+                "exclude_keywords": "Ausschluss-Stichwörter"
+              },
+              "data_description": {
+                "headline_keywords": "Nur in der Überschrift gesucht, z. B. Brand, Rauch oder Gefahrstoff. Ereignis-Wörter sind in der kurzen Überschrift zuverlässig, im Text aber oft Fehltreffer, z. B. die Feuerwehr als Absender.",
+                "text_keywords": "In Überschrift, Text und Handlungsempfehlungen gesucht, z. B. Lüftung: Behörden erwähnen die Lüftung nur, wenn sie abgeschaltet werden soll.",
+                "exclude_keywords": "Eine Warnung, die eines dieser Wörter irgendwo enthält, zählt nie, z. B. Entwarnungen, Probealarme und Übungen. Wird zuerst geprüft."
+              }
+            }
+          }
+        }
+      }
     }
   },
   "exceptions": {
@@ -380,6 +470,9 @@
     },
     "entry_not_loaded": {
       "message": "{entry_title} ist nicht geladen."
+    },
+    "no_active_warning": {
+      "message": "Es gibt keine aktive Warnung, die übersteuert werden kann."
     }
   },
   "selector": {
@@ -400,12 +493,37 @@
         "on": "An (z. B. ein Standby-Schalter)",
         "off": "Aus (z. B. ein Netzschalter)"
       }
+    },
+    "trigger": {
+      "options": {
+        "numeric": "Numerischer Schwellwert",
+        "state_list": "Zustandsliste"
+      }
+    },
+    "details": {
+      "options": {
+        "auto": "Automatisch",
+        "attributes": "Attribute",
+        "none": "Keine (nur ein/aus)"
+      }
+    },
+    "severity": {
+      "options": {
+        "none": "Kein Minimum",
+        "minor": "Gering",
+        "moderate": "Mäßig",
+        "severe": "Schwer",
+        "extreme": "Extrem"
+      }
     }
   },
   "entity": {
     "binary_sensor": {
       "problem": {
         "name": "Problem"
+      },
+      "safety_warning": {
+        "name": "Sicherheitswarnung"
       }
     },
     "button": {
@@ -494,6 +612,9 @@
     "switch": {
       "control": {
         "name": "Regelung"
+      },
+      "safety_override": {
+        "name": "Warnung übersteuern"
       }
     }
   },
@@ -539,6 +660,16 @@
           "description": "Der Lüftungseintrag. Optional, wenn nur einer existiert."
         }
       }
+    },
+    "override_safety": {
+      "name": "Sicherheitsabschaltung übersteuern",
+      "description": "Lässt die Lüftung trotz der aktuellen Warnungen weiterlaufen oder beendet das Warten auf die Bestätigung des Neustarts. Eine neue Warnung schaltet sie wieder aus.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Eintrag",
+          "description": "Der Lüftungseintrag. Optional, wenn nur einer existiert."
+        }
+      }
     }
   },
   "common": {
@@ -561,6 +692,11 @@
     "logbook_trigger_detector_end": "Erkennung beendet",
     "logbook_trigger_inputs_lost": "Eingänge verloren",
     "logbook_trigger_inputs_restored": "Eingänge wieder gültig",
-    "logbook_trigger_control_switch": "Regelungsschalter"
+    "logbook_trigger_control_switch": "Regelungsschalter",
+    "provider_nina": "NINA (Details vom NINA-Dienst)",
+    "provider_dwd_weather_warnings": "DWD-Wetterwarnungen (nummerierte Attribute)",
+    "provider_environment_canada": "Environment Canada (Titel der Meldungen)",
+    "provider_attributes": "allgemeine Attribute (Überschrift, Beschreibung, Schweregrad)",
+    "provider_none": "keiner (nur ein/aus, Filter gelten nicht)"
   }
 }

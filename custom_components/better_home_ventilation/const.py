@@ -27,12 +27,15 @@ from .engine.options import (
     CONF_DEADBAND_DOWN,
     CONF_DEADBAND_UP,
     CONF_DEBOUNCE,
+    CONF_DETAILS,
     CONF_DRYNESS_HUMIDITY_HIGH_LIMIT,
     CONF_DRYNESS_HYSTERESIS,
     CONF_DRYNESS_THRESHOLD,
     CONF_EVALUATION_INTERVAL,
+    CONF_EXCLUDE_KEYWORDS,
     CONF_FALLBACK_FLOW,
     CONF_FLOW_QUANTUM,
+    CONF_HEADLINE_KEYWORDS,
     CONF_HUMIDITY_HIGH_END,
     CONF_HUMIDITY_HIGH_START,
     CONF_HUMIDITY_SENSORS,
@@ -40,6 +43,7 @@ from .engine.options import (
     CONF_MAX_STEP_DOWN,
     CONF_MAX_STEP_UP,
     CONF_MIN_FLOW,
+    CONF_MIN_SEVERITY,
     CONF_MIN_WRITE_INTERVAL,
     CONF_NAME,
     CONF_NIGHT_ENABLED,
@@ -53,14 +57,28 @@ from .engine.options import (
     CONF_QUIET_HUMIDITY_OVERRIDE,
     CONF_QUIET_MAX_FLOW,
     CONF_SELECT_MAPPING,
+    CONF_SOURCE_DEVICE,
+    CONF_SOURCE_ENTITY,
     CONF_STALE_TIMEOUT,
     CONF_STARTUP_GRACE,
+    CONF_STATES,
+    CONF_TEXT_KEYWORDS,
+    CONF_THRESHOLD,
+    CONF_TRIGGER,
     DEFAULT_NAME,
     DEFAULTS,
+    DETAILS_ATTRIBUTES,
+    DETAILS_AUTO,
+    DETAILS_MODES,
+    DETAILS_NONE,
+    MIN_SEVERITY_NONE,
     OFF_STATE_OFF,
     OFF_STATE_ON,
     OFF_STATES,
     OPTIONS_MINOR_VERSION,
+    TRIGGER_NUMERIC,
+    TRIGGER_ON_OFF,
+    TRIGGER_STATE_LIST,
     defaults_for_max_flow,
 )
 
@@ -84,6 +102,12 @@ ENTITY_KEYS: Final[dict[str, tuple[str, ...]]] = {
     "sensor": ("setpoint", "reason", "mode", "ends_at"),
     "switch": ("control",),
 }
+#: Keys of the 0.2 safety entities, created only with at least one warning
+#: source subentry.
+SAFETY_ENTITY_KEYS: Final[dict[str, tuple[str, ...]]] = {
+    "binary_sensor": ("safety_warning",),
+    "switch": ("safety_override",),
+}
 
 #: Options of the ``boost_duration`` select (minutes).
 BOOST_DURATION_OPTIONS: Final = ("15", "30", "60", "120")
@@ -101,12 +125,14 @@ PAUSE_DURATION_DEFAULT: Final = "1h"
 SERVICE_BOOST: Final = "boost"
 SERVICE_PAUSE: Final = "pause"
 SERVICE_RESUME: Final = "resume"
+SERVICE_OVERRIDE_SAFETY: Final = "override_safety"
 ATTR_CONFIG_ENTRY_ID: Final = "config_entry_id"
 ATTR_DURATION: Final = "duration"
 ATTR_LEVEL: Final = "level"
 
 # --- Config subentries (docs/spec/01-configuration.md) -----------------------
 SUBENTRY_READINESS_CONDITION: Final = "readiness_condition"
+SUBENTRY_WARNING_SOURCE: Final = "warning_source"
 
 # Keys of a readiness condition subentry's data.
 CONF_ENTITY_ID: Final = "entity_id"
@@ -136,14 +162,17 @@ __all__ = [
     "CONF_DEADBAND_DOWN",
     "CONF_DEADBAND_UP",
     "CONF_DEBOUNCE",
+    "CONF_DETAILS",
     "CONF_DRYNESS_HUMIDITY_HIGH_LIMIT",
     "CONF_DRYNESS_HYSTERESIS",
     "CONF_DRYNESS_THRESHOLD",
     "CONF_ENTITY_ID",
     "CONF_EVALUATION_INTERVAL",
+    "CONF_EXCLUDE_KEYWORDS",
     "CONF_EXPECTED_STATE",
     "CONF_FALLBACK_FLOW",
     "CONF_FLOW_QUANTUM",
+    "CONF_HEADLINE_KEYWORDS",
     "CONF_HUMIDITY_HIGH_END",
     "CONF_HUMIDITY_HIGH_START",
     "CONF_HUMIDITY_SENSORS",
@@ -151,6 +180,7 @@ __all__ = [
     "CONF_MAX_STEP_DOWN",
     "CONF_MAX_STEP_UP",
     "CONF_MIN_FLOW",
+    "CONF_MIN_SEVERITY",
     "CONF_MIN_WRITE_INTERVAL",
     "CONF_NAME",
     "CONF_NIGHT_ENABLED",
@@ -164,15 +194,26 @@ __all__ = [
     "CONF_QUIET_HUMIDITY_OVERRIDE",
     "CONF_QUIET_MAX_FLOW",
     "CONF_SELECT_MAPPING",
+    "CONF_SOURCE_DEVICE",
+    "CONF_SOURCE_ENTITY",
     "CONF_STALE_TIMEOUT",
     "CONF_STARTUP_GRACE",
+    "CONF_STATES",
+    "CONF_TEXT_KEYWORDS",
+    "CONF_THRESHOLD",
+    "CONF_TRIGGER",
     "DEFAULTS",
     "DEFAULT_NAME",
+    "DETAILS_ATTRIBUTES",
+    "DETAILS_AUTO",
+    "DETAILS_MODES",
+    "DETAILS_NONE",
     "DOMAIN",
     "ENTITY_KEYS",
     "EVENT_MODE_CHANGED",
     "EVENT_READINESS_CORRECTED",
     "MANUFACTURER",
+    "MIN_SEVERITY_NONE",
     "MODEL",
     "OFF_STATES",
     "OFF_STATE_OFF",
@@ -180,9 +221,15 @@ __all__ = [
     "OPTIONS_MINOR_VERSION",
     "PAUSE_DURATION_DEFAULT",
     "PAUSE_DURATION_HOURS",
+    "SAFETY_ENTITY_KEYS",
     "SERVICE_BOOST",
+    "SERVICE_OVERRIDE_SAFETY",
     "SERVICE_PAUSE",
     "SERVICE_RESUME",
     "SUBENTRY_READINESS_CONDITION",
+    "SUBENTRY_WARNING_SOURCE",
+    "TRIGGER_NUMERIC",
+    "TRIGGER_ON_OFF",
+    "TRIGGER_STATE_LIST",
     "defaults_for_max_flow",
 ]

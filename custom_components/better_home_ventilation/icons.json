@@ -119,6 +119,22 @@
           "on": "mdi:robot",
           "off": "mdi:robot-off"
         }
+      },
+      "safety_override": {
+        "default": "mdi:shield-off-outline",
+        "state": {
+          "on": "mdi:shield-off-outline",
+          "off": "mdi:shield-outline"
+        }
+      }
+    },
+    "binary_sensor": {
+      "safety_warning": {
+        "default": "mdi:shield-check-outline",
+        "state": {
+          "on": "mdi:shield-alert",
+          "off": "mdi:shield-check-outline"
+        }
       }
     }
   },
@@ -131,6 +147,9 @@
     },
     "resume": {
       "service": "mdi:fan-auto"
+    },
+    "override_safety": {
+      "service": "mdi:shield-off-outline"
     }
   }
 }
