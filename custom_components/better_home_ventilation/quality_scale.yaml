@@ -63,7 +63,9 @@ rules:
 
   # Gold
   devices: done
-  diagnostics: todo
+  diagnostics:
+    status: done
+    comment: Options, subentries, stored state, used entity states, the last 100 decisions, problems and warnings; notify services redacted, person/device_tracker states reduced to home/not_home.
   discovery:
     status: exempt
     comment: Helper integration without a device or service to discover.
@@ -84,10 +86,10 @@ rules:
     comment: README "Requirements and supported units"; any unit controllable through a number, fan or select entity, no device-specific code.
   docs-supported-functions:
     status: done
-    comment: README "Entities", "Profiles", "How the setpoint is calculated", "Notifications", "Actions" and "Events and logbook".
+    comment: README "Entities", "Profiles", "How the setpoint is calculated", "Notifications", "Actions", "Events and logbook", "Voice control", "Repair issues" and "Diagnostics".
   docs-troubleshooting:
     status: done
-    comment: README "Troubleshooting".
+    comment: README "Troubleshooting", "Repair issues" and "Diagnostics" (download for bug reports, replay of recorded history).
   docs-use-cases:
     status: done
     comment: README "Use cases".
@@ -106,8 +108,8 @@ rules:
     status: exempt
     comment: entry.data is empty; every setting, including the actuator, is changed in the options flow (helper pattern).
   repair-issues:
-    status: todo
-    comment: missing_notify_service is implemented (0.2, M9); missing_entity and state_reset follow in M10.
+    status: done
+    comment: missing_entity (removed or never loaded entity or warning source device, resolved automatically), missing_notify_service and the informational state_reset.
   stale-devices:
     status: exempt
     comment: Exactly one device per config entry, removed together with the entry.
