@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Warning sources: **Add warning source** on the integration page adds a hazard signal that switches the ventilation off (safety shutdown). A source is one entity (`binary_sensor`, `input_boolean`, `switch`, a `sensor` with a numeric threshold or a `sensor`/`select` with a list of states) or one device, whose binary sensors all count (for example a NINA region with several message slots; new slots are picked up automatically). Each source has its own name, trigger and filters and can be reconfigured or deleted.
+- Warning details: for NINA the details come from the `nina.get_details` action (Home Assistant 2026.4 reads the attributes instead), for DWD Weather Warnings and Environment Canada from their attributes, for other integrations such as Meteoalarm from generic attributes. Filters per source: event keywords in the headline, advice keywords in the text, exclude keywords for all-clear messages and tests, and a minimum severity. German and English keyword suggestions are filled in for NINA. A source without details, or whose details cannot be fetched within 10 seconds, always counts as a warning.
+- Entities **Safety warning** (on while any warning is active, with the list of warnings as attribute) and **Safety override** (keep ventilating despite the current warnings; turning it off shuts down again), created only when at least one warning source exists.
+- Action `better_home_ventilation.override_safety`.
+- Problems `warning_source_unavailable` and `warning_details_failed` on the problem sensor.
+
 ### Changed
 
 - The profile select shows a short description with each profile (e.g. "Quiet – limited all day"), so the choice is clear in the dropdown.
