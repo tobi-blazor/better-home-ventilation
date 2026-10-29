@@ -114,10 +114,15 @@ The reason of the automatic demand is determined in this order:
 | Condition | Reason |
 |---|---|
 | `fallback` and `demand == fallback_flow` | `fallback` |
+| not `fallback`, `d_co2` not None, `d_hum` allowed, both above `d_min` (raw and quantised), and `abs(q(d_co2) − q(d_hum)) ≤ flow_quantum` | `co2_and_humidity_high` |
 | `d_hum` allowed and `d_hum == demand` and `d_hum > d_min` | `humidity_high` |
 | `d_co2 == demand` and `d_co2 > d_min` | `co2` |
 | `dry` and (`d_hum` suppressed and `d_hum > demand`, or `co2_from > co2_start` and the CO₂ ramp from `co2_start` would exceed `demand`) | `dryness_protection` |
 | otherwise | `minimum` |
+
+`q(x)` = `x` quantised to `flow_quantum` (round half up), as the target ([output shaping](#output-shaping)).
+
+**CO₂ and humidity** (owner decision 2026-10-29): when CO₂ and humidity-high ask for about the same flow, neither alone determines the setpoint. In a test run the reason flipped between `co2` and `humidity_high` 107 times in 7 days (13 times in 3 minutes) with both contributions almost equal. Without fallback and with both above `d_min`, the demand is the larger of the two, so the combined reason always names the rule that sets the value. The band is compared on the **quantised** contributions: the raw values move with every sensor reading, so a band on raw values would only move the flicker to its edge; a quantised value changes only when its contribution crosses a quantisation step, and a contribution that quantises to `d_min` does not count as above the minimum. The attribute `reasons` lists the single reasons behind the reason (`[co2, humidity_high]` for the combined one, otherwise just the reason).
 
 ## Limits
 
@@ -251,7 +256,7 @@ Logging follows the quality rule `log-when-unavailable`: one `info` message when
 Every evaluation produces a `Decision`:
 
 ```text
-time, mode, profile, reason, setpoint (after shaping, flow), target (before shaping), written (flow or None),
+time, mode, profile, reason, reasons (derived from reason), setpoint (after shaping, flow), target (before shaping), written (flow or None),
 contributions {minimum, co2, humidity_high, fallback, boost, shower, cooking},
 inputs {co2_max, co2_max_entity, h_max, h_max_entity, h_mean, presence_home},
 limits [..], invalid_inputs [..], problems [..], ends_at, write_blocked_by (None | grace | interval | deadband | disabled | not_ready | unavailable)

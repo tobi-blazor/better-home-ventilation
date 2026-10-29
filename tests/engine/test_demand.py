@@ -6,11 +6,12 @@ docs/spec/02-control.md#automatic-demand, #limits, #profiles.
 from __future__ import annotations
 
 from datetime import time, timedelta
+from typing import Any
 
 import pytest
 
 from engine.demand import in_window, quiet_limit_applies, ramp, update_dryness
-from engine.models import Limit, Mode, Profile, Reason
+from engine.models import BoostCommand, Limit, Mode, Profile, Reason, Source
 
 from .helpers import (
     CO2_A,
@@ -74,6 +75,114 @@ def test_e06_bhv13_humidity_high_ramp() -> None:
     assert decision.contributions.humidity_high == pytest.approx(229.33, abs=0.01)
     assert decision.target == 230
     assert decision.reason is Reason.HUMIDITY_HIGH
+
+
+def hum_for(flow: float) -> float:
+    """Humidity in % for which the default humidity-high ramp asks for ``flow``."""
+    return 55 + (flow - 80) * 15 / 320
+
+
+def _both(co2_flow: float, hum_flow: float, **kwargs: Any) -> Sim:
+    """CO₂ and humidity-high asking for the given flows (not dry)."""
+    return Sim(
+        values={
+            CO2_A: co2_for(co2_flow),
+            CO2_B: 700,
+            HUM_A: hum_for(hum_flow),
+            HUM_B: 45,
+        },
+        **kwargs,
+    )
+
+
+@pytest.mark.parametrize(
+    ("co2_flow", "hum_flow", "reason"),
+    [
+        (230, 230, Reason.CO2_AND_HUMIDITY_HIGH),  # tie
+        (230, 226, Reason.CO2_AND_HUMIDITY_HIGH),  # 230 / 225 after quantisation
+        (233, 229.3, Reason.CO2_AND_HUMIDITY_HIGH),  # 235 / 230
+        (226, 233, Reason.HUMIDITY_HIGH),  # 225 / 235: 10 apart
+        (240, 229.3, Reason.CO2),  # 240 / 230: clear lead
+        (230, 250, Reason.HUMIDITY_HIGH),  # 230 / 250
+        (230, 80, Reason.CO2),  # humidity at the minimum
+        (84, 80.3, Reason.CO2),  # humidity only rounds to the minimum
+    ],
+)
+def test_e06a_co2_and_humidity_reason(
+    co2_flow: float, hum_flow: float, reason: Reason
+) -> None:
+    """E6a: both within one flow quantum (after quantisation) -> combined reason."""
+    decision, _ = _both(co2_flow, hum_flow).run()
+    assert decision.reason is reason
+    expected = (
+        (Reason.CO2, Reason.HUMIDITY_HIGH)
+        if reason is Reason.CO2_AND_HUMIDITY_HIGH
+        else (reason,)
+    )
+    assert decision.reasons == expected
+
+
+def test_e06b_reason_does_not_flicker_when_both_are_almost_equal() -> None:
+    """E6b: humidity 61.9 → 62.1 % around a CO₂ demand of 230: one reason.
+
+    Before, the reason flipped between ``co2`` and ``humidity_high`` with
+    every humidity reading (227.2 / 229.3 / 231.5 m³/h against 230).
+    """
+    sim = _both(230, 230)
+    reasons = []
+    for humidity in (61.9, 62.0, 62.1, 62.0, 61.9, 62.1):
+        sim.set(HUM_A, humidity)
+        decision, _ = sim.run()
+        reasons.append(decision.reason)
+        sim.advance(minutes=1)
+    assert set(reasons) == {Reason.CO2_AND_HUMIDITY_HIGH}
+
+
+def test_e06c_reason_is_stable_at_the_band_edge() -> None:
+    """E6c: at the edge of the band (5 apart) the quantised values decide.
+
+    Raw contributions 230 and 233.9 … 236.4 would cross the edge (5) back and
+    forth; quantised they are 230 and 235 every time.
+    """
+    sim = _both(230, 234)
+    reasons = []
+    for hum_flow in (233.9, 235.1, 234.6, 236.4, 233.5):
+        sim.set(HUM_A, hum_for(hum_flow))
+        decision, _ = sim.run()
+        reasons.append(decision.reason)
+    assert set(reasons) == {Reason.CO2_AND_HUMIDITY_HIGH}
+    sim.set(HUM_A, hum_for(237.6))  # 240: clear lead of humidity
+    decision, _ = sim.run()
+    assert decision.reason is Reason.HUMIDITY_HIGH
+
+
+def test_e06d_combined_reason_under_limits() -> None:
+    """E6d: quiet limit and away replace it; dryness keeps CO₂ alone; boost keeps it."""
+    decision, _ = _both(260, 260, now=NIGHT).run()  # 63.4 %, below the override
+    assert decision.reason is Reason.QUIET_LIMIT
+    assert decision.reasons == (Reason.QUIET_LIMIT,)
+
+    away = _both(230, 230, options=make_options(presence_entities=[PRESENCE]))
+    away.set(PRESENCE, "not_home")
+    decision, _ = away.run()
+    assert decision.reason is Reason.HUMIDITY_HIGH  # CO₂ is ignored while away
+
+    dry = _both(230, 230, options=make_options(dryness_humidity_high_limit=0))
+    dry.set(HUM_B, 10)  # mean below 40 %: humidity-high suppressed at once
+    decision, _ = dry.run()
+    assert decision.reason is Reason.CO2
+
+    quiet = _both(
+        350,
+        350,
+        options=make_options(quiet_humidity_override=80),
+        state=running_state(profile=Profile.QUIET),
+    )
+    decision, _ = quiet.run()
+    assert decision.reason is Reason.QUIET_LIMIT
+    quiet.command(BoostCommand(source=Source.BUTTON))
+    decision, _ = quiet.run()
+    assert (decision.target, decision.reason) == (350, Reason.CO2_AND_HUMIDITY_HIGH)
 
 
 def _humidity_only(**overrides: object) -> Sim:

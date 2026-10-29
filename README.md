@@ -353,6 +353,7 @@ The **Reason** sensor names the rule or mode that determined the setpoint:
 | `minimum` | the minimum flow |
 | `co2` | the CO₂ ramp |
 | `humidity_high` | the humidity-high ramp |
+| `co2_and_humidity_high` | the CO₂ ramp and the humidity-high ramp ask for about the same flow (at most one flow step, 5 m³/h, apart after rounding to the flow step); shown as "CO₂ and humidity" |
 | `dryness_protection` | the flow is lower than humidity-high (or, in the winter profile, the full CO₂ ramp) would ask for, because the air is dry |
 | `away` | the away limit |
 | `quiet_limit` | the quiet limit |
@@ -404,6 +405,7 @@ All entities belong to one device per entry (named after the entry, model "Deman
 | Attribute | Content |
 |---|---|
 | `mode`, `reason`, `profile` | as the entities |
+| `reasons` | the single reasons behind `reason`: `co2` and `humidity_high` for `co2_and_humidity_high`, otherwise just the reason |
 | `target` | flow the active mode asks for, before shaping |
 | `written`, `last_write` | last flow written to the unit and when |
 | `actuator_value` | current native value of the actuator (not recorded) |

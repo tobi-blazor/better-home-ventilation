@@ -84,6 +84,7 @@
           "minimum": "mdi:fan-minus",
           "co2": "mdi:molecule-co2",
           "humidity_high": "mdi:water-percent",
+          "co2_and_humidity_high": "mdi:cloud-percent",
           "dryness_protection": "mdi:water-off-outline",
           "away": "mdi:home-export-outline",
           "quiet_limit": "mdi:weather-night",

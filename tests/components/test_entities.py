@@ -38,7 +38,14 @@ from custom_components.better_home_ventilation.engine.models import (
 from custom_components.better_home_ventilation.select import nearest_boost_duration
 from custom_components.better_home_ventilation.sensor import SetpointSensor
 
-from .common import CO2_LIVING, NUMBER_FLOW, MockUnit, advance, mock_entry
+from .common import (
+    CO2_LIVING,
+    HUMIDITY_LIVING,
+    NUMBER_FLOW,
+    MockUnit,
+    advance,
+    mock_entry,
+)
 from .test_controller import controller_of, setup_entry
 
 #: Entity ids and friendly names of the 0.1 entities per language (C5).
@@ -198,6 +205,7 @@ async def test_sensor_device_classes_and_options(
         "minimum",
         "co2",
         "humidity_high",
+        "co2_and_humidity_high",
         "dryness_protection",
         "away",
         "quiet_limit",
@@ -293,6 +301,7 @@ async def test_sensors_follow_the_decision(
     assert set(attributes) >= {
         "mode",
         "reason",
+        "reasons",
         "profile",
         "target",
         "written",
@@ -310,6 +319,7 @@ async def test_sensors_follow_the_decision(
     }
     assert "off_method" not in attributes
     assert attributes["mode"] == "automatic"
+    assert attributes["reasons"] == [attributes["reason"]]
     assert attributes["profile"] == "balanced"
     assert attributes["written"] == decision.last_written_flow == 80
     assert attributes["last_write"] == decision.last_write
@@ -328,6 +338,21 @@ async def test_sensors_follow_the_decision(
     assert attributes["humidity_mean"] == 45
     assert attributes["invalid_inputs"] == []
     assert attributes["limits"] == []
+
+
+@pytest.mark.usefixtures("entities")
+async def test_reason_co2_and_humidity(
+    hass: HomeAssistant, unit: MockUnit, freezer: FrozenDateTimeFactory
+) -> None:
+    """CO₂ and humidity-high ask for 240: reason and `reasons` show both."""
+    hass.states.async_set(CO2_LIVING, "1125", {"device_class": "carbon_dioxide"})
+    hass.states.async_set(HUMIDITY_LIVING, "62.5", {"device_class": "humidity"})
+    await setup_entry(hass)
+    await advance(hass, freezer, 60)
+
+    assert state_of(hass, REASON).state == "co2_and_humidity_high"
+    assert "co2_and_humidity_high" in state_of(hass, REASON).attributes["options"]
+    assert state_of(hass, SETPOINT).attributes["reasons"] == ["co2", "humidity_high"]
 
 
 @pytest.mark.usefixtures("entities")

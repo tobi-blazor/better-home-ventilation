@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- New reason **CO₂ and humidity** (`co2_and_humidity_high`) when CO₂ and humidity-high ask for about the same flow (at most one flow step apart). Before, the reason flipped between CO₂ and humidity with every sensor reading in that case. The setpoint attribute `reasons` lists the single reasons (`co2`, `humidity_high`).
+
 ### Changed
 
 - The profile select shows a short description with each profile (e.g. "Quiet – limited all day"), so the choice is clear in the dropdown.

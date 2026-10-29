@@ -56,13 +56,16 @@ Commands from the buttons, the control switch and the profile select carry `sour
 
 ### Reasons (`reason` sensor options)
 
-`minimum`, `co2`, `humidity_high`, `dryness_protection`, `away`, `quiet_limit`, `fallback`, `boost`, `shower`, `cooking`, `off`, `safety_off`.
+`minimum`, `co2`, `humidity_high`, `co2_and_humidity_high`, `dryness_protection`, `away`, `quiet_limit`, `fallback`, `boost`, `shower`, `cooking`, `off`, `safety_off`.
+
+`co2_and_humidity_high` (en "CO₂ and humidity", de „CO₂ und Feuchte“, icon `mdi:cloud-percent`): CO₂ and humidity-high ask for about the same flow ([02-control.md](02-control.md#reason)).
 
 ### Setpoint attributes
 
 | Attribute | Content |
 |---|---|
 | `mode`, `reason` | as the enum sensors |
+| `reasons` | list of the single reasons behind `reason`: `[co2, humidity_high]` for `co2_and_humidity_high`, otherwise `[reason]` |
 | `profile` | active profile |
 | `target` | flow the active mode asks for, before shaping |
 | `written`, `last_write` | last value written to the unit (flow) and its time (timestamp) |

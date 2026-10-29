@@ -24,6 +24,10 @@ Time is always injected (`now` parameter in the engine, `freezer` fixture in com
 | E4 | all CO₂ sensors invalid | mode `fallback`, setpoint 150, reason `fallback` |
 | E5 | CO₂ value unchanged but `last_reported` older than 30 min | invalid |
 | E6 | humidity max 62 % | humidity ramp ≈ 229 m³/h (quantised 230), reason `humidity_high` if above CO₂ demand |
+| E6a | CO₂ and humidity-high (raw): 230/230, 230/226, 233/229.3, 226/233, 240/229.3, 230/250, 230/80, 84/80.3 | `co2_and_humidity_high` (tie, near-tie within one quantum after quantisation), `humidity_high` (225/235), `co2` (clear lead), `humidity_high`, `co2` (humidity at the minimum), `co2` (humidity only rounds to the minimum); `reasons` `[co2, humidity_high]` for the combined reason, otherwise `[reason]` |
+| E6b | CO₂ demand 230, humidity 61.9 → 62.0 → 62.1 % and back (227.2 / 229.3 / 231.5) | always `co2_and_humidity_high` (before: flipped between `co2` and `humidity_high`) |
+| E6c | CO₂ 230, humidity-high 233.9 … 236.4 (raw edge 5 crossed back and forth) | always `co2_and_humidity_high` (quantised 230 / 235); 237.6 (240) → `humidity_high` |
+| E6d | both 260 at night; both 230 while away; both 230 while humidity-high is suppressed by dryness; profile quiet, both 350, boost 300 | `quiet_limit` (`reasons` `[quiet_limit]`); `humidity_high`; `co2`; boost 350 with `co2_and_humidity_high` |
 | E7 | humidity mean 38 %, max 58 % | `dry` active, humidity-high allowed for 60 min, then suppressed, reason `dryness_protection` |
 | E8 | mean 40.5 % after `dry` | stays `dry` (hysteresis until 42 %) |
 | E9 | night 23:00, demand 350 | 250, reason `quiet_limit` |

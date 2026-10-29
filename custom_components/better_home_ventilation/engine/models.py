@@ -49,6 +49,8 @@ class Reason(StrEnum):
     MINIMUM = "minimum"
     CO2 = "co2"
     HUMIDITY_HIGH = "humidity_high"
+    #: CO₂ and humidity-high ask for about the same flow (02-control.md#reason).
+    CO2_AND_HUMIDITY_HIGH = "co2_and_humidity_high"
     DRYNESS_PROTECTION = "dryness_protection"
     AWAY = "away"
     QUIET_LIMIT = "quiet_limit"
@@ -58,6 +60,12 @@ class Reason(StrEnum):
     COOKING = "cooking"
     OFF = "off"
     SAFETY_OFF = "safety_off"
+
+
+#: The single reasons a combined reason stands for (attribute ``reasons``).
+COMBINED_REASONS: Final[Mapping[Reason, tuple[Reason, ...]]] = {
+    Reason.CO2_AND_HUMIDITY_HIGH: (Reason.CO2, Reason.HUMIDITY_HIGH),
+}
 
 
 class Profile(StrEnum):
@@ -529,6 +537,14 @@ class Decision:
     actuator_value: float | str | None
     last_write: datetime | None
     last_written_flow: float | None
+
+    @property
+    def reasons(self) -> tuple[Reason, ...]:
+        """Every rule within the band of the reason (``co2``, ``humidity_high``).
+
+        A single reason for everything except a combined reason.
+        """
+        return COMBINED_REASONS.get(self.reason, (self.reason,))
 
 
 # --- Effects -----------------------------------------------------------------

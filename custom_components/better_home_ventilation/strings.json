@@ -463,6 +463,7 @@
           "minimum": "Minimum",
           "co2": "CO₂",
           "humidity_high": "High humidity",
+          "co2_and_humidity_high": "CO₂ and humidity",
           "dryness_protection": "Dryness protection",
           "away": "Away",
           "quiet_limit": "Quiet limit",
