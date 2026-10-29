@@ -694,7 +694,11 @@ class ExampleProvider:
         self, hass: HomeAssistant, entity_id: str, state: State
     ) -> list[WarningDetails]:
         # Called only for an active entity.
-        return [make_details(key=..., headline=..., text=..., actions=..., severity=..., sender=...)]
+        return [
+            make_details(
+                key=..., headline=..., text=..., actions=..., severity=..., sender=...
+            )
+        ]
 ```
 
 - Build every warning with `engine.safety.make_details`; it strips HTML and normalises the severity (CAP words, levels 1–4, Meteoalarm awareness levels).
