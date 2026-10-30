@@ -23,11 +23,7 @@ _TIME = re.compile(r"^\d{2}:\d{2}:\d{2}$")
 
 
 def test_defaults_for_max_flow_400_matches_spec_table() -> None:
-    """Defaults relative to max flow for a 400 m³/h unit (0.1 options).
-
-    `shower_level`, `cooking_level` and `auto_boost_quiet_cap` from the same
-    table belong to phase 0.3 and are not options of 0.1.
-    """
+    """Defaults relative to max flow for a 400 m³/h unit (01-configuration.md)."""
     assert defaults_for_max_flow(400) == {
         "min_flow": 80,
         "fallback_flow": 150,
@@ -35,6 +31,9 @@ def test_defaults_for_max_flow_400_matches_spec_table() -> None:
         "max_step_down": 50,
         "quiet_max_flow": 250,
         "boost_default_level": 300,
+        "shower_level": 250,
+        "cooking_level": 250,
+        "auto_boost_quiet_cap": 200,
     }
 
 
@@ -85,10 +84,64 @@ def test_02_defaults() -> None:
     )
 
 
+def test_03_defaults() -> None:
+    """Defaults of the sections `shower`, `cooking` and `common` (0.3)."""
+    assert DEFAULTS[options.CONF_SHOWER_RISE] == 8
+    assert DEFAULTS[options.CONF_SHOWER_WINDOW] == 10 * 60
+    assert DEFAULTS[options.CONF_SHOWER_END_OFFSET] == 5
+    assert DEFAULTS[options.CONF_SHOWER_MAX_DURATION] == 3600
+    assert DEFAULTS[options.CONF_COOKING_HIGHER_IS_WORSE] is True
+    assert DEFAULTS[options.CONF_COOKING_RISE] == 50
+    assert DEFAULTS[options.CONF_COOKING_WINDOW] == 10 * 60
+    assert DEFAULTS[options.CONF_COOKING_END_OFFSET] == 15
+    assert DEFAULTS[options.CONF_COOKING_TRIGGER_THRESHOLD] == 100
+    assert DEFAULTS[options.CONF_COOKING_TRIGGER_RUN_ON] == 15 * 60
+    assert DEFAULTS[options.CONF_COOKING_MAX_DURATION] == 90 * 60
+    assert DEFAULTS[options.CONF_AUTO_BOOST_COOLDOWN] == 10 * 60
+    assert default_value(options.CONF_BATHROOM_HUMIDITY_SENSORS) == []
+    assert default_value(options.CONF_COOKING_SENSORS) == []
+    assert options.CONF_COOKING_TRIGGER not in DEFAULTS
+
+
+def test_migrate_options_2_to_3_adds_03_defaults_relative_to_max_flow() -> None:
+    """Options minor version 2 -> 3: levels from the stored max flow (rounded to 5)."""
+    old = {"actuator": "number.flow", "max_flow": 350, "shower_rise": 10}
+    migrated = migrate_options(old, 2)
+    assert migrated == {
+        "actuator": "number.flow",
+        "max_flow": 350,
+        "shower_rise": 10,
+        "bathroom_humidity_sensors": [],
+        "shower_window": 600,
+        "shower_end_offset": 5,
+        "shower_level": 220,  # 218.75
+        "shower_max_duration": 3600,
+        "cooking_sensors": [],
+        "cooking_higher_is_worse": True,
+        "cooking_rise": 50,
+        "cooking_window": 600,
+        "cooking_end_offset": 15,
+        "cooking_trigger_threshold": 100,
+        "cooking_trigger_run_on": 900,
+        "cooking_level": 220,
+        "cooking_max_duration": 5400,
+        "auto_boost_quiet_cap": 175,
+        "auto_boost_cooldown": 600,
+    }
+    assert set(migrated) - set(old) <= set(ADDED_IN_MINOR_VERSION[3])
+    assert "cooking_trigger" not in migrated
+    # Without a stored max flow the relative defaults are left out.
+    assert "shower_level" not in migrate_options({"actuator": "number.flow"}, 2)
+
+
 def test_migrate_options_1_to_2_adds_defaults_and_keeps_values() -> None:
     """Options minor version 1 -> 2: the 0.2 keys get their defaults."""
     old = {"actuator": "number.flow", "max_flow": 400, "pause_reminder_after": 3600}
-    migrated = migrate_options(old, 1)
+    migrated = {
+        key: value
+        for key, value in migrate_options(old, 1).items()
+        if key not in ADDED_IN_MINOR_VERSION[3]
+    }
     assert migrated == {
         "actuator": "number.flow",
         "max_flow": 400,
@@ -103,7 +156,7 @@ def test_migrate_options_1_to_2_adds_defaults_and_keeps_values() -> None:
     }
     assert set(migrated) - set(old) <= set(ADDED_IN_MINOR_VERSION[2])
     assert "notify_services" not in old  # input unchanged
-    assert migrate_options(old, 0) == migrated
+    assert migrate_options(old, 0) == migrate_options(old, 1)
 
 
 def test_migrate_options_current_version_is_a_copy() -> None:
@@ -115,10 +168,10 @@ def test_migrate_options_current_version_is_a_copy() -> None:
 
 
 def test_every_added_option_has_a_default() -> None:
-    """Every key added by a migration has a default (scalar or list)."""
+    """Every key added by a migration has a default (scalar, list or relative)."""
     for keys in ADDED_IN_MINOR_VERSION.values():
         for key in keys:
-            assert key in DEFAULTS or key in LIST_OPTIONS
+            assert key in DEFAULTS or key in LIST_OPTIONS or key in MAX_FLOW_SHARES
 
 
 def test_absolute_and_relative_defaults_do_not_overlap() -> None:

@@ -997,6 +997,7 @@ async def test_bhv50_store_migration_from_1_1(
     assert isinstance(controller.state.manual, Pause)
     assert controller.state.off_since is not None
     assert controller.state.off_since.isoformat() == started
-    assert hass_storage[key]["minor_version"] == 2
+    assert hass_storage[key]["minor_version"] == 3
     assert hass_storage[key]["data"]["off_since"] == started
+    assert hass_storage[key]["data"]["auto_boosts"] == {}
     assert hass_storage[key]["data"]["safety"]["active"] == {}

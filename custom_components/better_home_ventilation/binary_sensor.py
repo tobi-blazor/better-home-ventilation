@@ -1,4 +1,4 @@
-"""Problem and safety warning sensors (docs/spec/04-interface.md#entities)."""
+"""Problem, safety warning and detection sensors (docs/spec/04-interface.md#entities)."""
 
 from __future__ import annotations
 
@@ -12,8 +12,9 @@ from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
+from .const import COOKING_ENTITY_KEY, SHOWER_ENTITY_KEY
 from .controller import BetterVentilationConfigEntry, VentilationController
-from .engine.models import Decision
+from .engine.models import AutoBoostKind, Decision
 from .entity import PushedEntity
 
 PARALLEL_UPDATES = 0
@@ -24,11 +25,23 @@ async def async_setup_entry(
     entry: BetterVentilationConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Set up the problem sensor and, with warning sources, the safety warning."""
+    """Set up the problem sensor and the sensors of configured features.
+
+    The safety warning needs a warning source, the shower and cooking
+    detection their sensors (or the cooking trigger entity).
+    """
     controller = entry.runtime_data
     entities: list[BinarySensorEntity] = [ProblemSensor(controller)]
     if controller.has_warning_sources:
         entities.append(SafetyWarningSensor(controller))
+    if controller.has_shower_detection:
+        entities.append(
+            DetectionSensor(controller, SHOWER_ENTITY_KEY, AutoBoostKind.SHOWER)
+        )
+    if controller.has_cooking_detection:
+        entities.append(
+            DetectionSensor(controller, COOKING_ENTITY_KEY, AutoBoostKind.COOKING)
+        )
     async_add_entities(entities)
 
 
@@ -99,3 +112,26 @@ class SafetyWarningSensor(PushedEntity, BinarySensorEntity):
         """Return the active warnings."""
         decision = self.decision
         return {"warnings": warnings_attribute(decision) if decision else []}
+
+
+class DetectionSensor(PushedEntity, BinarySensorEntity):
+    """On while an auto boost of its kind is active (BHV-30, BHV-31).
+
+    No device class; the icon comes from ``icons.json`` (``mdi:shower``,
+    ``mdi:stove``).
+    """
+
+    def __init__(
+        self, controller: VentilationController, key: str, kind: AutoBoostKind
+    ) -> None:
+        """Initialize the sensor for one auto boost kind."""
+        super().__init__(controller, key)
+        self._kind = kind
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return True while an auto boost of the kind is active."""
+        decision = self.decision
+        if decision is None:
+            return None
+        return any(boost.kind is self._kind for boost in decision.auto_boosts)

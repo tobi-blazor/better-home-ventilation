@@ -6,7 +6,7 @@ An invalid value is excluded from every calculation; it is never read as 0.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 import math
 from typing import Final
@@ -19,6 +19,8 @@ from .models import InputSummary, InputValue, Options, is_unavailable
 CO2_RANGE: Final = (100.0, 10000.0)
 #: Plausibility range of relative humidity in % (inclusive).
 HUMIDITY_RANGE: Final = (0.0, 100.0)
+#: Cooking sensors (IAQ index, VOC, …) have no common unit: any finite value.
+ANY_RANGE: Final = (-math.inf, math.inf)
 
 _HOME_STATES: Final = frozenset({"home", "on"})
 
@@ -78,12 +80,17 @@ def is_home(value: InputValue | None) -> bool:
 
 @dataclass(frozen=True, kw_only=True)
 class Readings:
-    """Valid input values of one evaluation, in configuration order."""
+    """Valid input values of one evaluation, in configuration order.
+
+    ``detectors`` holds the valid values of the bathroom humidity and cooking
+    sensors (0.3), which feed only the detectors.
+    """
 
     co2: tuple[tuple[str, float], ...]
     humidity: tuple[tuple[str, float], ...]
     invalid: tuple[str, ...]
     presence_home: bool | None
+    detectors: Mapping[str, float] = field(default_factory=dict)
 
     def summary(self) -> InputSummary:
         """Aggregate the readings for the decision record."""
@@ -116,7 +123,11 @@ def _max(values: Sequence[tuple[str, float]]) -> tuple[str | None, float | None]
 def read_inputs(
     states: Mapping[str, InputValue], options: Options, now: datetime
 ) -> Readings:
-    """Validate the CO₂ and living humidity inputs and evaluate presence."""
+    """Validate the room and detector inputs and evaluate presence.
+
+    Invalid bathroom humidity and cooking sensors are invalid inputs as well
+    (``invalid_inputs``, problem ``inputs_invalid``).
+    """
     invalid: list[str] = []
 
     def collect(
@@ -139,6 +150,12 @@ def read_inputs(
 
     co2 = collect(options.co2_sensors, CO2_RANGE)
     humidity = collect(options.humidity_sensors, HUMIDITY_RANGE)
+    detectors = dict(
+        (
+            *collect(options.bathroom_humidity_sensors, HUMIDITY_RANGE),
+            *collect(options.cooking_sensors, ANY_RANGE),
+        )
+    )
     presence_home = (
         any(is_home(states.get(entity_id)) for entity_id in options.presence_entities)
         if options.presence_entities
@@ -149,4 +166,5 @@ def read_inputs(
         humidity=humidity,
         invalid=tuple(invalid),
         presence_home=presence_home,
+        detectors=detectors,
     )

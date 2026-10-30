@@ -38,8 +38,8 @@ Entities are `available` as long as the controller runs; they do not become unav
 | `problem` | binary_sensor | 0.1 | diagnostic | always | `device_class` problem, on if any problem persists longer than `problem_delay` |
 | `safety_warning` | binary_sensor | 0.2 | – | at least one `warning_source` subentry | `device_class` safety, on while any warning is active (overridden or not). Attribute `warnings`: list of `{source, headline, severity, overridden, since}` |
 | `safety_override` | switch | 0.2 | – | at least one `warning_source` subentry | on = active warnings are overridden. Turning on = `override_safety()`; turning off = remove overrides (shuts down again if a warning is active). Without an active warning, turning on has no effect and the switch returns to off |
-| `shower_detected` | binary_sensor | 0.3 | – | `bathroom_humidity_sensors` set | no device class, icon `mdi:shower`. On while a shower auto boost is active |
-| `cooking_detected` | binary_sensor | 0.3 | – | `cooking_sensors` or `cooking_trigger` set | icon `mdi:stove`. On while a cooking auto boost is active |
+| `shower_detected` | binary_sensor | 0.3 | – | `bathroom_humidity_sensors` set | no device class, icon `mdi:shower`. On while a shower auto boost is active (also behind a pause, a user boost or while control is disabled). No attributes: baseline and deadline are in the diagnostics |
+| `cooking_detected` | binary_sensor | 0.3 | – | `cooking_sensors` or `cooking_trigger` set | no device class, icon `mdi:stove`. On while a cooking auto boost is active, as `shower_detected` |
 
 Rules applied (quality scale `entity-category`, `entity-device-class`, `entity-translations`, `icon-translations`, `has-entity-name`):
 
@@ -196,6 +196,6 @@ Details (decided 2026-10-29 for M10):
 
 Details (decided 2026-10-29 for M10):
 
-- **Layout:** `entry` (title, version, minor version, options), `subentries` (id, type, title, unique id, data), `controller` (started, `state_reset`, missing entities, number of missing notify services), `stored_state` (the persisted part of the controller state, as in the store), `entities` (per entity read by the controller, warning source devices expanded: `state`, `last_changed`, `last_reported`; `None` for an entity without state), `problems` and `warnings` (active warnings, overridden incident keys, `awaiting_restart`) of the last decision, `decisions` (oldest first; dataclasses as dicts, datetimes ISO 8601, durations in seconds, sets as sorted lists).
+- **Layout:** `entry` (title, version, minor version, options), `subentries` (id, type, title, unique id, data), `controller` (started, `state_reset`, missing entities, number of missing notify services, `detectors`: per detector key the samples of the window, `invalid_since` and `armed` of the trigger entity, 0.3), `stored_state` (the persisted part of the controller state, as in the store), `entities` (per entity read by the controller, warning source devices expanded: `state`, `last_changed`, `last_reported`; `None` for an entity without state), `problems` and `warnings` (active warnings, overridden incident keys, `awaiting_restart`) of the last decision, `decisions` (oldest first; dataclasses as dicts, datetimes ISO 8601, durations in seconds, sets as sorted lists).
 - **Redaction:** `async_redact_data` with `notify_services`: the service names carry phone (and often person) names. Entity attributes are not included at all (person and device_tracker attributes hold coordinates). Person/device_tracker states other than `home`, `unavailable` and `unknown` become `not_home` (zone names are locations).
 - The download is also an input of the replay tool ([06-testing.md](06-testing.md#replay)).

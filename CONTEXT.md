@@ -85,6 +85,10 @@ _Avoid_: turbo, party mode
 **Auto boost**:
 A boost started by a detector (shower, cooking), not by a user.
 
+**Detector**:
+Watches one bathroom humidity or cooking sensor for a fast rise (or the cooking trigger entity) and starts an auto boost; after the auto boost ends it waits for its cooldown.
+_Avoid_: sensor (for the detector), trigger (except the cooking trigger entity)
+
 **Pause**:
 The manual command that stops the unit for a duration or indefinitely; stopping the unit at the unit itself counts as an indefinite pause.
 _Avoid_: off command, standby

@@ -87,6 +87,29 @@ CONF_BOOST_DEFAULT_DURATION: Final = "boost_default_duration"
 CONF_BOOST_DEFAULT_LEVEL: Final = "boost_default_level"
 CONF_BOOST_MAX_DURATION: Final = "boost_max_duration"
 
+# --- Options step `boosts`, sections `shower`, `cooking`, `common` (0.3) -----
+# section `shower`
+CONF_BATHROOM_HUMIDITY_SENSORS: Final = "bathroom_humidity_sensors"
+CONF_SHOWER_RISE: Final = "shower_rise"
+CONF_SHOWER_WINDOW: Final = "shower_window"
+CONF_SHOWER_END_OFFSET: Final = "shower_end_offset"
+CONF_SHOWER_LEVEL: Final = "shower_level"
+CONF_SHOWER_MAX_DURATION: Final = "shower_max_duration"
+# section `cooking`
+CONF_COOKING_SENSORS: Final = "cooking_sensors"
+CONF_COOKING_HIGHER_IS_WORSE: Final = "cooking_higher_is_worse"
+CONF_COOKING_RISE: Final = "cooking_rise"
+CONF_COOKING_WINDOW: Final = "cooking_window"
+CONF_COOKING_END_OFFSET: Final = "cooking_end_offset"
+CONF_COOKING_TRIGGER: Final = "cooking_trigger"
+CONF_COOKING_TRIGGER_THRESHOLD: Final = "cooking_trigger_threshold"
+CONF_COOKING_TRIGGER_RUN_ON: Final = "cooking_trigger_run_on"
+CONF_COOKING_LEVEL: Final = "cooking_level"
+CONF_COOKING_MAX_DURATION: Final = "cooking_max_duration"
+# section `common`
+CONF_AUTO_BOOST_QUIET_CAP: Final = "auto_boost_quiet_cap"
+CONF_AUTO_BOOST_COOLDOWN: Final = "auto_boost_cooldown"
+
 # --- Options step `safety` (0.2) ---------------------------------------------
 CONF_RESTART_CONFIRM_TIMEOUT: Final = "restart_confirm_timeout"
 CONF_SAFETY_WHEN_DISABLED: Final = "safety_when_disabled"
@@ -165,15 +188,30 @@ DEFAULTS: Final[Mapping[str, OptionValue]] = MappingProxyType(
         CONF_NOTIFY_PROBLEMS: True,
         CONF_PAUSE_REMINDER_AFTER: 8 * _HOUR,
         CONF_OFF_NOTICE_AFTER: 24 * _HOUR,
+        # 0.3: options step `boosts`, sections `shower`, `cooking`, `common`
+        CONF_SHOWER_RISE: 8,
+        CONF_SHOWER_WINDOW: 10 * _MINUTE,
+        CONF_SHOWER_END_OFFSET: 5,
+        CONF_SHOWER_MAX_DURATION: 1 * _HOUR,
+        CONF_COOKING_HIGHER_IS_WORSE: True,
+        CONF_COOKING_RISE: 50,
+        CONF_COOKING_WINDOW: 10 * _MINUTE,
+        CONF_COOKING_END_OFFSET: 15,
+        CONF_COOKING_TRIGGER_THRESHOLD: 100,
+        CONF_COOKING_TRIGGER_RUN_ON: 15 * _MINUTE,
+        CONF_COOKING_MAX_DURATION: 90 * _MINUTE,
+        CONF_AUTO_BOOST_COOLDOWN: 10 * _MINUTE,
     }
 )
 
 #: Options minor version of the config entry (``ConfigFlow.MINOR_VERSION``).
-#: 1 = phase 0.1, 2 = phase 0.2 (options steps `safety` and `notifications`).
-OPTIONS_MINOR_VERSION: Final = 2
+#: 1 = phase 0.1, 2 = phase 0.2 (options steps `safety` and `notifications`),
+#: 3 = phase 0.3 (sections `shower`, `cooking`, `common` of the step `boosts`).
+OPTIONS_MINOR_VERSION: Final = 3
 
-#: Keys added per options minor version; their defaults come from ``DEFAULTS``
-#: or, for lists, are an empty list.
+#: Keys added per options minor version; their defaults come from ``DEFAULTS``,
+#: from the stored max flow (:data:`MAX_FLOW_SHARES`) or, for lists, are an
+#: empty list. ``cooking_trigger`` is optional and has no default.
 ADDED_IN_MINOR_VERSION: Final[Mapping[int, tuple[str, ...]]] = MappingProxyType(
     {
         2: (
@@ -186,12 +224,38 @@ ADDED_IN_MINOR_VERSION: Final[Mapping[int, tuple[str, ...]]] = MappingProxyType(
             CONF_PAUSE_REMINDER_AFTER,
             CONF_OFF_NOTICE_AFTER,
         ),
+        3: (
+            CONF_BATHROOM_HUMIDITY_SENSORS,
+            CONF_SHOWER_RISE,
+            CONF_SHOWER_WINDOW,
+            CONF_SHOWER_END_OFFSET,
+            CONF_SHOWER_LEVEL,
+            CONF_SHOWER_MAX_DURATION,
+            CONF_COOKING_SENSORS,
+            CONF_COOKING_HIGHER_IS_WORSE,
+            CONF_COOKING_RISE,
+            CONF_COOKING_WINDOW,
+            CONF_COOKING_END_OFFSET,
+            CONF_COOKING_TRIGGER_THRESHOLD,
+            CONF_COOKING_TRIGGER_RUN_ON,
+            CONF_COOKING_LEVEL,
+            CONF_COOKING_MAX_DURATION,
+            CONF_AUTO_BOOST_QUIET_CAP,
+            CONF_AUTO_BOOST_COOLDOWN,
+        ),
     }
 )
 
 #: Options whose default is an empty list (not in ``DEFAULTS``, which holds
 #: immutable values only).
-LIST_OPTIONS: Final = frozenset({CONF_PRESENCE_ENTITIES, CONF_NOTIFY_SERVICES})
+LIST_OPTIONS: Final = frozenset(
+    {
+        CONF_PRESENCE_ENTITIES,
+        CONF_NOTIFY_SERVICES,
+        CONF_BATHROOM_HUMIDITY_SENSORS,
+        CONF_COOKING_SENSORS,
+    }
+)
 
 
 def default_value(key: str) -> OptionValue | list[str]:
@@ -206,18 +270,25 @@ def migrate_options(options: Mapping[str, Any], from_minor: int) -> dict[str, An
 
     Every key added after ``from_minor`` gets its default; values that are
     already present are kept (docs/spec/01-configuration.md#principles: new
-    options are added by a migration, never by changing code defaults). A
-    ``from_minor`` at or above :data:`OPTIONS_MINOR_VERSION` returns a copy.
+    options are added by a migration, never by changing code defaults).
+    Defaults relative to the max flow (0.3: the auto boost levels and the
+    quiet cap) are calculated from the stored ``max_flow``. A ``from_minor``
+    at or above :data:`OPTIONS_MINOR_VERSION` returns a copy.
     """
     result = dict(options)
     for minor in range(from_minor + 1, OPTIONS_MINOR_VERSION + 1):
         for key in ADDED_IN_MINOR_VERSION.get(minor, ()):
-            if key not in result:
+            if key in result:
+                continue
+            if key in MAX_FLOW_SHARES:
+                if (max_flow := result.get(CONF_MAX_FLOW)) is not None:
+                    result[key] = round_flow(float(max_flow) * MAX_FLOW_SHARES[key])
+            else:
                 result[key] = default_value(key)
     return result
 
 
-#: Defaults given as a share of the max flow (0.1 options only).
+#: Defaults given as a share of the max flow.
 MAX_FLOW_SHARES: Final[Mapping[str, float]] = MappingProxyType(
     {
         CONF_MIN_FLOW: 0.20,
@@ -226,6 +297,10 @@ MAX_FLOW_SHARES: Final[Mapping[str, float]] = MappingProxyType(
         CONF_MAX_STEP_DOWN: 0.125,
         CONF_QUIET_MAX_FLOW: 0.625,
         CONF_BOOST_DEFAULT_LEVEL: 0.75,
+        # 0.3
+        CONF_SHOWER_LEVEL: 0.625,
+        CONF_COOKING_LEVEL: 0.625,
+        CONF_AUTO_BOOST_QUIET_CAP: 0.50,
     }
 )
 

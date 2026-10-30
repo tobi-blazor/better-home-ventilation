@@ -27,7 +27,7 @@ The design follows the Home Assistant developer documentation and the patterns o
 
 ## Config flow
 
-`ConfigFlow`, `VERSION = 1`, `MINOR_VERSION = 2` (1 in 0.1; the migration 1.1 → 1.2 adds the defaults of the options steps `safety` and `notifications`, `engine/options.py` `migrate_options`). Three short steps, the second only when needed. The entry is created with `data={}`, `options={…all fields and defaults…}`, `title=name`. The name is stored only as the title, not in `options`.
+`ConfigFlow`, `VERSION = 1`, `MINOR_VERSION = 3` (1 in 0.1, 2 in 0.2; the migration 1.1 → 1.2 adds the defaults of the options steps `safety` and `notifications`, 1.2 → 1.3 the defaults of the sections `shower`, `cooking` and `common` of the step `boosts`, with the levels and the cap calculated from the stored `max_flow`; `engine/options.py` `migrate_options`). Three short steps, the second only when needed. The entry is created with `data={}`, `options={…all fields and defaults…}`, `title=name`. The name is stored only as the title, not in `options`.
 
 ### Step `user`
 
@@ -153,6 +153,8 @@ The `data_description` of each shaping field explains its effect with the defaul
 
 A detector is active when its sensors are set. There are no separate "enabled" switches: no sensors = feature off. The `cooking_sensors` description says: IAQ/VOC sensor in the kitchen, not directly above the hob.
 
+Details (decided 2026-10-30 for M11): `shower_rise` and `shower_end_offset` have step 0.5 %; `cooking_rise`, `cooking_end_offset` and `cooking_trigger_threshold` have no unit (the unit of the sensor; the threshold is ≥ 0, step any). The sections `shower` and `cooking` are expanded, `common` is collapsed. `bathroom_humidity_sensors` and `cooking_sensors` are stored as lists (empty = off); `cooking_trigger` is optional and removed from `options` when cleared. The detector sensors and the trigger entity must exist (`sensor_not_found`, on the section). The `actuator` step's max-flow hint also names `shower_level`, `cooking_level` and `auto_boost_quiet_cap`.
+
 ### `safety`
 
 | Key | Selector | Default |
@@ -248,16 +250,16 @@ Validation: `source_required` (none or both of entity and device, on `base`), `i
 | off actuator exists (state or registry entry) | `off_entity` (reported on section `off`) | `off_entity_not_found` |
 | off actuator is not the actuator | `off_entity` (reported on section `off`) | `off_entity_is_actuator` |
 | at least one CO₂ or humidity sensor | `base` | `no_inputs` |
-| every CO₂ and humidity sensor exists (state or registry entry) | `co2_sensors` / `humidity_sensors` | `sensor_not_found` |
+| every CO₂, humidity, bathroom humidity and cooking sensor and the cooking trigger exists (state or registry entry) | the field (in the step `boosts` its section) | `sensor_not_found` |
 | `co2_start < co2_end` | `co2_end` | `co2_range` |
 | `humidity_high_start < humidity_high_end` | `humidity_high_end` | `humidity_range` |
 | `dryness_threshold + dryness_hysteresis < humidity_high_start` | `dryness_threshold` | `dryness_overlap` |
 | `min_flow ≤ fallback_flow ≤ max_flow` | `fallback_flow` | `fallback_range` |
 | `min_flow ≤ quiet_max_flow ≤ max_flow` | `quiet_max_flow` | `quiet_range` |
-| every level and cap within `min_flow`…`max_flow` | the field | `level_range` |
+| every level and cap within `min_flow`…`max_flow` (`boost_default_level`, `shower_level`, `cooking_level`, `auto_boost_quiet_cap`) | the field | `level_range` |
 | `night_start ≠ night_end` | `night_end` | `night_window` |
 | `auto_correct` only for writable domains | `base` (the field is not shown for other domains) | `not_correctable` |
-| a sensor appears in more than one input group (e.g. living and bathroom humidity) | the later field | `duplicate_sensor` |
+| a sensor appears in more than one input group (CO₂, living humidity, bathroom humidity, cooking sensors, cooking trigger, in this order) | the later field; if it is not in the form, the earlier one (e.g. a living humidity sensor that is stored as bathroom sensor, in the step `inputs`) | `duplicate_sensor` |
 
 Range limits of single fields are enforced by the selectors and are not repeated as errors.
 

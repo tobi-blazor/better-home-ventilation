@@ -21,11 +21,7 @@ from . import options as opt
 
 
 class Mode(StrEnum):
-    """Resolved operating mode (docs/spec/03-modes.md#mode-resolution).
-
-    ``shower`` and ``cooking`` belong to phase 0.3; they are listed for the
-    entity options but never resolved by the engine yet.
-    """
+    """Resolved operating mode (docs/spec/03-modes.md#mode-resolution)."""
 
     AUTOMATIC = "automatic"
     FALLBACK = "fallback"
@@ -44,6 +40,20 @@ RUNNING_MODES: Final = frozenset(
 
 #: Off states (CONTEXT.md): the modes that stop the unit.
 OFF_MODES: Final = frozenset({Mode.OFF, Mode.SAFETY_OFF})
+
+
+class AutoBoostKind(StrEnum):
+    """Kind of an auto boost (03-modes.md#automatic-boosts, BHV-30, BHV-31)."""
+
+    SHOWER = "shower"
+    COOKING = "cooking"
+
+
+#: Mode of each auto boost kind.
+AUTO_BOOST_MODES: Final[Mapping[AutoBoostKind, Mode]] = {
+    AutoBoostKind.SHOWER: Mode.SHOWER,
+    AutoBoostKind.COOKING: Mode.COOKING,
+}
 
 
 class Reason(StrEnum):
@@ -379,6 +389,24 @@ class Options:
     boost_default_duration: timedelta
     boost_default_level: float
     boost_max_duration: timedelta
+    bathroom_humidity_sensors: tuple[str, ...]
+    shower_rise: float
+    shower_window: timedelta
+    shower_end_offset: float
+    shower_level: float
+    shower_max_duration: timedelta
+    cooking_sensors: tuple[str, ...]
+    cooking_higher_is_worse: bool
+    cooking_rise: float
+    cooking_window: timedelta
+    cooking_end_offset: float
+    cooking_trigger: str | None
+    cooking_trigger_threshold: float
+    cooking_trigger_run_on: timedelta
+    cooking_level: float
+    cooking_max_duration: timedelta
+    auto_boost_quiet_cap: float
+    auto_boost_cooldown: timedelta
     restart_confirm_timeout: timedelta
     safety_when_disabled: bool
     pause_reminder_after: timedelta
@@ -416,6 +444,7 @@ class Options:
         }
         mapping = values.get(opt.CONF_SELECT_MAPPING) or {}
         off_entity = values.get(opt.CONF_OFF_ENTITY) or None
+        cooking_trigger = values.get(opt.CONF_COOKING_TRIGGER) or None
         return cls(
             actuator=str(values[opt.CONF_ACTUATOR]),
             max_flow=max_flow,
@@ -459,6 +488,26 @@ class Options:
             boost_default_duration=_seconds(values[opt.CONF_BOOST_DEFAULT_DURATION]),
             boost_default_level=float(values[opt.CONF_BOOST_DEFAULT_LEVEL]),
             boost_max_duration=_seconds(values[opt.CONF_BOOST_MAX_DURATION]),
+            bathroom_humidity_sensors=_entity_list(
+                values.get(opt.CONF_BATHROOM_HUMIDITY_SENSORS)
+            ),
+            shower_rise=float(values[opt.CONF_SHOWER_RISE]),
+            shower_window=_seconds(values[opt.CONF_SHOWER_WINDOW]),
+            shower_end_offset=float(values[opt.CONF_SHOWER_END_OFFSET]),
+            shower_level=float(values[opt.CONF_SHOWER_LEVEL]),
+            shower_max_duration=_seconds(values[opt.CONF_SHOWER_MAX_DURATION]),
+            cooking_sensors=_entity_list(values.get(opt.CONF_COOKING_SENSORS)),
+            cooking_higher_is_worse=bool(values[opt.CONF_COOKING_HIGHER_IS_WORSE]),
+            cooking_rise=float(values[opt.CONF_COOKING_RISE]),
+            cooking_window=_seconds(values[opt.CONF_COOKING_WINDOW]),
+            cooking_end_offset=float(values[opt.CONF_COOKING_END_OFFSET]),
+            cooking_trigger=str(cooking_trigger) if cooking_trigger else None,
+            cooking_trigger_threshold=float(values[opt.CONF_COOKING_TRIGGER_THRESHOLD]),
+            cooking_trigger_run_on=_seconds(values[opt.CONF_COOKING_TRIGGER_RUN_ON]),
+            cooking_level=float(values[opt.CONF_COOKING_LEVEL]),
+            cooking_max_duration=_seconds(values[opt.CONF_COOKING_MAX_DURATION]),
+            auto_boost_quiet_cap=float(values[opt.CONF_AUTO_BOOST_QUIET_CAP]),
+            auto_boost_cooldown=_seconds(values[opt.CONF_AUTO_BOOST_COOLDOWN]),
             restart_confirm_timeout=_seconds(values[opt.CONF_RESTART_CONFIRM_TIMEOUT]),
             safety_when_disabled=bool(values[opt.CONF_SAFETY_WHEN_DISABLED]),
             pause_reminder_after=_seconds(values[opt.CONF_PAUSE_REMINDER_AFTER]),
@@ -604,6 +653,40 @@ class Pause:
 
 
 @dataclass(frozen=True, kw_only=True)
+class AutoBoost:
+    """An active auto boost of one detector (03-modes.md#automatic-boosts).
+
+    ``baseline`` is the sensor value the detector started from (in the
+    sensor's own unit, also when ``higher_is_worse`` is false); None for the
+    cooking trigger entity. ``deadline`` is the latest end: ``started`` plus
+    the maximum duration, for the trigger entity shortened to the end of its
+    run-on once it turned inactive.
+    """
+
+    kind: AutoBoostKind
+    entity_id: str
+    baseline: float | None
+    started: datetime
+    deadline: datetime
+
+
+@dataclass(frozen=True, kw_only=True)
+class DetectorRuntime:
+    """Runtime state of one detector; not persisted (refills after a restart).
+
+    ``samples`` are the ``(time, value)`` pairs inside the window, the value
+    negated when ``higher_is_worse`` is false (internally higher = worse).
+    ``invalid_since`` is the first evaluation with an invalid value while
+    the input stays invalid. ``armed`` (trigger entity only) is False from
+    the start of an auto boost until the trigger is seen inactive.
+    """
+
+    samples: tuple[tuple[datetime, float], ...] = ()
+    invalid_since: datetime | None = None
+    armed: bool = True
+
+
+@dataclass(frozen=True, kw_only=True)
 class ReadinessTracker:
     """Correction bookkeeping of one unmet readiness condition (runtime only)."""
 
@@ -697,6 +780,11 @@ class ControllerState:
     manual: Boost | Pause | None = None
     safety: SafetyState = field(default_factory=SafetyState)
     safety_restore: SafetyRestore | None = None
+    #: Active auto boosts by detector key (``shower:<entity>``,
+    #: ``cooking:<entity>``, ``cooking_trigger:<entity>``).
+    auto_boosts: Mapping[str, AutoBoost] = field(default_factory=dict)
+    #: End of the cooldown per detector key.
+    detector_cooldown: Mapping[str, datetime] = field(default_factory=dict)
     dry_active: bool = False
     dry_humidity_high_since: datetime | None = None
     off_since: datetime | None = None
@@ -713,6 +801,7 @@ class ControllerState:
     pending_source: Source | None = None
     unit_running_seen: bool | None = None
     readiness: Mapping[str, ReadinessTracker] = field(default_factory=dict)
+    detectors: Mapping[str, DetectorRuntime] = field(default_factory=dict)
     problem_since: Mapping[ProblemId, datetime] = field(default_factory=dict)
     #: Keys of warnings loaded from the store that no source has reported
     #: again yet; they count until the startup grace ends
@@ -773,6 +862,9 @@ class Decision:
     Safety (0.2): ``warnings`` are all active warnings (overridden or not),
     ``overridden_incidents`` the overridden incident keys, ``awaiting_restart``
     is True while ``safety_off`` is caused only by the restart wait.
+
+    Auto boosts (0.3): ``auto_boosts`` are the active auto boosts, sorted by
+    detector key (the ``shower_detected``/``cooking_detected`` entities).
     """
 
     time: datetime
@@ -797,6 +889,7 @@ class Decision:
     warnings: tuple[WarningInfo, ...] = ()
     overridden_incidents: frozenset[str] = frozenset()
     awaiting_restart: bool = False
+    auto_boosts: tuple[AutoBoost, ...] = ()
 
     @property
     def reasons(self) -> tuple[Reason, ...]:
@@ -935,7 +1028,7 @@ class PauseCommand:
 
 @dataclass(frozen=True, kw_only=True)
 class ResumeCommand:
-    """``resume()``: end boost or pause."""
+    """``resume()``: end boost or pause and the auto boosts."""
 
     source: Source
 
