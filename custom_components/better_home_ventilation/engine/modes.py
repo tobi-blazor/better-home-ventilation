@@ -7,15 +7,18 @@ controller state.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Final
 
 from .demand import DemandResult
+from .detector import active_kinds, end_auto_boosts
 from .models import (
+    AUTO_BOOST_MODES,
     OFF_MODES,
     ActuatorDomain,
+    AutoBoostKind,
     Boost,
     BoostCommand,
     ClearNotification,
@@ -67,11 +70,27 @@ def safety_applies(state: ControllerState, options: Options) -> bool:
     )
 
 
+def auto_boost_mode(state: ControllerState, options: Options) -> Mode | None:
+    """Mode of the active auto boosts, or None (03-modes.md#mode-resolution).
+
+    With both kinds active the one with the higher level wins (tie:
+    ``cooking``); the configured levels are compared, before the quiet cap.
+    """
+    kinds = active_kinds(state)
+    if not kinds:
+        return None
+    if len(kinds) == 1:
+        return AUTO_BOOST_MODES[next(iter(kinds))]
+    if options.cooking_level >= options.shower_level:
+        return Mode.COOKING
+    return Mode.SHOWER
+
+
 def resolve_mode(state: ControllerState, options: Options, *, fallback: bool) -> Mode:
     """Resolve the mode by priority (03-modes.md#mode-resolution).
 
-    ``safety_off``, ``disabled``, ``off``, ``boost``, ``fallback``,
-    ``automatic``.
+    ``safety_off``, ``disabled``, ``off``, ``boost``, ``shower``/``cooking``,
+    ``fallback``, ``automatic``.
     """
     if safety_applies(state, options):
         return Mode.SAFETY_OFF
@@ -81,18 +100,50 @@ def resolve_mode(state: ControllerState, options: Options, *, fallback: bool) ->
         return Mode.OFF
     if isinstance(state.manual, Boost):
         return Mode.BOOST
+    if (auto := auto_boost_mode(state, options)) is not None:
+        return auto
     if fallback:
         return Mode.FALLBACK
     return Mode.AUTOMATIC
 
 
+def auto_boost_levels(
+    options: Options, kinds: frozenset[AutoBoostKind], *, quiet: bool
+) -> dict[AutoBoostKind, float]:
+    """Level of each active auto boost kind, capped while the quiet limit applies.
+
+    BHV-32: ``auto_boost_quiet_cap`` replaces ``quiet_max_flow`` for auto
+    boosts when the profile applies the quiet limit (night window, all day in
+    ``quiet``, never in ``air_quality``). The humidity override of the quiet
+    limit acts through the demand.
+    """
+    levels = {
+        AutoBoostKind.SHOWER: options.shower_level,
+        AutoBoostKind.COOKING: options.cooking_level,
+    }
+    return {
+        kind: min(levels[kind], options.auto_boost_quiet_cap) if quiet else levels[kind]
+        for kind in sorted(kinds)
+    }
+
+
+_AUTO_REASONS: Final = {Mode.SHOWER: Reason.SHOWER, Mode.COOKING: Reason.COOKING}
+_AUTO_KINDS: Final = {mode: kind for kind, mode in AUTO_BOOST_MODES.items()}
+
+
 def mode_target(
-    mode: Mode, demand: DemandResult, state: ControllerState
+    mode: Mode,
+    demand: DemandResult,
+    state: ControllerState,
+    auto_levels: Mapping[AutoBoostKind, float] | None = None,
 ) -> tuple[float, Reason]:
     """Target flow (before shaping) and reason of a mode (03-modes.md#target-per-mode).
 
     ``boost`` uses ``max(level, demand_unquiet)``: a user boost is never capped
     by the quiet limit and never gets less than the air quality asks for.
+    ``shower``/``cooking`` use ``max(min(level, cap_if_quiet), demand)``
+    (``auto_levels`` holds the capped levels); the reason is the one of the
+    demand if the demand is higher.
     """
     if mode is Mode.SAFETY_OFF:
         return 0.0, Reason.SAFETY_OFF
@@ -103,6 +154,10 @@ def mode_target(
         if demand.demand_unquiet > level:
             return demand.demand_unquiet, demand.reason_unquiet
         return level, Reason.BOOST
+    if mode in _AUTO_REASONS and auto_levels:
+        auto = auto_levels.get(_AUTO_KINDS[mode])
+        if auto is not None and auto >= demand.demand:
+            return auto, _AUTO_REASONS[mode]
     return demand.demand, demand.reason
 
 
@@ -173,10 +228,10 @@ def apply_command(
                 return state
             new = replace(state, control_enabled=enabled)
             if not enabled:
-                new = replace(new, manual=None)
+                new = end_auto_boosts(replace(new, manual=None), options, now)
             return _commanded(new, command.source, Trigger.CONTROL_SWITCH)
         case ResumeCommand():
-            return _resume(state, command.source)
+            return _resume(state, command.source, options, now)
         case PauseCommand(duration=duration):
             if not state.control_enabled:
                 raise CommandRejected(CONTROL_DISABLED)
@@ -203,19 +258,25 @@ def apply_command(
             return _keep_off(state, command.source, now)
 
 
-def _resume(state: ControllerState, source: Source) -> ControllerState:
-    """``resume()``: end boost or pause and confirm a pending restart.
+def _resume(
+    state: ControllerState, source: Source, options: Options, now: datetime
+) -> ControllerState:
+    """``resume()``: end boost or pause and the auto boosts, confirm a restart.
 
-    The restart confirmation also acts while control is disabled (the
+    The auto boosts end with the cooldown of their detectors. The restart
+    confirmation also acts while control is disabled (the
     ``safety_when_disabled`` restart); it does not lift an active warning.
     """
     restart = state.safety.restart_pending
     ends_manual = state.control_enabled and state.manual is not None
-    if restart is None and not ends_manual:
+    ends_auto = state.control_enabled and bool(state.auto_boosts)
+    if restart is None and not ends_manual and not ends_auto:
         return state
     new = replace(state, safety=replace(state.safety, restart_pending=None))
     if ends_manual:
         new = replace(new, manual=None)
+    if ends_auto:
+        new = end_auto_boosts(new, options, now)
     return _commanded(new, source)
 
 
@@ -531,8 +592,8 @@ def update_reminders(
 
 
 def wake_times(state: ControllerState) -> Sequence[datetime]:
-    """Timer ends of the controller state (boost, pause, restart wait)."""
-    times: list[datetime] = []
+    """Timer ends of the controller state (boost, pause, auto boosts, restart wait)."""
+    times: list[datetime] = [boost.deadline for boost in state.auto_boosts.values()]
     if state.manual is not None and state.manual.until is not None:
         times.append(state.manual.until)
     if state.safety.restart_pending is not None:

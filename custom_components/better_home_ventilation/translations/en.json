@@ -6,7 +6,7 @@
     },
     "error": {
       "actuator_not_found": "The actuator entity does not exist.",
-      "duplicate_sensor": "A sensor is used both as CO₂ and as humidity sensor.",
+      "duplicate_sensor": "A sensor is used in more than one input group (CO₂, room humidity, bathroom humidity, cooking).",
       "max_flow_required": "Enter the max flow. It can only be taken from the actuator if it is a number entity in m³/h with a maximum between 10 and 2000.",
       "no_inputs": "Select at least one CO₂ or humidity sensor.",
       "off_entity_is_actuator": "The off actuator must be a different entity than the actuator.",
@@ -74,10 +74,10 @@
       "actuator_not_found": "The actuator entity does not exist.",
       "co2_range": "The CO₂ end must be higher than the CO₂ start.",
       "dryness_overlap": "The dryness threshold plus its hysteresis must be below the humidity-high start.",
-      "duplicate_sensor": "A sensor is used both as CO₂ and as humidity sensor.",
+      "duplicate_sensor": "A sensor is used in more than one input group (CO₂, room humidity, bathroom humidity, cooking).",
       "fallback_range": "The fallback flow must be between the minimum flow and the max flow.",
       "humidity_range": "The humidity-high end must be higher than the humidity-high start.",
-      "level_range": "The boost level must be between the minimum flow and the max flow.",
+      "level_range": "Levels and the quiet cap must be between the minimum flow and the max flow.",
       "night_window": "The night window must not start and end at the same time.",
       "no_inputs": "Select at least one CO₂ or humidity sensor.",
       "off_entity_is_actuator": "The off actuator must be a different entity than the actuator.",
@@ -111,7 +111,7 @@
       },
       "actuator": {
         "title": "Actuator",
-        "description": "Flow values were calculated from the max flow when the entry was created and do not follow a change of it (max flow {max_flow} m³/h, minimum {min_flow} m³/h, fallback {fallback_flow} m³/h, quiet limit {quiet_max_flow} m³/h, boost {boost_default_level} m³/h). Adjust them in the control and boost settings if needed.",
+        "description": "Flow values were calculated from the max flow when the entry was created and do not follow a change of it (max flow {max_flow} m³/h, minimum {min_flow} m³/h, fallback {fallback_flow} m³/h, quiet limit {quiet_max_flow} m³/h, boost {boost_default_level} m³/h, shower {shower_level} m³/h, cooking {cooking_level} m³/h, quiet cap of automatic boosts {auto_boost_quiet_cap} m³/h). Adjust them in the control and boost settings if needed.",
         "data": {
           "actuator": "Actuator",
           "max_flow": "Max flow"
@@ -301,7 +301,7 @@
       },
       "boosts": {
         "title": "Boosts",
-        "description": "Defaults of manual boosts from the dashboard, services and voice.",
+        "description": "Manual boosts from the dashboard, services and voice, and the automatic boosts after a shower or while cooking.",
         "sections": {
           "manual": {
             "name": "Manual boost",
@@ -315,6 +315,66 @@
               "boost_default_duration": "Duration of a boost when none is given.",
               "boost_default_level": "Flow of a boost when no level is given. The automatic demand still wins if it is higher.",
               "boost_max_duration": "Extending a boost never makes it last longer than this from now."
+            }
+          },
+          "shower": {
+            "name": "Shower detection",
+            "description": "A fast rise of the humidity in a bathroom starts an automatic boost until the humidity is back near the value before the rise. Without bathroom sensors the detection is off.",
+            "data": {
+              "bathroom_humidity_sensors": "Bathroom humidity sensors",
+              "shower_rise": "Rise",
+              "shower_window": "Window",
+              "shower_end_offset": "End offset",
+              "shower_level": "Level",
+              "shower_max_duration": "Maximum duration"
+            },
+            "data_description": {
+              "bathroom_humidity_sensors": "Humidity sensors in bathrooms only, away from the shower spray. They feed only the shower detection, never the room humidity; a sensor cannot be in both.",
+              "shower_rise": "A shower is detected when the humidity is this much above its lowest value within the window.",
+              "shower_window": "Time over which the rise is measured. A slower rise is no shower.",
+              "shower_end_offset": "The boost ends when the humidity is back at the value before the rise plus this offset.",
+              "shower_level": "Flow while a shower is detected. The automatic demand still wins if it is higher.",
+              "shower_max_duration": "The boost ends after this time at the latest, also if the humidity stays high."
+            }
+          },
+          "cooking": {
+            "name": "Cooking detection",
+            "description": "A fast rise of a kitchen air quality sensor, or an optional trigger entity such as the hob power or the hood, starts an automatic boost. Without sensors and trigger the detection is off.",
+            "data": {
+              "cooking_sensors": "Kitchen air quality sensors",
+              "cooking_higher_is_worse": "Higher value is worse",
+              "cooking_rise": "Rise",
+              "cooking_window": "Window",
+              "cooking_end_offset": "End offset",
+              "cooking_trigger": "Trigger entity",
+              "cooking_trigger_threshold": "Trigger threshold",
+              "cooking_trigger_run_on": "Run-on after the trigger",
+              "cooking_level": "Level",
+              "cooking_max_duration": "Maximum duration"
+            },
+            "data_description": {
+              "cooking_sensors": "IAQ or VOC sensors in the kitchen, not directly above the hob (steam and heat give false values). Not the sensor in the extract duct.",
+              "cooking_higher_is_worse": "On for VOC values and IAQ indexes where a higher value means worse air. Off for quality scores where a lower value is worse; the detection then looks for a fall.",
+              "cooking_rise": "Cooking is detected when the value is this much worse than its best value within the window, in the unit of the sensor.",
+              "cooking_window": "Time over which the rise is measured.",
+              "cooking_end_offset": "The boost ends when the value is back at the value before the rise plus this offset.",
+              "cooking_trigger": "Optional: an entity that is on while cooking (hood, hob switch) or a power sensor of the hob. It starts the boost directly.",
+              "cooking_trigger_threshold": "A numeric trigger, for example the hob power in W, counts as active above this value. Ignored for on/off entities.",
+              "cooking_trigger_run_on": "The boost keeps running for this time after the trigger turned inactive.",
+              "cooking_level": "Flow while cooking is detected. The automatic demand still wins if it is higher.",
+              "cooking_max_duration": "The boost ends after this time from its start at the latest."
+            }
+          },
+          "common": {
+            "name": "Automatic boosts",
+            "description": "Settings shared by the shower and cooking detection.",
+            "data": {
+              "auto_boost_quiet_cap": "Quiet cap",
+              "auto_boost_cooldown": "Cooldown"
+            },
+            "data_description": {
+              "auto_boost_quiet_cap": "Highest flow of an automatic boost while the quiet limit applies (night window, all day in the quiet profile). Manual boosts are not capped.",
+              "auto_boost_cooldown": "After an automatic boost ends, its sensor cannot start a new one for this time."
             }
           }
         }
@@ -561,6 +621,12 @@
       },
       "safety_warning": {
         "name": "Safety warning"
+      },
+      "shower_detected": {
+        "name": "Shower detected"
+      },
+      "cooking_detected": {
+        "name": "Cooking detected"
       }
     },
     "button": {
@@ -765,6 +831,9 @@
     "issue_where_co2_sensors": "CO₂ sensors (step Inputs)",
     "issue_where_humidity_sensors": "humidity sensors (step Inputs)",
     "issue_where_presence_entities": "presence (step Inputs)",
+    "issue_where_bathroom_humidity_sensors": "bathroom humidity sensors (step Boosts)",
+    "issue_where_cooking_sensors": "kitchen air quality sensors (step Boosts)",
+    "issue_where_cooking_trigger": "cooking trigger entity (step Boosts)",
     "issue_where_readiness_condition": "readiness condition {title}",
     "issue_where_warning_source": "warning source {title}",
     "intent_boost": "{name} boosted to {level} m³/h until {time}.",

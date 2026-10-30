@@ -171,6 +171,18 @@ def warning_sources(hass: HomeAssistant, entry: ConfigEntry) -> list[WarningSour
     ]
 
 
+def detector_entities(options: Options) -> tuple[str, ...]:
+    """Return the entities of the shower and cooking detection (0.3).
+
+    Bathroom humidity sensors, cooking sensors and the cooking trigger entity.
+    """
+    return (
+        *options.bathroom_humidity_sensors,
+        *options.cooking_sensors,
+        *([options.cooking_trigger] if options.cooking_trigger else []),
+    )
+
+
 def has_warning_sources(entry: ConfigEntry) -> bool:
     """Return True if the entry has at least one warning source subentry."""
     return any(
@@ -208,6 +220,13 @@ class VentilationController:
         )
         #: True if the safety entities exist (at least one warning source).
         self.has_warning_sources = has_warning_sources(entry)
+        #: True if the ``shower_detected`` entity exists (bathroom sensors).
+        self.has_shower_detection = bool(self.options.bathroom_humidity_sensors)
+        #: True if the ``cooking_detected`` entity exists (cooking sensors or a
+        #: cooking trigger entity).
+        self.has_cooking_detection = bool(
+            self.options.cooking_sensors or self.options.cooking_trigger
+        )
         self._details = DetailsCollector(hass)
         self._notifier = Notifier(
             hass, entry, self.async_command, self._async_request_soon
@@ -372,10 +391,13 @@ class VentilationController:
             return
         self._started_at = dt_util.now()
         options = self.options
+        # Detector sensors are debounced inputs as well; every evaluation
+        # (also the periodic one) adds their current value as a sample.
         debounced = {
             *options.co2_sensors,
             *options.humidity_sensors,
             *options.presence_entities,
+            *detector_entities(options),
         }
         immediate = {
             options.actuator,
@@ -605,6 +627,7 @@ class VentilationController:
             *options.co2_sensors,
             *options.humidity_sensors,
             *options.presence_entities,
+            *detector_entities(options),
             *(condition.entity_id for condition in options.readiness_conditions),
             *(
                 entity_id
@@ -774,6 +797,7 @@ class VentilationController:
             *options.co2_sensors,
             *options.humidity_sensors,
             *options.presence_entities,
+            *detector_entities(options),
             *(condition.entity_id for condition in options.readiness_conditions),
             *(
                 str(subentry.data[CONF_SOURCE_ENTITY])

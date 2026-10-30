@@ -67,7 +67,7 @@ async def test_bhv53_options_change_reloads_entry(hass: HomeAssistant) -> None:
     assert len(entry.update_listeners) == 1
 
 
-@pytest.mark.parametrize(("version", "minor_version"), [(1, 2), (1, 3)])
+@pytest.mark.parametrize(("version", "minor_version"), [(1, 3), (1, 4)])
 async def test_migration_current_and_compatible_versions(
     hass: HomeAssistant, version: int, minor_version: int
 ) -> None:
@@ -92,8 +92,10 @@ async def test_migration_current_and_compatible_versions(
 async def test_c4b_migration_adds_02_option_defaults(
     hass: HomeAssistant, minor_version: int
 ) -> None:
-    """1.1 -> 1.2 adds the `safety`/`notifications` defaults, keeps other values."""
-    entry = mock_entry(*ADDED_IN_MINOR_VERSION[2], co2_start=900)
+    """1.1 -> 1.3 adds the `safety`/`notifications` defaults, keeps other values."""
+    entry = mock_entry(
+        *ADDED_IN_MINOR_VERSION[2], *ADDED_IN_MINOR_VERSION[3], co2_start=900
+    )
     entry.add_to_hass(hass)
     hass.config_entries.async_update_entry(entry, minor_version=minor_version)
     assert CONF_NOTIFY_SERVICES not in entry.options
@@ -102,7 +104,7 @@ async def test_c4b_migration_adds_02_option_defaults(
     await hass.async_block_till_done()
 
     assert entry.state is ConfigEntryState.LOADED
-    assert entry.minor_version == 2
+    assert entry.minor_version == 3
     assert entry.options["co2_start"] == 900
     assert entry.options[CONF_NOTIFY_SERVICES] == []
     assert entry.options["restart_confirm_timeout"] == 1800
@@ -110,6 +112,31 @@ async def test_c4b_migration_adds_02_option_defaults(
     assert entry.options["pause_reminder_after"] == 8 * 3600
     assert entry.options["off_notice_after"] == 24 * 3600
     assert dict(entry.options) == entry_options(co2_start=900)
+
+
+async def test_migration_adds_03_option_defaults_from_max_flow(
+    hass: HomeAssistant,
+) -> None:
+    """1.2 -> 1.3 adds the shower/cooking defaults; levels from the stored max flow."""
+    removed = [key for key in ADDED_IN_MINOR_VERSION[3] if key != "shower_rise"]
+    entry = mock_entry(*removed, max_flow=350, shower_rise=12)
+    entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(entry, minor_version=2)
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert entry.state is ConfigEntryState.LOADED
+    assert entry.minor_version == 3
+    assert entry.options["shower_rise"] == 12
+    assert entry.options["shower_level"] == 220
+    assert entry.options["cooking_level"] == 220
+    assert entry.options["auto_boost_quiet_cap"] == 175
+    assert entry.options["bathroom_humidity_sensors"] == []
+    assert entry.options["cooking_sensors"] == []
+    assert "cooking_trigger" not in entry.options
+    # The other relative defaults stay as stored (created for 400 m³/h).
+    assert entry.options["min_flow"] == 80
 
 
 async def test_migration_rejects_future_major_version(hass: HomeAssistant) -> None:

@@ -10,12 +10,15 @@ import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from .common import (
+    BATHROOM_HUMIDITY,
     CO2_BEDROOM,
     CO2_LIVING,
     CONTROL_MODE,
     FAN,
+    HOB_POWER,
     HUMIDITY_BEDROOM,
     HUMIDITY_LIVING,
+    KITCHEN_VOC,
     NUMBER_FLOW,
     NUMBER_PERCENT,
     NUMBER_RAW,
@@ -62,6 +65,13 @@ def entities(hass: HomeAssistant) -> None:
     hass.states.async_set(
         HUMIDITY_BEDROOM, "50", {"device_class": "humidity", "unit_of_measurement": "%"}
     )
+    hass.states.async_set(
+        BATHROOM_HUMIDITY,
+        "55",
+        {"device_class": "humidity", "unit_of_measurement": "%"},
+    )
+    hass.states.async_set(KITCHEN_VOC, "100", {"unit_of_measurement": "ppb"})
+    hass.states.async_set(HOB_POWER, "0", {"unit_of_measurement": "W"})
     hass.states.async_set(PERSON, "home")
     hass.states.async_set(STANDBY_SWITCH, "off")
     hass.states.async_set(
