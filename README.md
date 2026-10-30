@@ -360,6 +360,7 @@ How it works:
 - With **Correct automatically**, the integration sets the entity back to the expected state (at most once per minute per condition), fires the event `better_home_ventilation_readiness_corrected`, and writes the flow again right after it is restored. This also happens when no flow change is due, because the unit ignores the flow until the condition is met again. If the condition is still not met after three attempts, the problem `not_ready` is reported and further attempts follow every five minutes.
 - Without automatic correction (or while the entity is unavailable), the problem `not_ready` is reported at once; the problem sensor still waits for the problem delay.
 - No correction is made while the **Control** switch is off or during the startup grace.
+- This also applies to a [safety shutdown](#warning-sources): while a condition is not met the unit is not switched off either. The mode is still "Safety off" and the safety notification is sent; the problem `not_ready` (and its notification after the problem delay) shows that the off could not be written. The unit is switched off as soon as the condition is met.
 
 ## Warning sources
 

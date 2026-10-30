@@ -843,6 +843,89 @@ def test_bhv40_pause_and_boost_during_safety_off() -> None:
     assert sim.run()[0].mode is Mode.AUTOMATIC
 
 
+# --- Q13: the readiness gate also applies to the safety off --------------------
+
+
+def _not_ready(sim: Sim) -> list[tuple[ProblemKey, str | None]]:
+    assert sim.decision is not None
+    return [
+        (p.key, p.entity_id)
+        for p in sim.decision.problems
+        if p.key is ProblemKey.NOT_READY
+    ]
+
+
+def test_e58_q13_safety_off_waits_for_readiness_and_is_a_problem() -> None:
+    """E58: an unmet readiness condition blocks the safety off; ``not_ready``.
+
+    Owner decision on Q13 (2026-10-30): the readiness gate also applies to the
+    safety TurnOff. Without ``auto_correct`` the problem is raised at once, the
+    problem sensor follows after ``problem_delay``; the off is written as soon
+    as the condition is met.
+    """
+    condition = ReadinessCondition(
+        entity_id=READY, expected_state="Remote", auto_correct=False
+    )
+    sim = _sim(readiness_conditions=(condition,))
+    sim.set(READY, "Local")
+    sim.run()
+    sim.advance(minutes=20)
+    sim.warn(SMOKE)
+    decision, effects = sim.run()
+    assert decision.mode is Mode.SAFETY_OFF
+    assert decision.setpoint == 0
+    assert decision.write_blocked_by is WriteBlock.NOT_READY
+    assert not of_type(effects, TurnOff)
+    # the warning itself is notified as usual
+    assert _notify(effects, NotifyKind.SAFETY)
+    assert _not_ready(sim) == [(ProblemKey.NOT_READY, READY)]
+    assert decision.problem  # unmet for longer than problem_delay
+
+    sim.set(READY, "Remote")
+    decision, effects = sim.run()
+    assert of_type(effects, TurnOff) == [TurnOff(entity_id=OFF_SWITCH)]
+    assert decision.write_blocked_by is None
+    assert _not_ready(sim) == []
+
+
+def test_e58_q13_safety_off_after_failed_corrections_is_not_ready() -> None:
+    """E58 with ``auto_correct``: corrections first, ``not_ready`` after 3 attempts."""
+    condition = ReadinessCondition(
+        entity_id=READY, expected_state="Remote", auto_correct=True
+    )
+    sim = _sim(readiness_conditions=(condition,))
+    sim.set(READY, "Remote")
+    sim.run()
+    sim.set(READY, "Local")
+    sim.warn(SMOKE)
+    decision, effects = sim.run()
+    assert decision.mode is Mode.SAFETY_OFF
+    assert decision.write_blocked_by is WriteBlock.NOT_READY
+    assert of_type(effects, CorrectReadiness)
+    assert not of_type(effects, TurnOff)
+    assert _not_ready(sim) == []
+
+    # the unit ignores the correction: two more attempts, then the problem
+    for _ in range(2):
+        sim.advance(seconds=60)
+        _, effects = sim.run()
+        assert of_type(effects, CorrectReadiness)
+        assert not of_type(effects, TurnOff)
+    sim.advance(seconds=60)
+    decision, effects = sim.run()
+    assert not of_type(effects, TurnOff)
+    assert _not_ready(sim) == [(ProblemKey.NOT_READY, READY)]
+    assert not decision.problem  # the sensor waits problem_delay
+    sim.advance(minutes=10)
+    decision, _ = sim.run()
+    assert decision.problem
+
+    # a later correction works: the safety off follows at once
+    sim.set(READY, "Remote")
+    _, effects = sim.run()
+    assert of_type(effects, TurnOff) == [TurnOff(entity_id=OFF_SWITCH)]
+
+
 def test_source_unavailable_problem_after_grace() -> None:
     """``warning_source_unavailable``: one per source, not during the grace."""
     sim = _sim()

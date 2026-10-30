@@ -207,6 +207,7 @@ Details of the flow (decided 2026-10-29 for M7):
 
 - Notification `safety` is sent when the unit enters `safety_off` because of active warnings (also when control is switched on or an override is removed during a warning), and again when a new warning shuts down while the unit already is in `safety_off` (an update of a non-overridden incident replaces the text). `restart` replaces it when the restart wait begins. Leaving `safety_off` by the restart timeout sends `restarted`; leaving it in any other way (override, resume, keep off, control switch) clears the safety notification.
 - `restart_confirm_timeout` 0: no restart wait; the unit restarts at once (trigger `warning_ended`, notification `restarted`).
+- The safety off is a write like any other behind the gates of [02-control.md](02-control.md#readiness-and-availability), except the startup grace: an unavailable actuator or an unmet readiness condition blocks it ([Q13](README.md#open-questions), owner decision 2026-10-30). The mode is still `safety_off` and the notification `safety` is sent; the blocked off shows as `write_blocked_by` and as the problem `actuator_unavailable` or `not_ready`, and it is written as soon as the gate opens.
 - The engine always emits the notification effects; the glue sends nothing for a kind whose `notify_*` option is off.
 
 ## Automatic boosts

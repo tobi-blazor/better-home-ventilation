@@ -37,8 +37,8 @@ from custom_components.better_home_ventilation.notifications import (
     service_name,
 )
 
-from .common import FAN, NUMBER_FLOW, MockUnit, advance
-from .test_controller import controller_of, problem_keys, setup_entry
+from .common import CONTROL_MODE, FAN, NUMBER_FLOW, MockUnit, advance
+from .test_controller import controller_of, problem_keys, readiness, setup_entry
 from .test_safety import SMOKE, mode_of, set_state, source, turn
 
 PHONE = "mobile_app_example_phone"
@@ -344,6 +344,66 @@ async def test_problem_notification_after_problem_delay(
     )
 
     assert phone[-1].data == {"message": "clear_notification", "data": {"tag": tag}}
+
+
+@pytest.mark.usefixtures("entities")
+async def test_q13_blocked_safety_off_is_notified_as_not_ready(
+    hass: HomeAssistant,
+    unit: MockUnit,
+    freezer: FrozenDateTimeFactory,
+    phone: list[ServiceCall],
+) -> None:
+    """Q13: a safety off blocked by readiness is the problem `not_ready`.
+
+    The warning is notified at once; nothing is written; the problem
+    notification follows after `problem_delay`; the off once the condition is met.
+    """
+    hass.states.async_set(SMOKE, "off")
+    entry = await setup_entry(
+        hass,
+        notify_services=[PHONE],
+        subentries=[
+            # Without details the periodic evaluations finish within
+            # `async_block_till_done` (no provider tasks in the background).
+            source(entity_id=SMOKE, name="Outdoor smoke", data={"details": "none"}),
+            readiness(CONTROL_MODE, "Remote", auto_correct=False),
+        ],
+    )
+    await advance(hass, freezer, 61)
+    short = entry8(entry)
+
+    await set_state(hass, SMOKE, "on")
+
+    assert mode_of(hass) == "safety_off"
+    assert [call.data["data"]["tag"] for call in phone] == [f"bhv_{short}_safety"]
+    assert unit.calls_for("number", "set_value") == []
+    assert ("not_ready", CONTROL_MODE) in problem_keys(controller_of(entry))
+
+    # `not_ready` since the setup (unmet in the grace): notified 10 min later.
+    await advance(hass, freezer, 8 * 60)
+    assert len(phone) == 1
+    await advance(hass, freezer, 60)
+
+    problem = phone[-1]
+    assert problem.data == {
+        "title": "Ventilation problem",
+        "message": (
+            "The readiness condition on Unit control mode is not met; "
+            "nothing is written to the unit."
+        ),
+        "data": {"tag": f"bhv_{short}_problem_not_ready"},
+    }
+    assert unit.calls_for("number", "set_value") == []
+
+    await set_state(hass, CONTROL_MODE, "Remote", {"options": ["Manual", "Remote"]})
+
+    assert [call.data["value"] for call in unit.calls_for("number", "set_value")] == [
+        0.0
+    ]
+    assert phone[-1].data == {
+        "message": "clear_notification",
+        "data": {"tag": f"bhv_{short}_problem_not_ready"},
+    }
 
 
 @pytest.mark.usefixtures("entities")
