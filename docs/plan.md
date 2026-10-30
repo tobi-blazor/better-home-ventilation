@@ -244,7 +244,7 @@ Spec: [README.md](spec/README.md#summer-and-bypass) (BHV-60–64), decided 2026-
 
 ## M13 Release 1.0
 
-- [ ] License (Q5, owner decision), `LICENSE` file
+- [x] License (Q5, owner decision), `LICENSE` file: MIT (2026-10-30)
 - [ ] Repository public, description and topics, HACS validation without ignored checks
 - [ ] Brand images
 - [ ] README complete: screenshots, FAQ, every option documented
