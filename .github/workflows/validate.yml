@@ -31,6 +31,6 @@ jobs:
         with:
           category: integration
           # The repository is private for now: no brands entry, topics or
-          # description yet, and no license until the owner decides (spec Q5).
+          # description yet.
           # Remove before the HACS default listing (M12).
-          ignore: brands topics description license
+          ignore: brands topics description

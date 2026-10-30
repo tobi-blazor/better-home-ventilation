@@ -865,4 +865,4 @@ Behavior changes start in the [specification](docs/spec/README.md); see [CLAUDE.
 
 ## License
 
-TBD
+[MIT](LICENSE)
