@@ -30,7 +30,9 @@ from custom_components.better_home_ventilation.const import (
     ACTUATOR_UNIT_FLOW,
     CONF_ACTUATOR,
     CONF_ACTUATOR_UNIT,
+    CONF_BATHROOM_HUMIDITY_SENSORS,
     CONF_CO2_SENSORS,
+    CONF_COOKING_SENSORS,
     CONF_HUMIDITY_SENSORS,
     CONF_MAX_FLOW,
     CONF_NOTIFY_SERVICES,
@@ -52,6 +54,9 @@ CO2_BEDROOM = "sensor.bedroom_co2"
 HUMIDITY_LIVING = "sensor.living_room_humidity"
 HUMIDITY_BEDROOM = "sensor.bedroom_humidity"
 PERSON = "person.resident"
+BATHROOM_HUMIDITY = "sensor.bathroom_humidity"
+KITCHEN_VOC = "sensor.kitchen_voc"
+HOB_POWER = "sensor.hob_power"
 STANDBY_SWITCH = "switch.unit_standby"
 CONTROL_MODE = "select.unit_control_mode"
 
@@ -70,6 +75,8 @@ def entry_options(*remove: str, **overrides: Any) -> dict[str, Any]:
         CONF_HUMIDITY_SENSORS: [HUMIDITY_LIVING],
         CONF_PRESENCE_ENTITIES: [],
         CONF_NOTIFY_SERVICES: [],
+        CONF_BATHROOM_HUMIDITY_SENSORS: [],
+        CONF_COOKING_SENSORS: [],
         **overrides,
     }
     for key in remove:

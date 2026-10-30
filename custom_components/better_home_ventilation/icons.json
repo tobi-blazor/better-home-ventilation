@@ -35,7 +35,10 @@
       },
       "boosts": {
         "sections": {
-          "manual": "mdi:fan-plus"
+          "manual": "mdi:fan-plus",
+          "shower": "mdi:shower",
+          "cooking": "mdi:stove",
+          "common": "mdi:fan-clock"
         }
       }
     }
@@ -136,6 +139,12 @@
           "on": "mdi:shield-alert",
           "off": "mdi:shield-check-outline"
         }
+      },
+      "shower_detected": {
+        "default": "mdi:shower"
+      },
+      "cooking_detected": {
+        "default": "mdi:stove"
       }
     }
   },

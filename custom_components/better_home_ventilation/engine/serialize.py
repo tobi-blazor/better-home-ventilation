@@ -5,8 +5,9 @@ runtime bookkeeping starts fresh after a load. Datetimes are ISO strings in
 UTC.
 
 Versions: 1.1 = phase 0.1; 1.2 = phase 0.2 (safety, ``safety_restore``,
-``off_since``, ``last_reminder``). The minor bump is backwards compatible:
-0.1 reads 1.2 data and ignores the new keys.
+``off_since``, ``last_reminder``); 1.3 = phase 0.3 (``auto_boosts``,
+``detector_cooldown``). The minor bumps are backwards compatible: an older
+version reads newer data and ignores the new keys.
 """
 
 from __future__ import annotations
@@ -17,6 +18,8 @@ from datetime import UTC, datetime
 from typing import Any, Final
 
 from .models import (
+    AutoBoost,
+    AutoBoostKind,
     Boost,
     ControllerState,
     Mode,
@@ -34,7 +37,11 @@ from .models import (
 #: Store version (``Store(version=...)``); an incompatible change bumps it.
 STORE_VERSION: Final = 1
 #: Store minor version (backwards compatible changes, see :func:`migrate_store_data`).
-STORE_MINOR_VERSION: Final = 2
+STORE_MINOR_VERSION: Final = 3
+
+
+#: Store minor version of phase 0.2 (safety keys, ``off_since``).
+_MINOR_SAFETY: Final = 2
 
 
 class _CorruptError(ValueError):
@@ -123,6 +130,16 @@ def _safety_to_dict(safety: SafetyState) -> dict[str, Any]:
     }
 
 
+def _auto_boost_to_dict(boost: AutoBoost) -> dict[str, Any]:
+    return {
+        "kind": str(boost.kind),
+        "entity_id": boost.entity_id,
+        "baseline": boost.baseline,
+        "started": _dt_to_str(boost.started),
+        "deadline": _dt_to_str(boost.deadline),
+    }
+
+
 def state_to_dict(state: ControllerState) -> dict[str, Any]:
     """Serialise the persisted fields of the controller state."""
     manual: dict[str, Any] | None = None
@@ -152,6 +169,14 @@ def state_to_dict(state: ControllerState) -> dict[str, Any]:
             if restore is not None
             else None
         ),
+        "auto_boosts": {
+            key: _auto_boost_to_dict(boost)
+            for key, boost in sorted(state.auto_boosts.items())
+        },
+        "detector_cooldown": {
+            key: _dt_to_str(until)
+            for key, until in sorted(state.detector_cooldown.items())
+        },
         "dry_active": state.dry_active,
         "dry_humidity_high_since": _dt_to_str(state.dry_humidity_high_since),
         "off_since": _dt_to_str(state.off_since),
@@ -169,6 +194,7 @@ def migrate_store_data(major: int, minor: int, data: Any) -> Any:
     Called by the glue's ``Store._async_migrate_func``. 1.1 -> 1.2 adds the
     safety keys and sets ``off_since`` of a running pause to its start, so the
     reminder of a pause that began under 0.1 counts from its real start.
+    1.2 -> 1.3 adds the empty ``auto_boosts`` and ``detector_cooldown``.
     Data of a newer minor version (a downgrade) is returned unchanged; data
     that is not a mapping is left to :func:`state_from_dict` (reset).
     """
@@ -176,21 +202,24 @@ def migrate_store_data(major: int, minor: int, data: Any) -> Any:
         return data
     if not isinstance(data, Mapping):
         return data
-    # 1.1 -> 1.2 (the only step so far).
     result = dict(data)
-    manual = result.get("manual")
-    if (
-        result.get("off_since") is None
-        and isinstance(manual, Mapping)
-        and manual.get("type") == "pause"
-    ):
-        result["off_since"] = manual.get("started")
-    result.setdefault(
-        "safety", {"active": {}, "overridden": [], "restart_pending": None}
-    )
-    result.setdefault("safety_restore", None)
-    result.setdefault("off_since", None)
-    result.setdefault("last_reminder", None)
+    if minor < _MINOR_SAFETY:
+        manual = result.get("manual")
+        if (
+            result.get("off_since") is None
+            and isinstance(manual, Mapping)
+            and manual.get("type") == "pause"
+        ):
+            result["off_since"] = manual.get("started")
+        result.setdefault(
+            "safety", {"active": {}, "overridden": [], "restart_pending": None}
+        )
+        result.setdefault("safety_restore", None)
+        result.setdefault("off_since", None)
+        result.setdefault("last_reminder", None)
+    # 1.2 -> 1.3
+    result.setdefault("auto_boosts", {})
+    result.setdefault("detector_cooldown", {})
     return result
 
 
@@ -199,7 +228,8 @@ class LoadResult:
     """Loaded state; ``reset`` asks the glue for the ``state_reset`` repair.
 
     ``expired`` names what ended while Home Assistant was offline (``boost``,
-    ``pause``, ``restart wait``, joined with " and "), for one log message.
+    ``pause``, ``auto boost``, ``restart wait``, joined with " and "), for one
+    log message.
     """
 
     state: ControllerState
@@ -283,6 +313,34 @@ def _restore(data: Any) -> SafetyRestore | None:
     )
 
 
+def _auto_boost(data: Any) -> AutoBoost:
+    if not isinstance(data, Mapping):
+        raise _CorruptError("auto boost")
+    return AutoBoost(
+        kind=AutoBoostKind(_required_str(data.get("kind"))),
+        entity_id=_required_str(data.get("entity_id")),
+        baseline=_float(data.get("baseline")),
+        started=_required_dt(data.get("started")),
+        deadline=_required_dt(data.get("deadline")),
+    )
+
+
+def _auto_boosts(data: Any) -> dict[str, AutoBoost]:
+    if data is None:
+        return {}
+    if not isinstance(data, Mapping):
+        raise _CorruptError("auto_boosts")
+    return {str(key): _auto_boost(value) for key, value in data.items()}
+
+
+def _cooldowns(data: Any) -> dict[str, datetime]:
+    if data is None:
+        return {}
+    if not isinstance(data, Mapping):
+        raise _CorruptError("detector_cooldown")
+    return {str(key): _required_dt(value) for key, value in data.items()}
+
+
 def _state_from(data: Mapping[str, Any]) -> ControllerState:
     last_mode = data.get("last_mode")
     return ControllerState(
@@ -291,6 +349,8 @@ def _state_from(data: Mapping[str, Any]) -> ControllerState:
         manual=_manual(data.get("manual")),
         safety=_safety(data.get("safety")),
         safety_restore=_restore(data.get("safety_restore")),
+        auto_boosts=_auto_boosts(data.get("auto_boosts")),
+        detector_cooldown=_cooldowns(data.get("detector_cooldown")),
         dry_active=_bool(data.get("dry_active"), default=False),
         dry_humidity_high_since=_dt_from(data.get("dry_humidity_high_since")),
         off_since=_dt_from(data.get("off_since")),
@@ -312,9 +372,9 @@ def state_from_dict(
 
     - ``data`` None (no store yet): defaults, no reset.
     - corrupt data or a future major ``version``: defaults and ``reset``.
-    - an expired boost, timed pause or restart wait is ended with trigger
-      ``timeout_while_offline`` (an ended restart wait also sends
-      "restarted").
+    - an expired boost, timed pause, auto boost or restart wait is ended
+      with trigger ``timeout_while_offline`` (an ended restart wait also sends
+      "restarted"); an active auto boost keeps its deadline.
     - ``safety.active`` is not trusted (03-modes.md#persistence): every loaded
       warning is unconfirmed and counts only until the startup grace ends,
       unless a source reports it again.
@@ -337,6 +397,17 @@ def state_from_dict(
         expired.append("boost" if isinstance(manual, Boost) else "pause")
         state = replace(
             state, manual=None, pending_trigger=Trigger.TIMEOUT_WHILE_OFFLINE
+        )
+    if any(boost.deadline <= now for boost in state.auto_boosts.values()):
+        expired.append("auto boost")
+        state = replace(
+            state,
+            auto_boosts={
+                key: boost
+                for key, boost in state.auto_boosts.items()
+                if boost.deadline > now
+            },
+            pending_trigger=Trigger.TIMEOUT_WHILE_OFFLINE,
         )
     restart = state.safety.restart_pending
     if restart is not None and restart.deadline <= now:

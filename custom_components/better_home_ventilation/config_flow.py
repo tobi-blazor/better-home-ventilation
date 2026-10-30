@@ -7,12 +7,13 @@ Spec: docs/spec/01-configuration.md. Everything is stored in ``entry.options``;
 (docs/adr/0001-update-listener-instead-of-options-flow-with-reload.md).
 
 Subentries: readiness conditions (0.1) and warning sources (0.2). Options
-steps `safety` and `notifications` (0.2).
+steps `safety` and `notifications` (0.2); sections `shower`, `cooking` and
+`common` of the step `boosts` (0.3).
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass
 from datetime import timedelta
 from enum import StrEnum
@@ -58,14 +59,27 @@ from .const import (
     CONF_ACTUATOR_MAX,
     CONF_ACTUATOR_MIN,
     CONF_ACTUATOR_UNIT,
+    CONF_AUTO_BOOST_COOLDOWN,
+    CONF_AUTO_BOOST_QUIET_CAP,
     CONF_AUTO_CORRECT,
     CONF_AWAY_ENABLED,
+    CONF_BATHROOM_HUMIDITY_SENSORS,
     CONF_BOOST_DEFAULT_DURATION,
     CONF_BOOST_DEFAULT_LEVEL,
     CONF_BOOST_MAX_DURATION,
     CONF_CO2_END,
     CONF_CO2_SENSORS,
     CONF_CO2_START,
+    CONF_COOKING_END_OFFSET,
+    CONF_COOKING_HIGHER_IS_WORSE,
+    CONF_COOKING_LEVEL,
+    CONF_COOKING_MAX_DURATION,
+    CONF_COOKING_RISE,
+    CONF_COOKING_SENSORS,
+    CONF_COOKING_TRIGGER,
+    CONF_COOKING_TRIGGER_RUN_ON,
+    CONF_COOKING_TRIGGER_THRESHOLD,
+    CONF_COOKING_WINDOW,
     CONF_DEADBAND_DOWN,
     CONF_DEADBAND_UP,
     CONF_DEBOUNCE,
@@ -108,6 +122,11 @@ from .const import (
     CONF_RESTART_CONFIRM_TIMEOUT,
     CONF_SAFETY_WHEN_DISABLED,
     CONF_SELECT_MAPPING,
+    CONF_SHOWER_END_OFFSET,
+    CONF_SHOWER_LEVEL,
+    CONF_SHOWER_MAX_DURATION,
+    CONF_SHOWER_RISE,
+    CONF_SHOWER_WINDOW,
     CONF_SOURCE_DEVICE,
     CONF_SOURCE_ENTITY,
     CONF_STALE_TIMEOUT,
@@ -179,6 +198,25 @@ WRITABLE_DOMAINS: Final = frozenset(
     {"select", "input_select", "switch", "input_boolean", "number"}
 )
 ON_OFF_DOMAINS: Final = frozenset({"switch", "input_boolean", "binary_sensor"})
+#: Domains of the cooking trigger entity (hob power, hood, ...).
+COOKING_TRIGGER_DOMAINS: Final = ["binary_sensor", "sensor", "switch", "fan", "light"]
+
+#: Input groups in which a sensor may appear only once (`duplicate_sensor`), in
+#: the order of the forms; the later group reports the error.
+SENSOR_GROUPS: Final = (
+    CONF_CO2_SENSORS,
+    CONF_HUMIDITY_SENSORS,
+    CONF_BATHROOM_HUMIDITY_SENSORS,
+    CONF_COOKING_SENSORS,
+    CONF_COOKING_TRIGGER,
+)
+#: Flows of the step `boosts` that must lie within min flow ... max flow.
+BOOST_LEVEL_KEYS: Final = (
+    CONF_BOOST_DEFAULT_LEVEL,
+    CONF_SHOWER_LEVEL,
+    CONF_COOKING_LEVEL,
+    CONF_AUTO_BOOST_QUIET_CAP,
+)
 OPTION_DOMAINS: Final = frozenset({"select", "input_select"})
 
 #: A `select` actuator needs at least this many (mapped) options.
@@ -215,6 +253,9 @@ SECTION_AWAY: Final = "away"
 SECTION_SHAPING: Final = "shaping"
 SECTION_ADVANCED: Final = "advanced"
 SECTION_MANUAL: Final = "manual"
+SECTION_SHOWER: Final = "shower"
+SECTION_COOKING: Final = "cooking"
+SECTION_COMMON: Final = "common"
 SECTIONS: Final = frozenset(
     {
         SECTION_OFF,
@@ -229,6 +270,9 @@ SECTIONS: Final = frozenset(
         SECTION_SHAPING,
         SECTION_ADVANCED,
         SECTION_MANUAL,
+        SECTION_SHOWER,
+        SECTION_COOKING,
+        SECTION_COMMON,
     }
 )
 
@@ -247,6 +291,12 @@ DURATION_KEYS: Final = frozenset(
         CONF_RESTART_CONFIRM_TIMEOUT,
         CONF_PAUSE_REMINDER_AFTER,
         CONF_OFF_NOTICE_AFTER,
+        CONF_SHOWER_WINDOW,
+        CONF_SHOWER_MAX_DURATION,
+        CONF_COOKING_WINDOW,
+        CONF_COOKING_TRIGGER_RUN_ON,
+        CONF_COOKING_MAX_DURATION,
+        CONF_AUTO_BOOST_COOLDOWN,
     }
 )
 
@@ -541,19 +591,65 @@ def _entity_exists(hass: HomeAssistant, entity_id: str) -> bool:
     )
 
 
+def _entity_ids(value: Any) -> list[str]:
+    """Return an option value (an entity id or a list of them) as a list."""
+    if not value:
+        return []
+    if isinstance(value, str):
+        return [value]
+    return [str(item) for item in value]
+
+
+def _duplicate_sensors(
+    values: Mapping[str, Any], fields: Collection[str]
+) -> dict[str, str]:
+    """Report a sensor used in more than one input group (`duplicate_sensor`).
+
+    ``values`` are the stored options merged with the form input, ``fields``
+    the groups shown in the form. The later group of the two reports the
+    error; if it is not in the form, the earlier one does.
+    """
+    errors: dict[str, str] = {}
+    first: dict[str, str] = {}
+    for group in SENSOR_GROUPS:
+        for entity_id in _entity_ids(values.get(group)):
+            earlier = first.setdefault(entity_id, group)
+            if earlier == group:
+                continue
+            target = group if group in fields else earlier
+            if target in fields:
+                errors.setdefault(target, "duplicate_sensor")
+    return errors
+
+
+def _missing_sensors(
+    hass: HomeAssistant, values: Mapping[str, Any], fields: Collection[str]
+) -> dict[str, str]:
+    """Report a field with an entity that does not exist (`sensor_not_found`)."""
+    return {
+        field: "sensor_not_found"
+        for field in fields
+        if any(
+            not _entity_exists(hass, item) for item in _entity_ids(values.get(field))
+        )
+    }
+
+
 def _validate_inputs(hass: HomeAssistant, values: Mapping[str, Any]) -> dict[str, str]:
-    """Validate the room sensors; return errors per field (or ``base``)."""
+    """Validate the room sensors; return errors per field (or ``base``).
+
+    In the options flow ``values`` include the stored detector sensors, so a
+    room sensor that is also a bathroom or cooking sensor is a duplicate.
+    """
     co2: list[str] = values.get(CONF_CO2_SENSORS) or []
     humidity: list[str] = values.get(CONF_HUMIDITY_SENSORS) or []
     if not co2 and not humidity:
         return {"base": "no_inputs"}
-    errors: dict[str, str] = {}
-    for field, sensors in ((CONF_CO2_SENSORS, co2), (CONF_HUMIDITY_SENSORS, humidity)):
-        if any(not _entity_exists(hass, sensor) for sensor in sensors):
-            errors[field] = "sensor_not_found"
-    if set(co2) & set(humidity):
-        errors[CONF_HUMIDITY_SENSORS] = "duplicate_sensor"
-    return errors
+    fields = (CONF_CO2_SENSORS, CONF_HUMIDITY_SENSORS)
+    return {
+        **_missing_sensors(hass, values, fields),
+        **_duplicate_sensors(values, fields),
+    }
 
 
 def _validate_off(hass: HomeAssistant, values: Mapping[str, Any]) -> dict[str, str]:
@@ -599,15 +695,29 @@ def _validate_control(values: Mapping[str, Any]) -> dict[str, str]:
     return errors
 
 
-def _validate_boosts(values: Mapping[str, Any]) -> dict[str, str]:
-    """Validate the `boosts` step (options merged with the input)."""
-    if not (
-        values[CONF_MIN_FLOW]
-        <= values[CONF_BOOST_DEFAULT_LEVEL]
-        <= values[CONF_MAX_FLOW]
-    ):
-        return {CONF_BOOST_DEFAULT_LEVEL: "level_range"}
-    return {}
+def _validate_boosts(hass: HomeAssistant, values: Mapping[str, Any]) -> dict[str, str]:
+    """Validate the `boosts` step (options merged with the input).
+
+    Every level and the quiet cap lie within min flow ... max flow
+    (`level_range`); the detector sensors and the trigger exist
+    (`sensor_not_found`) and are not used in another input group
+    (`duplicate_sensor`).
+    """
+    errors = {
+        key: "level_range"
+        for key in BOOST_LEVEL_KEYS
+        if not values[CONF_MIN_FLOW] <= values[key] <= values[CONF_MAX_FLOW]
+    }
+    fields = (
+        CONF_BATHROOM_HUMIDITY_SENSORS,
+        CONF_COOKING_SENSORS,
+        CONF_COOKING_TRIGGER,
+    )
+    return {
+        **_missing_sensors(hass, values, fields),
+        **_duplicate_sensors(values, fields),
+        **errors,
+    }
 
 
 def _validate_notifications(values: Mapping[str, Any]) -> dict[str, str]:
@@ -820,6 +930,8 @@ class BetterHomeVentilationConfigFlow(ConfigFlow, domain=DOMAIN):
                     CONF_HUMIDITY_SENSORS: user_input[CONF_HUMIDITY_SENSORS],
                     CONF_PRESENCE_ENTITIES: [],
                     CONF_NOTIFY_SERVICES: [],
+                    CONF_BATHROOM_HUMIDITY_SENSORS: [],
+                    CONF_COOKING_SENSORS: [],
                 }
                 return self.async_create_entry(
                     title=self._title, data={}, options=options
@@ -938,7 +1050,11 @@ def _control_options_schema(max_flow: float) -> vol.Schema:
 
 
 def _boosts_options_schema(max_flow: float) -> vol.Schema:
-    """Return the schema of the options step `boosts` (section `manual` in 0.1)."""
+    """Return the schema of the options step `boosts`.
+
+    Sections `manual`, `shower`, `cooking` and `common` (collapsed). A
+    detector is active when its sensors are set; there are no enable switches.
+    """
     return vol.Schema(
         {
             vol.Required(SECTION_MANUAL): _section(
@@ -947,6 +1063,47 @@ def _boosts_options_schema(max_flow: float) -> vol.Schema:
                     vol.Required(CONF_BOOST_DEFAULT_LEVEL): _flow_selector(max_flow),
                     vol.Required(CONF_BOOST_MAX_DURATION): DURATION_SELECTOR,
                 }
+            ),
+            vol.Required(SECTION_SHOWER): _section(
+                {
+                    vol.Optional(
+                        CONF_BATHROOM_HUMIDITY_SENSORS, default=list
+                    ): HUMIDITY_SENSORS_SELECTOR,
+                    vol.Required(CONF_SHOWER_RISE): _percent_selector(1, 40, 0.5),
+                    vol.Required(CONF_SHOWER_WINDOW): DURATION_SELECTOR,
+                    vol.Required(CONF_SHOWER_END_OFFSET): _percent_selector(0, 30, 0.5),
+                    vol.Required(CONF_SHOWER_LEVEL): _flow_selector(max_flow),
+                    vol.Required(CONF_SHOWER_MAX_DURATION): DURATION_SELECTOR,
+                }
+            ),
+            vol.Required(SECTION_COOKING): _section(
+                {
+                    vol.Optional(CONF_COOKING_SENSORS, default=list): _entity_selector(
+                        "sensor", multiple=True
+                    ),
+                    vol.Required(CONF_COOKING_HIGHER_IS_WORSE): BOOLEAN_SELECTOR,
+                    vol.Required(CONF_COOKING_RISE): _number_selector(1, 500, 1, None),
+                    vol.Required(CONF_COOKING_WINDOW): DURATION_SELECTOR,
+                    vol.Required(CONF_COOKING_END_OFFSET): _number_selector(
+                        0, 200, 1, None
+                    ),
+                    vol.Optional(CONF_COOKING_TRIGGER): _entity_selector(
+                        COOKING_TRIGGER_DOMAINS
+                    ),
+                    vol.Required(CONF_COOKING_TRIGGER_THRESHOLD): _number_selector(
+                        0, None, "any", None
+                    ),
+                    vol.Required(CONF_COOKING_TRIGGER_RUN_ON): DURATION_SELECTOR,
+                    vol.Required(CONF_COOKING_LEVEL): _flow_selector(max_flow),
+                    vol.Required(CONF_COOKING_MAX_DURATION): DURATION_SELECTOR,
+                }
+            ),
+            vol.Required(SECTION_COMMON): _section(
+                {
+                    vol.Required(CONF_AUTO_BOOST_QUIET_CAP): _flow_selector(max_flow),
+                    vol.Required(CONF_AUTO_BOOST_COOLDOWN): DURATION_SELECTOR,
+                },
+                collapsed=True,
             ),
         }
     )
@@ -993,6 +1150,9 @@ MAX_FLOW_HINT_KEYS: Final = (
     CONF_FALLBACK_FLOW,
     CONF_QUIET_MAX_FLOW,
     CONF_BOOST_DEFAULT_LEVEL,
+    CONF_SHOWER_LEVEL,
+    CONF_COOKING_LEVEL,
+    CONF_AUTO_BOOST_QUIET_CAP,
 )
 
 
@@ -1095,10 +1255,10 @@ class BetterHomeVentilationOptionsFlow(OptionsFlow):
     async def async_step_boosts(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Change the manual boost defaults."""
+        """Change the manual boost defaults and the shower and cooking detection."""
         schema = _boosts_options_schema(self.config_entry.options[CONF_MAX_FLOW])
         return await self._async_options_form(
-            STEP_BOOSTS, schema, user_input, _validate_boosts
+            STEP_BOOSTS, schema, user_input, partial(_validate_boosts, self.hass)
         )
 
     async def async_step_safety(

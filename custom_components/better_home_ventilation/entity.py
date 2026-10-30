@@ -14,7 +14,13 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import Entity
 
-from .const import DOMAIN, ENTITY_KEYS, SAFETY_ENTITY_KEYS
+from .const import (
+    COOKING_ENTITY_KEY,
+    DOMAIN,
+    ENTITY_KEYS,
+    SAFETY_ENTITY_KEYS,
+    SHOWER_ENTITY_KEY,
+)
 from .controller import BetterVentilationConfigEntry, VentilationController
 from .engine.models import Decision
 
@@ -33,10 +39,12 @@ def async_remove_stale_entities(
     docs/spec/04-interface.md#entities ("Only what is configured"): entities of
     features that were removed (or of older versions) are removed from the
     entity registry during setup. The safety entities exist only with at
-    least one warning source, so they are removed with the last one.
+    least one warning source, so they are removed with the last one; the
+    detection entities exist only while their sensors are configured.
     """
+    controller = entry.runtime_data
     platforms = [ENTITY_KEYS]
-    if entry.runtime_data.has_warning_sources:
+    if controller.has_warning_sources:
         platforms.append(SAFETY_ENTITY_KEYS)
     expected = {
         unique_id(entry.entry_id, key)
@@ -44,6 +52,10 @@ def async_remove_stale_entities(
         for keys in keys_by_platform.values()
         for key in keys
     }
+    if controller.has_shower_detection:
+        expected.add(unique_id(entry.entry_id, SHOWER_ENTITY_KEY))
+    if controller.has_cooking_detection:
+        expected.add(unique_id(entry.entry_id, COOKING_ENTITY_KEY))
     registry = er.async_get(hass)
     for registry_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
         if registry_entry.unique_id not in expected:

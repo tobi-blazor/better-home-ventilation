@@ -15,7 +15,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime
 
-from .demand import compute_demand, update_dryness
+from .demand import compute_demand, quiet_limit_applies, update_dryness
+from .detector import DetectorUpdate, active_kinds, kind_deadline, update_detectors
 from .mapping import (
     adjacent_stage,
     current_native,
@@ -26,9 +27,11 @@ from .mapping import (
     same_native,
 )
 from .models import (
+    AUTO_BOOST_MODES,
     EVENT_MODE_CHANGED,
     OFF_MODES,
     ActuatorDomain,
+    AutoBoostKind,
     Boost,
     CommandRejected,
     ControllerState,
@@ -57,6 +60,7 @@ from .models import (
 from .modes import (
     SafetyUpdate,
     apply_command,
+    auto_boost_levels,
     detect_external_command,
     expire_timers,
     mode_target,
@@ -116,11 +120,21 @@ def evaluate(
     )
     demand = compute_demand(readings, dryness, state.profile, options, now)
 
-    # 3. Mode and target.
+    # 3. Detectors (shower, cooking; BHV-30, BHV-31), mode and target. Auto
+    #    boosts are capped while the profile applies the quiet limit (BHV-32).
+    detection = update_detectors(
+        state, readings.detectors, snapshot.states, options, now
+    )
+    state = detection.state
+    auto_levels = auto_boost_levels(
+        options,
+        active_kinds(state),
+        quiet=quiet_limit_applies(state.profile, options, now),
+    )
     mode = resolve_mode(state, options, fallback=demand.fallback)
     previous_mode = state.last_mode
     mode_changed = previous_mode is not None and mode != previous_mode
-    target_raw, reason = mode_target(mode, demand, state)
+    target_raw, reason = mode_target(mode, demand, state, auto_levels)
 
     # 4. Readiness (in every evaluation), then the gated write. No correction
     #    while control is disabled, also not for the safety off/on.
@@ -171,6 +185,7 @@ def evaluate(
             previous_mode,
             first_evaluation=first_evaluation,
             safety=safety,
+            detection=detection,
         )
         effects.append(
             FireEvent(
@@ -243,6 +258,8 @@ def evaluate(
             boost=manual.level
             if mode is Mode.BOOST and isinstance(manual, Boost)
             else None,
+            shower=auto_levels.get(AutoBoostKind.SHOWER),
+            cooking=auto_levels.get(AutoBoostKind.COOKING),
         ),
         inputs=summary,
         limits=demand.limits,
@@ -258,6 +275,7 @@ def evaluate(
         warnings=by_priority(state.safety.active.values()),
         overridden_incidents=state.safety.overridden,
         awaiting_restart=awaiting_restart,
+        auto_boosts=tuple(boost for _, boost in sorted(state.auto_boosts.items())),
     )
     return decision, state, effects
 
@@ -265,10 +283,17 @@ def evaluate(
 def _ends_at(
     state: ControllerState, mode: Mode, *, awaiting_restart: bool
 ) -> datetime | None:
-    """End of the current boost, pause or restart wait (``ends_at`` sensor)."""
+    """End of the current boost, pause, auto boost or restart wait (``ends_at``).
+
+    For an auto boost it is the latest deadline of its kind (its maximum end;
+    the detector may end it earlier).
+    """
     if mode is Mode.SAFETY_OFF:
         restart = state.safety.restart_pending
         return restart.deadline if awaiting_restart and restart is not None else None
+    for kind, auto_mode in AUTO_BOOST_MODES.items():
+        if mode is auto_mode:
+            return kind_deadline(state, kind)
     manual = state.manual
     return manual.until if manual is not None else None
 
@@ -546,11 +571,13 @@ def _trigger(
     *,
     first_evaluation: bool,
     safety: SafetyUpdate,
+    detection: DetectorUpdate,
 ) -> tuple[Trigger, Source | None]:
     """Trigger and source of a mode change.
 
     A new warning or the immediate restart after the last warning comes
-    first, then a pending command or timer, then startup and inputs.
+    first, then a pending command or timer, then startup, the detectors
+    (start of the new auto boost, end of the previous one) and inputs.
     """
     if mode is Mode.SAFETY_OFF and safety.new_blocking:
         return Trigger.WARNING, None
@@ -560,6 +587,12 @@ def _trigger(
         return state.pending_trigger, state.pending_source
     if first_evaluation:
         return Trigger.STARTUP, None
+    for kind, auto_mode in AUTO_BOOST_MODES.items():
+        if mode is auto_mode and kind in detection.started:
+            return Trigger.DETECTOR_START, None
+    for kind, end_trigger in detection.ended:
+        if previous is AUTO_BOOST_MODES[kind]:
+            return end_trigger, None
     if mode is Mode.FALLBACK:
         return Trigger.INPUTS_LOST, None
     if previous is Mode.FALLBACK:

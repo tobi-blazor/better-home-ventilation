@@ -245,6 +245,21 @@ Optional, in addition to the detectors. Active when the entity is `on` (binary_s
 
 Active auto boosts (kind, entity, baseline, started, deadline) and cooldowns are persisted. Sample buffers are not; after a restart they refill.
 
+### Details (decided 2026-10-30 for M11)
+
+- **Detector keys:** `shower:<entity>`, `cooking:<entity>` and `cooking_trigger:<entity>` (keys of `auto_boosts` and `detector_cooldown`). The baseline is stored in the sensor's own unit (not negated); the trigger entity has none.
+- **Samples:** every evaluation adds the current valid value of each detector sensor (time = the evaluation time). Detector sensors are debounced inputs like the room sensors, so every state change that survives the debounce and every periodic evaluation is a sample. Bathroom humidity sensors use the humidity plausibility range (0–100 %), cooking sensors accept any finite value (IAQ index, VOC in ppb, …). Invalid detector sensors are invalid inputs (`invalid_inputs`, problem `inputs_invalid`).
+- **Inputs lost:** counted from the first evaluation with an invalid value; a valid value in between starts the count again.
+- **Trigger entity:** active when it is `on` (`binary_sensor`, `switch`, `fan`, `light`, `input_boolean`) or, for any other entity, numeric `> cooking_trigger_threshold`; `unavailable`/`unknown` is inactive; the state is taken as it is (no stale check: an on/off entity does not report again while it does not change). It starts the cooking auto boost when it is active, not in cooldown, and was seen inactive since its last start (an entity that is active at startup without a running auto boost starts one). While it is active the deadline is `started + cooking_max_duration`; once inactive the deadline becomes `min(that, now + cooking_trigger_run_on)`, and active again restores it. The end of the run-on is trigger `detector_end`, the maximum duration `timeout`; both start the cooldown. After a `timeout` (or `resume()`) the trigger must turn inactive before it starts again.
+- **All modes:** the detectors run in every mode. An auto boost behind a higher priority (pause, user boost, safety off, `disabled`) stays active and takes over when that ends; while control is disabled it is shown (shadow run), nothing is written, and `resume()` does nothing. Switching control off ends the active auto boosts (cooldown); new ones may start afterwards and are shown only.
+- **Both kinds:** the configured levels are compared (before the quiet cap). The cap applies where the profile applies the quiet limit (`quiet` all day, `balanced`/`winter` in the night window, never in `air_quality`), independently of `quiet_humidity_override`: above the override the demand is not capped and wins through `max(…, demand)`.
+- **Contributions:** `shower` and `cooking` are the (capped) levels of the active kinds, in every mode; `None` while the kind is not active.
+- **`ends_at`:** in `shower`/`cooking` the latest deadline of the active auto boosts of that kind (the maximum end; the detector may end it earlier).
+- **Triggers:** a mode change caused by a detector has trigger `detector_start` (the new mode's kind started in this evaluation), or the end trigger of the previous mode's kind (`detector_end`, `timeout`, `inputs_lost`). A pending command or timer of the same evaluation comes first.
+- **Options changed:** auto boosts and cooldowns of detectors that are no longer configured are dropped.
+- SPEC-GAP: the "seen inactive" state of the trigger entity is runtime only. If a cooking auto boost of the trigger expires while Home Assistant is offline and the hob is still on at startup, a new cooking auto boost starts.
+- SPEC-GAP: values between two debounced evaluations (within `debounce`, default 10 s) are not samples; for humidity and IAQ rises over minutes this does not matter.
+
 ## Reminders (BHV-24)
 
 One rule for all off states (`off`, `safety_off`):
@@ -258,7 +273,7 @@ One rule for all off states (`off`, `safety_off`):
 
 ## Persistence
 
-- Storage: `homeassistant.helpers.storage.Store`, version 1, key `better_home_ventilation.<entry_id>`. Minor version 1 = 0.1, minor version 2 = 0.2 (safety, `safety_restore`, `off_since`, `last_reminder`); the minor bump is backwards compatible, so 0.1 still reads the data. Migration 1.1 → 1.2 sets `off_since` of a running pause to its start (`serialize.migrate_store_data`, called by the glue's `Store._async_migrate_func`).
+- Storage: `homeassistant.helpers.storage.Store`, version 1, key `better_home_ventilation.<entry_id>`. Minor version 1 = 0.1, minor version 2 = 0.2 (safety, `safety_restore`, `off_since`, `last_reminder`), minor version 3 = 0.3 (`auto_boosts`, `detector_cooldown`; migration 1.2 → 1.3 adds them empty); the minor bumps are backwards compatible, so older versions still read the data. Migration 1.1 → 1.2 sets `off_since` of a running pause to its start (`serialize.migrate_store_data`, called by the glue's `Store._async_migrate_func`).
 - Content: the full `ControllerState` except `last_mode` derivations; datetimes as ISO strings in UTC.
 - Saved with `async_delay_save(…, 1)` after every state change.
 - Removed in `async_remove_entry`.
@@ -278,7 +293,7 @@ On every change of the resolved mode an event `better_home_ventilation_mode_chan
 entry_id, device_id, name, from_mode, to_mode, reason, setpoint, trigger, source, warning (headline or None), ends_at
 ```
 
-`ends_at` is the end of the new boost or pause as an ISO 8601 string, `None` for an indefinite pause and every other mode (decided 2026-10-16 for M5: the logbook shows "until 18:30" from the event alone, because the `ends_at` sensor may have changed again by the time the logbook is read).
+`ends_at` is the end of the new boost, pause or auto boost (its latest deadline, decided 2026-10-30 for M11) as an ISO 8601 string, `None` for an indefinite pause and every other mode (decided 2026-10-16 for M5: the logbook shows "until 18:30" from the event alone, because the `ends_at` sensor may have changed again by the time the logbook is read).
 
 `trigger` values: `startup`, `command`, `timeout`, `timeout_while_offline`, `warning`, `warning_ended`, `override`, `detector_start`, `detector_end`, `inputs_lost`, `inputs_restored`, `control_switch`.
 
