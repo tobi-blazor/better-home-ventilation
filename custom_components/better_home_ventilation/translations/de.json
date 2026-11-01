@@ -408,7 +408,7 @@
           "notify_reminders": "Erinnerung mit Fortsetzen, solange das Gerät aus bleibt (der Feuchteschutz ist nicht aktiv), alle 24 Stunden wiederholt.",
           "notify_problems": "Eine Benachrichtigung, wenn ein Problem länger als die Verzögerung für Probleme (Einstellungen unter Regelung) besteht; sie wird entfernt, wenn es behoben ist.",
           "pause_reminder_after": "Erste Erinnerung, nachdem eine Pause bis zum Fortsetzen so lange gedauert hat (mindestens 1 Minute).",
-          "off_notice_after": "Erste Erinnerung, nachdem eine befristete Pause oder eine Sicherheitsabschaltung so lange gedauert hat (mindestens 1 Minute)."
+          "off_notice_after": "Erste Erinnerung, nachdem eine befristete Pause oder eine Sicherheitsabschaltung so lange gedauert hat oder das Gerät bei ausgeschalteter Regelung so lange stillsteht (mindestens 1 Minute)."
         }
       }
     }

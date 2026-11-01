@@ -25,9 +25,12 @@ from pytest_homeassistant_custom_component.common import (
 
 from custom_components.better_home_ventilation.const import DOMAIN
 from custom_components.better_home_ventilation.engine.models import (
+    ControlSwitchCommand,
     Mode,
     NotifyKind,
+    PauseCommand,
     ProblemKey,
+    Source,
 )
 from custom_components.better_home_ventilation.notifications import (
     Action,
@@ -37,7 +40,7 @@ from custom_components.better_home_ventilation.notifications import (
     service_name,
 )
 
-from .common import CONTROL_MODE, FAN, NUMBER_FLOW, MockUnit, advance
+from .common import CONTROL_MODE, FAN, NUMBER_FLOW, STANDBY_SWITCH, MockUnit, advance
 from .test_controller import controller_of, problem_keys, readiness, setup_entry
 from .test_safety import SMOKE, mode_of, set_state, source, turn
 
@@ -311,6 +314,73 @@ def test_q14_format_with_warning_text() -> None:
     assert message.urgent
     empty = Notify(kind=NotifyKind.SAFETY_DISABLED)
     assert format_notify(empty, "abcdefghij", texts, dt_util.now()) is None
+
+
+REMINDER_TEXTS = {
+    "en": ("Ventilation off since", "Moisture protection is inactive.", "Resume"),
+    "de": ("Lüftung aus seit", "Der Feuchteschutz ist nicht aktiv.", "Fortsetzen"),
+}
+
+
+@pytest.mark.parametrize("language", ["en", "de"])
+@pytest.mark.usefixtures("entities")
+async def test_q15_reminder_while_control_is_off_and_unit_stopped(
+    hass: HomeAssistant,
+    unit: MockUnit,
+    freezer: FrozenDateTimeFactory,
+    phone: list[ServiceCall],
+    language: str,
+) -> None:
+    """Q15: a pause stopped the unit, then control off: reminded after 24 h.
+
+    The usual reminder with Resume (BHV-24); cleared when control is on.
+    """
+    entry = await setup_entry(hass, notify_services=[PHONE], off_entity=STANDBY_SWITCH)
+    await advance(hass, freezer, 61)
+    hass.config.language = language
+    short = entry8(entry)
+    controller = controller_of(entry)
+    await controller.async_command(PauseCommand(source=Source.SERVICE))
+    await hass.async_block_till_done()
+    assert unit.calls_for("switch", "turn_on")  # the standby switch: stopped
+    off_since = dt_util.now()
+    await controller.async_command(
+        ControlSwitchCommand(source=Source.SERVICE, enabled=False)
+    )
+    await hass.async_block_till_done()
+    assert mode_of(hass) == "disabled"
+
+    def reminders() -> list[ServiceCall]:
+        # The sensors go stale meanwhile: problem notifications are sent too.
+        tag = f"bhv_{short}_reminder"
+        return [call for call in phone if call.data["data"]["tag"] == tag]
+
+    await advance(hass, freezer, 8 * 3600)
+    assert reminders() == []
+    await advance(hass, freezer, 16 * 3600)
+
+    [reminder] = reminders()
+    title, message, resume = REMINDER_TEXTS[language]
+    assert reminder.data == {
+        "title": f"{title} {format_time(off_since, dt_util.now())}",
+        "message": message,
+        "data": {
+            "tag": f"bhv_{short}_reminder",
+            "actions": [{"action": f"BHV_{short}_RESUME", "title": resume}],
+        },
+    }
+
+    await controller.async_command(
+        ControlSwitchCommand(source=Source.SERVICE, enabled=True)
+    )
+    await hass.async_block_till_done()
+
+    assert mode_of(hass) == "fallback"  # the CO₂ sensor went stale meanwhile
+    assert unit.calls_for("switch", "turn_off")  # switched on again
+    assert reminders()[-1].data == {
+        "message": "clear_notification",
+        "data": {"tag": f"bhv_{short}_reminder"},
+    }
 
 
 @pytest.mark.usefixtures("entities")

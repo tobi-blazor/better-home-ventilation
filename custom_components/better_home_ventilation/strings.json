@@ -408,7 +408,7 @@
           "notify_reminders": "Reminder with Resume while the unit stays off (moisture protection is inactive), repeated every 24 hours.",
           "notify_problems": "A notification when a problem persists longer than the problem delay (Control settings, Advanced); cleared when it is resolved.",
           "pause_reminder_after": "First reminder after a pause until resumed has lasted this long (at least 1 minute).",
-          "off_notice_after": "First reminder after a timed pause or a safety shutdown has lasted this long (at least 1 minute)."
+          "off_notice_after": "First reminder after a timed pause or a safety shutdown has lasted this long, or the unit has stood still this long while the Control switch is off (at least 1 minute)."
         }
       }
     }

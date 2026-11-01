@@ -14,6 +14,7 @@ from typing import Final
 
 from .demand import DemandResult
 from .detector import active_kinds, end_auto_boosts
+from .mapping import current_native, off_native, same_native
 from .models import (
     AUTO_BOOST_MODES,
     OFF_MODES,
@@ -364,6 +365,22 @@ def unit_running(options: Options, snapshot: Snapshot) -> bool | None:
     return state != stopped
 
 
+def unit_stopped(options: Options, snapshot: Snapshot) -> bool | None:
+    """Return whether the unit stands still, for the reminders while disabled (Q15).
+
+    With an off actuator: it is in the stopped state. Without one: the
+    actuator shows its lowest value, the value an off state writes (a ``fan``
+    is off). None while the entity is unavailable/unknown or has no value.
+    """
+    if options.off_entity is not None:
+        running = unit_running(options, snapshot)
+        return None if running is None else not running
+    native = current_native(options, snapshot.actuator)
+    if native is None:
+        return None
+    return same_native(native, off_native(options, snapshot.actuator))
+
+
 def _foreign_change(options: Options, snapshot: Snapshot) -> bool:
     if options.off_entity is not None:
         return (
@@ -591,6 +608,7 @@ def update_reminders(
     *,
     now: datetime,
     in_grace: bool,
+    stopped: bool | None = None,
 ) -> tuple[ControllerState, list[Effect], datetime | None]:
     """Track ``off_since`` and send reminders for long off states (BHV-24).
 
@@ -599,8 +617,16 @@ def update_reminders(
     lasts. Nothing is sent during the startup grace. When the off state ends,
     a sent reminder is cleared. Returns the new state, the effects and the
     time of the next reminder (None outside off states).
+
+    In ``disabled`` a stopped unit (:func:`unit_stopped`) counts as an off
+    state (owner decision on Q15); while ``stopped`` is unknown (None) the
+    previous status is kept.
     """
-    if mode not in OFF_MODES:
+    off = mode in OFF_MODES or (
+        mode is Mode.DISABLED
+        and (stopped if stopped is not None else state.off_since is not None)
+    )
+    if not off:
         effects: list[Effect] = []
         if state.last_reminder is not None:
             effects.append(ClearNotification(tag=NotificationTag.REMINDER))

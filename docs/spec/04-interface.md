@@ -157,7 +157,7 @@ Sent via the configured `notify.mobile_app_*` services (`notify.<service>` with 
 | safety_disabled | "Warning: <headline>" / "<recommended actions, otherwise description, as for safety> Control is off, so the integration does not switch the ventilation off." Without details: "<source name> reports a warning. Control is off, so the integration does not switch the ventilation off." Only while control is disabled and `safety_when_disabled` is off ([03-modes.md](03-modes.md#flow), Q14) | `OK` → nothing | `bhv_<entry8>_safety` |
 | restart | "Warning lifted" / "Restart ventilation? Restarts automatically at <time>." | `RESTART` → `resume()`, `KEEP_OFF` → `keep_off()` | `bhv_<entry8>_safety` (replaces) |
 | restarted | "Ventilation restarted" / "The warning has ended; the ventilation runs again." | – | `bhv_<entry8>_safety` |
-| reminder | "Ventilation off since <time>" / "Moisture protection is inactive." | `RESUME` → `resume()` | `bhv_<entry8>_reminder` |
+| reminder | "Ventilation off since <time>" / "Moisture protection is inactive." Also for a stopped unit while control is disabled ([03-modes.md](03-modes.md#reminders-bhv-24), Q15) | `RESUME` → `resume()` | `bhv_<entry8>_reminder` |
 | problem | "Ventilation problem" / problem text (`common.notify_problem_<key>`, with the friendly names of the problem's entities) | – | `bhv_<entry8>_problem_<key>` |
 
 `<entry8>` = first 8 characters of the entry id. Action ids are `BHV_<entry8>_<ACTION>`. `<time>` is `HH:MM` in local time, with the date if it is not today.

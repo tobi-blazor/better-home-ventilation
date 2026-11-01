@@ -264,14 +264,15 @@ Active auto boosts (kind, entity, baseline, started, deadline) and cooldowns are
 
 ## Reminders (BHV-24)
 
-One rule for all off states (`off`, `safety_off`):
+One rule for all off states (`off`, `safety_off`) and, since the owner decision on [Q15](README.md#open-questions) (2026-10-30), for a **stopped unit while control is disabled**:
 
-- `off_since` is set when an off mode starts and cleared when it ends.
-- First reminder: after `pause_reminder_after` for an indefinite `Pause`, otherwise after `off_notice_after`.
+- **Stopped while disabled:** in mode `disabled` the unit counts as off while it is stopped: with an off actuator, the off actuator is in the stopped state; without one, the actuator shows its lowest value (`actuator_min`, 0 %, the lowest stage; a `fan` is off), i.e. the value an off state writes ([02-control.md](02-control.md#off-and-on)). Like the off method `minimum`, a unit that keeps running at its lowest value counts as stopped; such units need an off actuator anyway. While the entity is `unavailable`/`unknown` (or has no value) the previous status is kept: a running count goes on, none starts.
+- `off_since` is set when an off mode (or a stopped unit while disabled) starts and cleared when it ends: when the unit runs again (seen in the entity state, e.g. started at the unit) or control is switched on (the mode leaves `disabled`).
+- First reminder: after `pause_reminder_after` for an indefinite `Pause`, otherwise after `off_notice_after`. While disabled it is always `off_notice_after`: switching control off ends a pause, so there is no indefinite pause any more, and the threshold is the one of the current mode (below). A pause followed by switching control off keeps `off_since`, so the first reminder comes `off_notice_after` after the pause started (or 24 h after a reminder sent during the pause).
 - Further reminders every 24 h while the off state lasts.
 - Reminder notification has the action "Resume". Timed pauses that end before the threshold send nothing.
-- `off_since` spans a change between the two off states (a pause followed by a safety shutdown is one off state); the threshold is the one of the current mode. No reminder is sent during the startup grace (a due one follows when it ends). When the off state ends, a sent reminder is cleared (decided 2026-10-29).
-- SPEC-GAP: a unit that stays stopped while control is disabled (e.g. a pause stopped it, then the control switch was turned off) is in mode `disabled`, not in an off state, so it gets no reminder although moisture protection is inactive.
+- `off_since` spans a change between the off states (a pause followed by a safety shutdown, or by switching control off while the unit stays stopped, is one off state); the threshold is the one of the current mode. No reminder is sent during the startup grace (a due one follows when it ends). When the off state ends, a sent reminder is cleared (decided 2026-10-29).
+- The reminder is the same in every case. SPEC-GAP: while control is disabled `resume()` has nothing to end, so "Resume" does nothing there; the unit runs again when control is switched on (a unit stopped by the integration is switched on) or when it is started at the unit.
 
 ## Persistence
 

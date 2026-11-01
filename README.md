@@ -334,7 +334,7 @@ The warning sources themselves are added on the integration page ([below](#warni
 | `notify_reminders` | Reminders | on | Reminder with **Resume** while the unit stays off, repeated every 24 hours. |
 | `notify_problems` | Problem notifications | on | A notification when a problem persists longer than the problem delay; cleared when it is resolved. |
 | `pause_reminder_after` | Reminder for an indefinite pause after | 8 h | First reminder after a pause until resumed has lasted this long. At least 1 minute. |
-| `off_notice_after` | Reminder for other off states after | 24 h | First reminder after a timed pause or a safety shutdown has lasted this long. At least 1 minute. |
+| `off_notice_after` | Reminder for other off states after | 24 h | First reminder after a timed pause or a safety shutdown has lasted this long, or the unit has stood still this long while the **Control** switch is off. At least 1 minute. |
 
 The problem delay is in **Control** (section **Advanced**), because it also sets when the problem sensor turns on.
 
@@ -427,7 +427,7 @@ The integration sends notifications to the phones selected in **Notifications** 
 | **Warning: <headline>** with the same text and "Control is off, so the integration does not switch the ventilation off." | a warning while the **Control** switch is off and **Safety while control is off** is disabled; nothing is switched. Removed when the warning ends | **OK** (nothing) |
 | **Warning lifted** – "Restart ventilation? Restarts automatically at 14:30." | the last warning ended; replaces the safety notification | **Restart now** (resume), **Keep off** (the unit stays off until resumed) |
 | **Ventilation restarted** | nobody answered and the restart confirmation timeout passed | – |
-| **Ventilation off since 08:15** – "Moisture protection is inactive." | the unit has been off for the reminder time (8 h for a pause until resumed, 24 h otherwise), then every 24 hours | **Resume** |
+| **Ventilation off since 08:15** – "Moisture protection is inactive." | the unit has been off for the reminder time (8 h for a pause until resumed, 24 h otherwise), then every 24 hours. Also while the **Control** switch is off and the unit stands still (the off actuator is stopped, or without one the actuator is at its lowest value): after 24 h, counted from the start of a pause that stopped it. Removed when the unit runs again or control is switched on | **Resume** (while control is off it does nothing: switch **Control** on, or start the unit) |
 | **Ventilation problem** with the problem text | a problem persists longer than the problem delay (one notification per kind of problem) | – |
 
 How it works:

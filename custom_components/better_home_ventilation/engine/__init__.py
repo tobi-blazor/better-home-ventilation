@@ -67,6 +67,7 @@ from .modes import (
     resolve_mode,
     safety_notifications,
     unit_running,
+    unit_stopped,
     update_reminders,
     update_safety,
     wake_times,
@@ -174,7 +175,12 @@ def evaluate(
         state, safety, mode=mode, previous_mode=previous_mode
     )
     state, reminders, reminder_at = update_reminders(
-        state, mode, options, now=now, in_grace=in_grace
+        state,
+        mode,
+        options,
+        now=now,
+        in_grace=in_grace,
+        stopped=unit_stopped(options, snapshot),
     )
     effects.extend((*notices, *reminders))
 

@@ -542,10 +542,11 @@ def test_e59_q14_control_switched_off_during_safety_off_replaces_notice() -> Non
     sim.command(ControlSwitchCommand(source=Source.BUTTON, enabled=False))
     decision, effects = sim.run()
     assert decision.mode is Mode.DISABLED
-    assert effects == [
-        Notify(kind=NotifyKind.SAFETY_DISABLED, warnings=decision.warnings),
-        *of_type(effects, FireEvent),
+    assert of_type(effects, Notify) == [
+        Notify(kind=NotifyKind.SAFETY_DISABLED, warnings=decision.warnings)
     ]
+    assert not of_type(effects, ClearNotification)
+    assert not of_type(effects, TurnOn)
     # switched on again during the warning: safety_off and a notification
     sim.command(ControlSwitchCommand(source=Source.BUTTON, enabled=True))
     decision, effects = sim.run()
