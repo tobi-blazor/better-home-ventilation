@@ -184,6 +184,9 @@ class NotifyKind(StrEnum):
     """Kind of a notification (04-interface.md#notifications)."""
 
     SAFETY = "safety"
+    #: A warning while control is disabled and ``safety_when_disabled`` is
+    #: off: the integration does not switch the unit off (Q14).
+    SAFETY_DISABLED = "safety_disabled"
     RESTART = "restart"
     RESTARTED = "restarted"
     REMINDER = "reminder"
@@ -200,6 +203,7 @@ class NotificationTag(StrEnum):
 #: ``safety``).
 NOTIFY_TAGS: Final = {
     NotifyKind.SAFETY: NotificationTag.SAFETY,
+    NotifyKind.SAFETY_DISABLED: NotificationTag.SAFETY,
     NotifyKind.RESTART: NotificationTag.SAFETY,
     NotifyKind.RESTARTED: NotificationTag.SAFETY,
     NotifyKind.REMINDER: NotificationTag.REMINDER,
@@ -810,6 +814,10 @@ class ControllerState:
     #: The restart wait ended by its timeout; the next evaluation sends
     #: "restarted".
     restarted_pending: bool = False
+    #: The notification ``safety_disabled`` is shown: a warning while control
+    #: is disabled without ``safety_when_disabled`` (Q14). After a load it is
+    #: derived from the loaded warnings.
+    safety_disabled_notified: bool = False
 
 
 # --- Decision ----------------------------------------------------------------
@@ -961,6 +969,8 @@ class Notify:
 
     - ``safety``: ``warnings`` are the blocking warnings, most severe and
       newest first (the title uses the first one).
+    - ``safety_disabled``: as ``safety``, while control is disabled and the
+      integration does not switch the unit off (Q14).
     - ``restart``: ``restart_at`` is the deadline of the restart wait.
     - ``restarted``: no data.
     - ``reminder``: ``off_since`` is the start of the off state.

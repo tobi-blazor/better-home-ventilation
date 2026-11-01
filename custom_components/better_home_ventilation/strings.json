@@ -388,7 +388,7 @@
         },
         "data_description": {
           "restart_confirm_timeout": "When the last warning ends, the unit stays off and asks on the phones whether to restart. Without an answer it restarts after this time. 0 restarts at once.",
-          "safety_when_disabled": "Also switch the unit off for a warning while the Control switch is off, and back to its previous state after the restart. When off, warnings are only shown on the entities."
+          "safety_when_disabled": "Also switch the unit off for a warning while the Control switch is off, and back to its previous state after the restart. When off, a warning is only shown on the entities and notified; the unit is not switched."
         }
       },
       "notifications": {
@@ -404,7 +404,7 @@
         },
         "data_description": {
           "notify_services": "The notify.mobile_app services of the Companion apps that get the notifications. A service that no longer exists is not selected here and is removed on saving.",
-          "notify_safety": "Safety shutdown with Keep ventilating, the restart question with Restart now and Keep off, and the restart notice.",
+          "notify_safety": "Safety shutdown with Keep ventilating, the restart question with Restart now and Keep off, the restart notice, and a warning while the Control switch is off.",
           "notify_reminders": "Reminder with Resume while the unit stays off (moisture protection is inactive), repeated every 24 hours.",
           "notify_problems": "A notification when a problem persists longer than the problem delay (Control settings, Advanced); cleared when it is resolved.",
           "pause_reminder_after": "First reminder after a pause until resumed has lasted this long (at least 1 minute).",
@@ -804,6 +804,9 @@
     "provider_none": "none (on/off only, filters do not apply)",
     "notify_safety_title": "Ventilation off: {headline}",
     "notify_safety_message_no_details": "{source} reports a warning. The ventilation was switched off.",
+    "notify_safety_disabled_title": "Warning: {headline}",
+    "notify_safety_disabled_message": "{text} Control is off, so the integration does not switch the ventilation off.",
+    "notify_safety_disabled_message_no_details": "{source} reports a warning. Control is off, so the integration does not switch the ventilation off.",
     "notify_restart_title": "Warning lifted",
     "notify_restart_message": "Restart ventilation? Restarts automatically at {time}.",
     "notify_restarted_title": "Ventilation restarted",

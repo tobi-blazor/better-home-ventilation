@@ -475,23 +475,67 @@ def test_e31_bhv44_safety_when_control_disabled() -> None:
     assert sim.run()[1] == []
 
 
-def test_safety_when_disabled_off() -> None:
-    """Without ``safety_when_disabled`` a disabled control stays hands-off."""
+def test_e59_q14_warning_while_disabled_notifies_without_switching() -> None:
+    """E59: control disabled, ``safety_when_disabled`` off, warning -> notified.
+
+    Owner decision on Q14 (2026-10-30): the notification ``safety_disabled``
+    is sent (nothing is switched), again for a new warning, and cleared when
+    the warning ends.
+    """
     sim = _sim(safety_when_disabled=False)
     sim.command(ControlSwitchCommand(source=Source.BUTTON, enabled=False))
     sim.run()
     sim.warn(SMOKE)
     decision, effects = sim.run()
     assert decision.mode is Mode.DISABLED
-    assert effects == []
     assert len(decision.warnings) == 1
+    [smoke] = decision.warnings
+    assert effects == [Notify(kind=NotifyKind.SAFETY_DISABLED, warnings=(smoke,))]
+    assert Notify(kind=NotifyKind.SAFETY_DISABLED).tag is NotificationTag.SAFETY
+
+    # still active: not sent again, nothing switched
+    sim.advance(minutes=5)
+    assert sim.run()[1] == []
+
+    # a new warning is notified, the newest first
+    sim.warn(NINA_1, FIRE)
+    decision, effects = sim.run()
+    notice = _notify(effects, NotifyKind.SAFETY_DISABLED)
+    assert [w.headline for w in notice.warnings] == [FIRE.headline, None]
+    assert not of_type(effects, TurnOff)
+    assert not writes(effects)
+
+    # one warning ends: nothing; the last one ends: cleared, no restart wait
     sim.clear(SMOKE)
-    sim.run()
+    assert sim.run()[1] == []
+    sim.clear(NINA_1)
+    decision, effects = sim.run()
+    assert decision.mode is Mode.DISABLED
+    assert effects == [CLEAR_SAFETY]
     assert sim.state.safety.restart_pending is None
+    sim.advance(minutes=5)
+    assert sim.run()[1] == []
 
 
-def test_control_switched_off_during_safety_off_clears_notification() -> None:
-    """Leaving safety_off by the control switch clears the safety notification."""
+def test_e59_q14_override_and_removed_override_while_disabled() -> None:
+    """E59: an override clears the notice; removing it notifies again."""
+    sim = _sim(safety_when_disabled=False)
+    sim.command(ControlSwitchCommand(source=Source.BUTTON, enabled=False))
+    sim.run()
+    sim.warn(SMOKE)
+    sim.run()
+    sim.command(OverrideSafetyCommand(source=Source.NOTIFICATION))
+    decision, effects = sim.run()
+    assert decision.mode is Mode.DISABLED
+    assert effects == [CLEAR_SAFETY]
+    sim.command(RemoveOverrideCommand(source=Source.SERVICE))
+    decision, effects = sim.run()
+    assert _notify(effects, NotifyKind.SAFETY_DISABLED)
+    assert not of_type(effects, TurnOff)
+
+
+def test_e59_q14_control_switched_off_during_safety_off_replaces_notice() -> None:
+    """E59: control off during a warning replaces ``safety``; on shuts down again."""
     sim = _sim(safety_when_disabled=False)
     sim.warn(SMOKE)
     sim.run()
@@ -499,7 +543,7 @@ def test_control_switched_off_during_safety_off_clears_notification() -> None:
     decision, effects = sim.run()
     assert decision.mode is Mode.DISABLED
     assert effects == [
-        CLEAR_SAFETY,
+        Notify(kind=NotifyKind.SAFETY_DISABLED, warnings=decision.warnings),
         *of_type(effects, FireEvent),
     ]
     # switched on again during the warning: safety_off and a notification
@@ -507,7 +551,51 @@ def test_control_switched_off_during_safety_off_clears_notification() -> None:
     decision, effects = sim.run()
     assert decision.mode is Mode.SAFETY_OFF
     assert _notify(effects, NotifyKind.SAFETY)
+    assert CLEAR_SAFETY not in effects
     assert _event(effects)["trigger"] == "control_switch"
+    # and off again: the notice replaces it once more
+    sim.command(ControlSwitchCommand(source=Source.BUTTON, enabled=False))
+    _, effects = sim.run()
+    assert _notify(effects, NotifyKind.SAFETY_DISABLED)
+
+
+def test_control_switched_off_during_restart_wait_clears_notification() -> None:
+    """Leaving safety_off by the control switch without a warning clears it."""
+    sim = _sim(safety_when_disabled=False)
+    sim.warn(SMOKE)
+    sim.run()
+    sim.clear(SMOKE)
+    sim.run()
+    assert sim.state.safety.restart_pending is not None
+    sim.command(ControlSwitchCommand(source=Source.BUTTON, enabled=False))
+    decision, effects = sim.run()
+    assert decision.mode is Mode.DISABLED
+    assert CLEAR_SAFETY in effects
+    assert not of_type(effects, Notify)
+
+
+def test_e59_q14_notice_survives_a_restart() -> None:
+    """E59: after a restart the loaded warning is not notified again."""
+    sim = _sim(safety_when_disabled=False)
+    sim.command(ControlSwitchCommand(source=Source.BUTTON, enabled=False))
+    sim.run()
+    sim.warn(SMOKE)
+    sim.run()
+    restarted = _reload(sim)
+    decision, effects = restarted.run()
+    assert decision.mode is Mode.DISABLED
+    assert not of_type(effects, Notify)
+    restarted.clear(SMOKE)
+    restarted.advance(minutes=5)  # end of the startup grace
+    _, effects = restarted.run()
+    assert CLEAR_SAFETY in effects
+
+    # without a warning before the restart nothing is cleared
+    quiet = _sim(safety_when_disabled=False)
+    quiet.command(ControlSwitchCommand(source=Source.BUTTON, enabled=False))
+    quiet.run()
+    _, effects = _reload(quiet).run()
+    assert CLEAR_SAFETY not in effects
 
 
 def test_keep_off_while_disabled_does_not_restore() -> None:

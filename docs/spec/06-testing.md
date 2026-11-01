@@ -93,6 +93,7 @@ Time is always injected (`now` parameter in the engine, `freezer` fixture in com
 | E56 | shaping holds (inside dead band), readiness condition becomes unmet with `auto_correct` | CorrectReadiness effect without WriteFlow; after it is met again the next write uses bypass. Control disabled or startup grace: no CorrectReadiness |
 | E57 | `fan` actuator without off actuator, turned off externally, then on externally | mode `off` (pause, source `external`), then `automatic` |
 | E58 | safety warning while a readiness condition is not met: without `auto_correct`; with `auto_correct` and a unit that ignores the correction ([Q13](README.md#open-questions)) | `safety_off`, setpoint 0, no TurnOff, `write_blocked_by` `not_ready`, notification `safety`; problem `not_ready` at once / after 3 correction attempts, problem sensor after `problem_delay`; TurnOff in the evaluation in which the condition is met |
+| E59 | control disabled, `safety_when_disabled` off: warning on, a second warning, both end; override and removed override; control switched off during `safety_off` and on again; restart during the warning ([Q14](README.md#open-questions)) | mode `disabled`, nothing switched; notification `safety_disabled` once per new warning (newest first), cleared when the last ends, no restart wait; cleared by the override, sent again when it is removed; replaces `safety` (no clear), `safety` again when control is on; not repeated after the restart, cleared when the warning ends after it |
 
 ## Warning text fixture
 

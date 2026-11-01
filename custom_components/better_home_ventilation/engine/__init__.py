@@ -92,6 +92,14 @@ def evaluate(
     grace_until = snapshot.started_at + options.startup_grace
     in_grace = now < grace_until
     first_evaluation = not state.started
+    if first_evaluation:
+        # After a load the notification of a warning while control is disabled
+        # is still on the phones if the loaded warnings blocked (Q14).
+        state = replace(
+            state,
+            safety_disabled_notified=state.last_mode is Mode.DISABLED
+            and bool(state.safety.blocking),
+        )
 
     # 1. Timers, external stop/start and the warning sources change the
     #    controller state first.

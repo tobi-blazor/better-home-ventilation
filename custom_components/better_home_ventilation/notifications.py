@@ -99,6 +99,9 @@ class Action(StrEnum):
 #: Actions of each notification kind, in the order they are shown.
 KIND_ACTIONS: Final[Mapping[NotifyKind, tuple[Action, ...]]] = {
     NotifyKind.SAFETY: (Action.KEEP_VENTILATING, Action.OK),
+    # The integration does not act while control is disabled: an override
+    # would change nothing now (Q14), so only OK.
+    NotifyKind.SAFETY_DISABLED: (Action.OK,),
     NotifyKind.RESTART: (Action.RESTART, Action.KEEP_OFF),
     NotifyKind.RESTARTED: (),
     NotifyKind.REMINDER: (Action.RESUME,),
@@ -107,6 +110,7 @@ KIND_ACTIONS: Final[Mapping[NotifyKind, tuple[Action, ...]]] = {
 #: Option that switches each notification kind on or off.
 KIND_OPTION: Final[Mapping[NotifyKind, str]] = {
     NotifyKind.SAFETY: CONF_NOTIFY_SAFETY,
+    NotifyKind.SAFETY_DISABLED: CONF_NOTIFY_SAFETY,
     NotifyKind.RESTART: CONF_NOTIFY_SAFETY,
     NotifyKind.RESTARTED: CONF_NOTIFY_SAFETY,
     NotifyKind.REMINDER: CONF_NOTIFY_REMINDERS,
@@ -116,7 +120,9 @@ TAG_OPTION: Final[Mapping[NotificationTag, str]] = {
     NotificationTag.REMINDER: CONF_NOTIFY_REMINDERS,
 }
 #: Kinds sent with the time-sensitive / high priority data.
-URGENT_KINDS: Final = frozenset({NotifyKind.SAFETY, NotifyKind.RESTART})
+URGENT_KINDS: Final = frozenset(
+    {NotifyKind.SAFETY, NotifyKind.SAFETY_DISABLED, NotifyKind.RESTART}
+)
 
 #: Priority data of safety notifications: iOS interruption level, Android
 #: priority and time to live (the companion app docs; the same keys as the
@@ -225,8 +231,8 @@ def format_notify(
 ) -> Message | None:
     """Format a ``Notify`` effect (04-interface.md#notifications).
 
-    Returns None for a ``safety`` notification without warnings (the engine
-    always sends at least one).
+    Returns None for a ``safety`` or ``safety_disabled`` notification without
+    warnings (the engine always sends at least one).
     """
     kind = effect.kind
     actions = tuple(
@@ -243,6 +249,21 @@ def format_notify(
                 texts, "notify_safety_message_no_details", source=warning.source_name
             )
             title = _text(texts, "notify_safety_title", headline=warning_title(warning))
+        case NotifyKind.SAFETY_DISABLED:
+            if not effect.warnings:
+                return None
+            warning = effect.warnings[0]
+            if (text := notification_text(warning)) is not None:
+                message = _text(texts, "notify_safety_disabled_message", text=text)
+            else:
+                message = _text(
+                    texts,
+                    "notify_safety_disabled_message_no_details",
+                    source=warning.source_name,
+                )
+            title = _text(
+                texts, "notify_safety_disabled_title", headline=warning_title(warning)
+            )
         case NotifyKind.RESTART:
             title = _text(texts, "notify_restart_title")
             restart_at = effect.restart_at or now

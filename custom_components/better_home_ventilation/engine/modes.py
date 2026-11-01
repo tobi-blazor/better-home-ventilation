@@ -518,14 +518,21 @@ def safety_notifications(
       restart wait (or at once with ``restart_confirm_timeout`` 0).
     - otherwise leaving ``safety_off`` (override, resume, keep off, control
       switch) clears the safety notification.
+    - ``safety_disabled`` while control is disabled without
+      ``safety_when_disabled`` and a warning blocks (owner decision on Q14):
+      sent when the first warning blocks (also when control is switched off
+      during ``safety_off``, replacing ``safety``, or an override is removed)
+      and again for a new warning; cleared when no warning blocks any more.
+      Nothing is switched.
     """
     effects: list[Effect] = []
     was_safety = previous_mode is Mode.SAFETY_OFF
     restarted = state.restarted_pending or update.ended_without_wait
+    blocking = by_priority(state.safety.blocking.values())
+    older = tuple(w for w in blocking if w not in update.new_blocking)
+    notified_disabled = False
     if mode is Mode.SAFETY_OFF:
-        blocking = by_priority(state.safety.blocking.values())
         if blocking and (update.new_blocking or not was_safety):
-            older = tuple(w for w in blocking if w not in update.new_blocking)
             effects.append(
                 Notify(kind=NotifyKind.SAFETY, warnings=(*update.new_blocking, *older))
             )
@@ -536,12 +543,29 @@ def safety_notifications(
                     restart_at=state.safety.restart_pending.deadline,
                 )
             )
+    elif mode is Mode.DISABLED and blocking:
+        # A blocking warning in ``disabled`` means safety_when_disabled is off.
+        if update.new_blocking or not state.safety_disabled_notified:
+            effects.append(
+                Notify(
+                    kind=NotifyKind.SAFETY_DISABLED,
+                    warnings=(*update.new_blocking, *older),
+                )
+            )
+        notified_disabled = True
     elif was_safety:
         if restarted:
             effects.append(Notify(kind=NotifyKind.RESTARTED))
         else:
             effects.append(ClearNotification(tag=NotificationTag.SAFETY))
-    return replace(state, restarted_pending=False), effects
+    elif state.safety_disabled_notified:
+        effects.append(ClearNotification(tag=NotificationTag.SAFETY))
+    return (
+        replace(
+            state, restarted_pending=False, safety_disabled_notified=notified_disabled
+        ),
+        effects,
+    )
 
 
 # --- Reminders (BHV-24) ------------------------------------------------------

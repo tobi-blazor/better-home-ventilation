@@ -319,7 +319,7 @@ Errors: a level or the quiet cap outside minimum flow to max flow; a sensor used
 | Key | UI name | Default | Meaning |
 |---|---|---|---|
 | `restart_confirm_timeout` | Restart confirmation timeout | 30 min | When the last warning ends, the unit stays off and asks on the phones whether to restart ([phone notifications](#phone-notifications)). Without an answer it restarts after this time. 0 restarts at once. |
-| `safety_when_disabled` | Safety while control is off | on | Also switch the unit off for a warning while the **Control** switch is off, and back to its previous state after the restart. When off, warnings are only shown on the entities while control is off, and no notification is sent. |
+| `safety_when_disabled` | Safety while control is off | on | Also switch the unit off for a warning while the **Control** switch is off, and back to its previous state after the restart. When off, a warning while control is off is only shown on the entities and notified (**Warning: <headline>**); the unit is not switched. |
 
 The warning sources themselves are added on the integration page ([below](#warning-sources)); the step's description links there.
 
@@ -424,6 +424,7 @@ The integration sends notifications to the phones selected in **Notifications** 
 | Notification | When | Actions |
 |---|---|---|
 | **Ventilation off: <headline>** with the recommended actions or the description of the warning (at most 300 characters) and the sender | a warning switches the unit off ([safety shutdown](#warning-sources)), also when a new warning arrives during the shutdown. A source without details shows its name | **Keep ventilating** (the same as the **Safety override** switch), **OK** (nothing) |
+| **Warning: <headline>** with the same text and "Control is off, so the integration does not switch the ventilation off." | a warning while the **Control** switch is off and **Safety while control is off** is disabled; nothing is switched. Removed when the warning ends | **OK** (nothing) |
 | **Warning lifted** – "Restart ventilation? Restarts automatically at 14:30." | the last warning ended; replaces the safety notification | **Restart now** (resume), **Keep off** (the unit stays off until resumed) |
 | **Ventilation restarted** | nobody answered and the restart confirmation timeout passed | – |
 | **Ventilation off since 08:15** – "Moisture protection is inactive." | the unit has been off for the reminder time (8 h for a pause until resumed, 24 h otherwise), then every 24 hours | **Resume** |
@@ -438,7 +439,7 @@ How it works:
 - **Without phones**, or when none of the selected services exists any more, a persistent notification appears in Home Assistant instead (without actions; use the **Safety override** switch or the **Resume** button). It is dismissed when its reason is gone.
 - A selected service that no longer exists (the app was removed, the phone renamed) raises a repair issue and the problem `missing_notify_service`; the other phones still get the notifications. Open **Notifications** and save: the missing service is not selected any more.
 - Sending never delays the control. A phone that cannot be reached is logged once, and again when it works.
-- Each kind can be switched off in **Notifications**. With **Safety while control is off** disabled, a warning while the **Control** switch is off sends no notification.
+- Each kind can be switched off in **Notifications**; **Safety notifications** also covers **Warning: <headline>**. With **Safety while control is off** disabled, a warning while the **Control** switch is off is notified but switches nothing; there is no **Keep ventilating**, because the integration does not act while control is off (the **Safety override** switch still works for the time after control is switched on again).
 
 ## Profiles
 

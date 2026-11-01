@@ -388,7 +388,7 @@
         },
         "data_description": {
           "restart_confirm_timeout": "Endet die letzte Warnung, bleibt das Gerät aus und fragt auf den Telefonen, ob es wieder einschalten soll. Ohne Antwort schaltet es nach dieser Zeit ein. 0 schaltet sofort ein.",
-          "safety_when_disabled": "Das Gerät auch bei ausgeschaltetem Regelungsschalter für eine Warnung ausschalten und nach dem Wiedereinschalten in den vorherigen Zustand bringen. Ausgeschaltet werden Warnungen nur an den Entitäten angezeigt."
+          "safety_when_disabled": "Das Gerät auch bei ausgeschaltetem Regelungsschalter für eine Warnung ausschalten und nach dem Wiedereinschalten in den vorherigen Zustand bringen. Ausgeschaltet wird eine Warnung nur an den Entitäten angezeigt und gemeldet; das Gerät wird nicht geschaltet."
         }
       },
       "notifications": {
@@ -404,7 +404,7 @@
         },
         "data_description": {
           "notify_services": "Die notify.mobile_app-Dienste der Companion Apps, die die Benachrichtigungen erhalten. Ein Dienst, der nicht mehr existiert, ist hier nicht gewählt und wird beim Speichern entfernt.",
-          "notify_safety": "Sicherheitsabschaltung mit Weiter lüften, die Frage zum Wiedereinschalten mit Jetzt einschalten und Aus lassen sowie der Hinweis auf das Wiedereinschalten.",
+          "notify_safety": "Sicherheitsabschaltung mit Weiter lüften, die Frage zum Wiedereinschalten mit Jetzt einschalten und Aus lassen , der Hinweis auf das Wiedereinschalten sowie eine Warnung bei ausgeschalteter Regelung.",
           "notify_reminders": "Erinnerung mit Fortsetzen, solange das Gerät aus bleibt (der Feuchteschutz ist nicht aktiv), alle 24 Stunden wiederholt.",
           "notify_problems": "Eine Benachrichtigung, wenn ein Problem länger als die Verzögerung für Probleme (Einstellungen unter Regelung) besteht; sie wird entfernt, wenn es behoben ist.",
           "pause_reminder_after": "Erste Erinnerung, nachdem eine Pause bis zum Fortsetzen so lange gedauert hat (mindestens 1 Minute).",
@@ -804,6 +804,9 @@
     "provider_none": "keiner (nur ein/aus, Filter gelten nicht)",
     "notify_safety_title": "Lüftung aus: {headline}",
     "notify_safety_message_no_details": "{source} meldet eine Warnung. Die Lüftung wurde ausgeschaltet.",
+    "notify_safety_disabled_title": "Warnung: {headline}",
+    "notify_safety_disabled_message": "{text} Die Regelung ist aus, deshalb schaltet die Integration die Lüftung nicht ab.",
+    "notify_safety_disabled_message_no_details": "{source} meldet eine Warnung. Die Regelung ist aus, deshalb schaltet die Integration die Lüftung nicht ab.",
     "notify_restart_title": "Warnung aufgehoben",
     "notify_restart_message": "Lüftung wieder einschalten? Sie startet automatisch um {time}.",
     "notify_restarted_title": "Lüftung wieder eingeschaltet",
