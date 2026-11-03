@@ -283,6 +283,49 @@ async def test_q14_warning_while_control_is_off_notifies_only(
     assert unit.calls[calls:] == []
 
 
+def test_q13_format_blocked_with_warning_text() -> None:
+    """Q13 follow-up: the blocked wording with the warning text and the reason."""
+    from custom_components.better_home_ventilation.engine.models import (  # noqa: PLC0415
+        Notify,
+        WarningInfo,
+        WriteBlock,
+    )
+
+    warning = WarningInfo(
+        source_id="nina",
+        source_name="City warnings",
+        entity_id="binary_sensor.example_city_warning_1",
+        incident_key="nina:fire",
+        headline="Fire in the industrial area",
+        text=None,
+        recommended_actions="Close windows and doors.",
+        severity=None,
+        sender=None,
+        since=dt_util.now(),
+    )
+    texts = {
+        "notify_safety_blocked_title": "Warning: {headline}",
+        "notify_safety_blocked_message": "{text} Not off yet ({reason}).",
+        "notify_blocked_unavailable": "actuator unavailable",
+    }
+    notice = Notify(
+        kind=NotifyKind.SAFETY,
+        warnings=(warning,),
+        off_blocked_by=WriteBlock.UNAVAILABLE,
+    )
+    message = format_notify(notice, "abcdefghij", texts, dt_util.now())
+    assert message is not None
+    assert message.title == "Warning: Fire in the industrial area"
+    assert message.message == (
+        "Close windows and doors. Not off yet (actuator unavailable)."
+    )
+    assert message.urgent
+    assert [title for _, title in message.actions] == [
+        "notify_action_keep_ventilating",
+        "notify_action_ok",
+    ]
+
+
 def test_q14_format_with_warning_text() -> None:
     """Q14: with details the text of the warning comes first."""
     from custom_components.better_home_ventilation.engine.models import (  # noqa: PLC0415
@@ -533,17 +576,54 @@ async def test_problem_notification_after_problem_delay(
     assert phone[-1].data == {"message": "clear_notification", "data": {"tag": tag}}
 
 
+BLOCKED_TEXTS = {
+    "en": {
+        "title": "Warning: Outdoor smoke",
+        "blocked": (
+            "Outdoor smoke reports a warning. The ventilation could not be"
+            " switched off yet (readiness not met)."
+        ),
+        "problem_title": "Ventilation problem",
+        "problem": (
+            "The readiness condition on Unit control mode is not met; "
+            "nothing is written to the unit."
+        ),
+        "off_title": "Ventilation off: Outdoor smoke",
+        "off": "Outdoor smoke reports a warning. The ventilation was switched off.",
+    },
+    "de": {
+        "title": "Warnung: Outdoor smoke",
+        "blocked": (
+            "Outdoor smoke meldet eine Warnung. Die Lüftung konnte noch nicht"
+            " ausgeschaltet werden (Bereitschaftsbedingung nicht erfüllt)."
+        ),
+        "problem_title": "Problem mit der Lüftung",
+        "problem": (
+            "Die Bereitschaftsbedingung an Unit control mode ist nicht erfüllt;"
+            " es wird nichts an das Gerät geschrieben."
+        ),
+        "off_title": "Lüftung aus: Outdoor smoke",
+        "off": "Outdoor smoke meldet eine Warnung. Die Lüftung wurde ausgeschaltet.",
+    },
+}
+
+
+@pytest.mark.parametrize("language", ["en", "de"])
 @pytest.mark.usefixtures("entities")
 async def test_q13_blocked_safety_off_is_notified_as_not_ready(
     hass: HomeAssistant,
     unit: MockUnit,
     freezer: FrozenDateTimeFactory,
     phone: list[ServiceCall],
+    language: str,
 ) -> None:
     """Q13: a safety off blocked by readiness is the problem `not_ready`.
 
-    The warning is notified at once; nothing is written; the problem
-    notification follows after `problem_delay`; the off once the condition is met.
+    The warning is notified at once, saying that the ventilation could not be
+    switched off yet (owner decision 2026-11-03); nothing is written; the
+    problem notification follows after `problem_delay`; once the condition is
+    met the off is written and the normal safety notification replaces the
+    first one (same tag).
     """
     hass.states.async_set(SMOKE, "off")
     entry = await setup_entry(
@@ -557,12 +637,22 @@ async def test_q13_blocked_safety_off_is_notified_as_not_ready(
         ],
     )
     await advance(hass, freezer, 61)
+    hass.config.language = language
     short = entry8(entry)
+    texts = BLOCKED_TEXTS[language]
 
     await set_state(hass, SMOKE, "on")
 
     assert mode_of(hass) == "safety_off"
-    assert [call.data["data"]["tag"] for call in phone] == [f"bhv_{short}_safety"]
+    [blocked] = phone
+    assert blocked.data["title"] == texts["title"]
+    assert blocked.data["message"] == texts["blocked"]
+    assert blocked.data["data"]["tag"] == f"bhv_{short}_safety"
+    assert [a["action"] for a in blocked.data["data"]["actions"]] == [
+        f"BHV_{short}_KEEP_VENTILATING",
+        f"BHV_{short}_OK",
+    ]
+    assert blocked.data["data"]["priority"] == "high"
     assert unit.calls_for("number", "set_value") == []
     assert ("not_ready", CONTROL_MODE) in problem_keys(controller_of(entry))
 
@@ -573,11 +663,8 @@ async def test_q13_blocked_safety_off_is_notified_as_not_ready(
 
     problem = phone[-1]
     assert problem.data == {
-        "title": "Ventilation problem",
-        "message": (
-            "The readiness condition on Unit control mode is not met; "
-            "nothing is written to the unit."
-        ),
+        "title": texts["problem_title"],
+        "message": texts["problem"],
         "data": {"tag": f"bhv_{short}_problem_not_ready"},
     }
     assert unit.calls_for("number", "set_value") == []
@@ -587,7 +674,11 @@ async def test_q13_blocked_safety_off_is_notified_as_not_ready(
     assert [call.data["value"] for call in unit.calls_for("number", "set_value")] == [
         0.0
     ]
-    assert phone[-1].data == {
+    replaced, cleared = phone[-2:]
+    assert replaced.data["title"] == texts["off_title"]
+    assert replaced.data["message"] == texts["off"]
+    assert replaced.data["data"]["tag"] == f"bhv_{short}_safety"
+    assert cleared.data == {
         "message": "clear_notification",
         "data": {"tag": f"bhv_{short}_problem_not_ready"},
     }

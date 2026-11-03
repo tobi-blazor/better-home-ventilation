@@ -360,7 +360,7 @@ How it works:
 - With **Correct automatically**, the integration sets the entity back to the expected state (at most once per minute per condition), fires the event `better_home_ventilation_readiness_corrected`, and writes the flow again right after it is restored. This also happens when no flow change is due, because the unit ignores the flow until the condition is met again. If the condition is still not met after three attempts, the problem `not_ready` is reported and further attempts follow every five minutes.
 - Without automatic correction (or while the entity is unavailable), the problem `not_ready` is reported at once; the problem sensor still waits for the problem delay.
 - No correction is made while the **Control** switch is off or during the startup grace.
-- This also applies to a [safety shutdown](#warning-sources): while a condition is not met the unit is not switched off either. The mode is still "Safety off" and the safety notification is sent; the problem `not_ready` (and its notification after the problem delay) shows that the off could not be written. The unit is switched off as soon as the condition is met.
+- This also applies to a [safety shutdown](#warning-sources): while a condition is not met the unit is not switched off either. The mode is still "Safety off", and the safety notification says **Warning: <headline>** … "The ventilation could not be switched off yet (readiness not met)."; the problem `not_ready` (and its notification after the problem delay) shows it as well. The unit is switched off as soon as the condition is met, and the safety notification is replaced by the normal **Ventilation off: <headline>**.
 
 ## Warning sources
 
@@ -423,7 +423,7 @@ The integration sends notifications to the phones selected in **Notifications** 
 
 | Notification | When | Actions |
 |---|---|---|
-| **Ventilation off: <headline>** with the recommended actions or the description of the warning (at most 300 characters) and the sender | a warning switches the unit off ([safety shutdown](#warning-sources)), also when a new warning arrives during the shutdown. A source without details shows its name | **Keep ventilating** (the same as the **Safety override** switch), **OK** (nothing) |
+| **Ventilation off: <headline>** with the recommended actions or the description of the warning (at most 300 characters) and the sender | a warning switches the unit off ([safety shutdown](#warning-sources)), also when a new warning arrives during the shutdown. A source without details shows its name. While the unit could not be switched off yet (a [readiness condition](#readiness-conditions) is not met or the actuator is unavailable) it reads **Warning: <headline>** … "The ventilation could not be switched off yet (readiness not met)." and is replaced by the normal text once the unit is off | **Keep ventilating** (the same as the **Safety override** switch), **OK** (nothing) |
 | **Warning: <headline>** with the same text and "Control is off, so the integration does not switch the ventilation off." | a warning while the **Control** switch is off and **Safety while control is off** is disabled; nothing is switched. Removed when the warning ends | **OK** (nothing) |
 | **Warning lifted** – "Restart ventilation? Restarts automatically at 14:30." | the last warning ended; replaces the safety notification | **Restart now** (resume), **Keep off** (the unit stays off until resumed) |
 | **Ventilation restarted** | nobody answered and the restart confirmation timeout passed | – |

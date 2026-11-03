@@ -965,16 +965,27 @@ def test_e58_q13_safety_off_waits_for_readiness_and_is_a_problem() -> None:
     assert decision.setpoint == 0
     assert decision.write_blocked_by is WriteBlock.NOT_READY
     assert not of_type(effects, TurnOff)
-    # the warning itself is notified as usual
-    assert _notify(effects, NotifyKind.SAFETY)
+    # the warning is notified, saying that the off could not be written yet
+    # (owner decision 2026-11-03)
+    notice = _notify(effects, NotifyKind.SAFETY)
+    assert notice.off_blocked_by is WriteBlock.NOT_READY
+    assert notice.warnings == decision.warnings
     assert _not_ready(sim) == [(ProblemKey.NOT_READY, READY)]
     assert decision.problem  # unmet for longer than problem_delay
+    sim.advance(minutes=1)
+    assert not of_type(sim.run()[1], Notify)  # not repeated while blocked
 
     sim.set(READY, "Remote")
     decision, effects = sim.run()
     assert of_type(effects, TurnOff) == [TurnOff(entity_id=OFF_SWITCH)]
     assert decision.write_blocked_by is None
     assert _not_ready(sim) == []
+    # the normal wording replaces it (same tag), once
+    assert of_type(effects, Notify) == [
+        Notify(kind=NotifyKind.SAFETY, warnings=decision.warnings)
+    ]
+    sim.advance(minutes=1)
+    assert not of_type(sim.run()[1], Notify)
 
 
 def test_e58_q13_safety_off_after_failed_corrections_is_not_ready() -> None:
@@ -1013,6 +1024,69 @@ def test_e58_q13_safety_off_after_failed_corrections_is_not_ready() -> None:
     sim.set(READY, "Remote")
     _, effects = sim.run()
     assert of_type(effects, TurnOff) == [TurnOff(entity_id=OFF_SWITCH)]
+    assert _notify(effects, NotifyKind.SAFETY).off_blocked_by is None
+
+
+def test_e58_blocked_off_unavailable_and_already_stopped() -> None:
+    """E58: an unavailable actuator blocks too; a stopped unit is not blocked."""
+    sim = _sim()
+    sim.set_off("unavailable")
+    sim.warn(SMOKE)
+    decision, effects = sim.run()
+    assert decision.write_blocked_by is WriteBlock.UNAVAILABLE
+    assert _notify(effects, NotifyKind.SAFETY).off_blocked_by is (
+        WriteBlock.UNAVAILABLE
+    )
+    sim.set_off("off")
+    _, effects = sim.run()
+    assert of_type(effects, TurnOff) == [TurnOff(entity_id=OFF_SWITCH)]
+    assert _notify(effects, NotifyKind.SAFETY).off_blocked_by is None
+
+    # paused (stopped) before the warning: unmet readiness blocks nothing
+    condition = ReadinessCondition(
+        entity_id=READY, expected_state="Remote", auto_correct=False
+    )
+    paused = _sim(readiness_conditions=(condition,))
+    paused.set(READY, "Remote")
+    paused.command(PauseCommand(source=Source.BUTTON))
+    paused.run()
+    paused.set(READY, "Local")
+    paused.warn(SMOKE)
+    _, effects = paused.run()
+    assert _notify(effects, NotifyKind.SAFETY).off_blocked_by is None
+
+    # without off actuator: the lowest value is the off
+    lowest = Sim(
+        make_options(actuator_min=0, warning_sources=(SMOKE_SOURCE,)),
+        actuator="unavailable",
+        values={SMOKE: "on"},
+    )
+    _, effects = lowest.run()
+    assert _notify(effects, NotifyKind.SAFETY).off_blocked_by is (
+        WriteBlock.UNAVAILABLE
+    )
+    lowest.set_actuator("120")
+    _, effects = lowest.run()
+    assert [w.flow for w in writes(effects)] == [0]
+    assert _notify(effects, NotifyKind.SAFETY).off_blocked_by is None
+
+
+def test_e58_blocked_wording_after_a_restart() -> None:
+    """E58: after a load the wording that fits now is assumed to be shown."""
+    condition = ReadinessCondition(
+        entity_id=READY, expected_state="Remote", auto_correct=False
+    )
+    sim = _sim(readiness_conditions=(condition,))
+    sim.set(READY, "Local")
+    sim.warn(SMOKE)
+    sim.run()
+    restarted = _reload(sim)
+    _, effects = restarted.run()
+    assert not of_type(effects, Notify)
+    restarted.set(READY, "Remote")
+    _, effects = restarted.run()
+    assert of_type(effects, TurnOff) == [TurnOff(entity_id=OFF_SWITCH)]
+    assert _notify(effects, NotifyKind.SAFETY).off_blocked_by is None
 
 
 def test_source_unavailable_problem_after_grace() -> None:

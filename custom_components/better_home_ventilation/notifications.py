@@ -62,6 +62,8 @@ from .engine.models import (
     ProblemKey,
     ResumeCommand,
     Source,
+    WarningInfo,
+    WriteBlock,
 )
 from .engine.safety import notification_text, warning_title
 
@@ -251,6 +253,8 @@ def format_notify(
             if not effect.warnings:
                 return None
             warning = effect.warnings[0]
+            if effect.off_blocked_by is not None:
+                return _format_blocked(effect.off_blocked_by, warning, texts, actions)
             message = notification_text(warning) or _text(
                 texts, "notify_safety_message_no_details", source=warning.source_name
             )
@@ -286,6 +290,29 @@ def format_notify(
             )
             message = _text(texts, "notify_reminder_message")
     return Message(title=title, message=message, actions=actions, urgent=urgent)
+
+
+def _format_blocked(
+    blocked: WriteBlock,
+    warning: WarningInfo,
+    texts: Mapping[str, str],
+    actions: tuple[tuple[str, str], ...],
+) -> Message:
+    """Format ``safety`` while the off could not be written yet."""
+    reason = _text(texts, f"notify_blocked_{blocked}")
+    if (text := notification_text(warning)) is not None:
+        message = _text(
+            texts, "notify_safety_blocked_message", text=text, reason=reason
+        )
+    else:
+        message = _text(
+            texts,
+            "notify_safety_blocked_message_no_details",
+            source=warning.source_name,
+            reason=reason,
+        )
+    title = _text(texts, "notify_safety_blocked_title", headline=warning_title(warning))
+    return Message(title=title, message=message, actions=actions, urgent=True)
 
 
 def format_problem(

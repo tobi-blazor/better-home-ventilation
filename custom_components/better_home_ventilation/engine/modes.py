@@ -47,6 +47,7 @@ from .models import (
     Source,
     Trigger,
     WarningInfo,
+    WriteBlock,
 )
 from .safety import by_priority, collect_warnings
 
@@ -525,8 +526,15 @@ def safety_notifications(
     *,
     mode: Mode,
     previous_mode: Mode | None,
+    off_blocked: WriteBlock | None = None,
 ) -> tuple[ControllerState, list[Effect]]:
     """Notifications of the safety shutdown (BHV-41, BHV-43; 04-interface.md).
+
+    ``off_blocked`` is the gate that kept the off from being written in this
+    evaluation (owner decision 2026-11-03 on the Q13 follow-up): the
+    notification ``safety`` then says that the ventilation could not be
+    switched off yet, and it is sent again in the normal wording as soon as
+    the off is written.
 
     - ``safety`` when the unit enters ``safety_off`` because of a warning, or a
       new warning shuts down while it already is in ``safety_off``.
@@ -548,11 +556,23 @@ def safety_notifications(
     blocking = by_priority(state.safety.blocking.values())
     older = tuple(w for w in blocking if w not in update.new_blocking)
     notified_disabled = False
+    notified_blocked = False
     if mode is Mode.SAFETY_OFF:
         if blocking and (update.new_blocking or not was_safety):
             effects.append(
-                Notify(kind=NotifyKind.SAFETY, warnings=(*update.new_blocking, *older))
+                Notify(
+                    kind=NotifyKind.SAFETY,
+                    warnings=(*update.new_blocking, *older),
+                    off_blocked_by=off_blocked,
+                )
             )
+            notified_blocked = off_blocked is not None
+        elif blocking and state.safety_blocked_notified:
+            if off_blocked is None:
+                # The off has been written: the normal wording replaces it.
+                effects.append(Notify(kind=NotifyKind.SAFETY, warnings=blocking))
+            else:
+                notified_blocked = True
         elif update.restart_started and state.safety.restart_pending is not None:
             effects.append(
                 Notify(
@@ -579,7 +599,10 @@ def safety_notifications(
         effects.append(ClearNotification(tag=NotificationTag.SAFETY))
     return (
         replace(
-            state, restarted_pending=False, safety_disabled_notified=notified_disabled
+            state,
+            restarted_pending=False,
+            safety_disabled_notified=notified_disabled,
+            safety_blocked_notified=notified_blocked,
         ),
         effects,
     )
