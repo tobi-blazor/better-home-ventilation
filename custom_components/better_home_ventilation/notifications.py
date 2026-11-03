@@ -52,6 +52,7 @@ from .const import (
 from .engine.models import (
     ClearNotification,
     Command,
+    ControlSwitchCommand,
     Decision,
     KeepOffCommand,
     NotificationTag,
@@ -94,6 +95,7 @@ class Action(StrEnum):
     RESTART = "RESTART"
     KEEP_OFF = "KEEP_OFF"
     RESUME = "RESUME"
+    CONTROL_ON = "CONTROL_ON"
 
 
 #: Actions of each notification kind, in the order they are shown.
@@ -105,6 +107,7 @@ KIND_ACTIONS: Final[Mapping[NotifyKind, tuple[Action, ...]]] = {
     NotifyKind.RESTART: (Action.RESTART, Action.KEEP_OFF),
     NotifyKind.RESTARTED: (),
     NotifyKind.REMINDER: (Action.RESUME,),
+    NotifyKind.REMINDER_CONTROL_OFF: (Action.CONTROL_ON,),
 }
 
 #: Option that switches each notification kind on or off.
@@ -114,6 +117,7 @@ KIND_OPTION: Final[Mapping[NotifyKind, str]] = {
     NotifyKind.RESTART: CONF_NOTIFY_SAFETY,
     NotifyKind.RESTARTED: CONF_NOTIFY_SAFETY,
     NotifyKind.REMINDER: CONF_NOTIFY_REMINDERS,
+    NotifyKind.REMINDER_CONTROL_OFF: CONF_NOTIFY_REMINDERS,
 }
 TAG_OPTION: Final[Mapping[NotificationTag, str]] = {
     NotificationTag.SAFETY: CONF_NOTIFY_SAFETY,
@@ -164,6 +168,8 @@ def action_command(action: Action) -> Command | None:
             return ResumeCommand(source=source)
         case Action.KEEP_OFF:
             return KeepOffCommand(source=source)
+        case Action.CONTROL_ON:
+            return ControlSwitchCommand(source=source, enabled=True)
     return None
 
 
@@ -273,7 +279,7 @@ def format_notify(
         case NotifyKind.RESTARTED:
             title = _text(texts, "notify_restarted_title")
             message = _text(texts, "notify_restarted_message")
-        case NotifyKind.REMINDER:
+        case NotifyKind.REMINDER | NotifyKind.REMINDER_CONTROL_OFF:
             off_since = effect.off_since or now
             title = _text(
                 texts, "notify_reminder_title", time=format_time(off_since, now)

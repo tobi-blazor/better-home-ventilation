@@ -32,8 +32,11 @@ SMOKE = "binary_sensor.hallway_smoke"
 CLEAR_REMINDER = ClearNotification(tag=NotificationTag.REMINDER)
 
 
+REMINDER_KINDS = (NotifyKind.REMINDER, NotifyKind.REMINDER_CONTROL_OFF)
+
+
 def _reminders(effects: list[Effect]) -> list[Notify]:
-    return [n for n in of_type(effects, Notify) if n.kind is NotifyKind.REMINDER]
+    return [n for n in of_type(effects, Notify) if n.kind in REMINDER_KINDS]
 
 
 def _sim() -> Sim:
@@ -196,18 +199,15 @@ def test_e60_q15_pause_then_control_off_keeps_reminding() -> None:
     assert not _reminders(sim.run()[1])
     sim.advance(hours=16)
     _, effects = sim.run()
-    assert _reminders(effects) == [Notify(kind=NotifyKind.REMINDER, off_since=T0)]
+    # While control is off the action is "Turn control on" (2026-11-03).
+    reminder = Notify(kind=NotifyKind.REMINDER_CONTROL_OFF, off_since=T0)
+    assert _reminders(effects) == [reminder]
+    assert reminder.tag is NotificationTag.REMINDER
     sim.advance(hours=24)
-    assert len(_reminders(sim.run()[1])) == 1
+    assert _reminders(sim.run()[1]) == [reminder]
 
-    # Resume has nothing to end while control is disabled.
-    sim.command(ResumeCommand(source=Source.NOTIFICATION))
-    decision, effects = sim.run()
-    assert decision.mode is Mode.DISABLED
-    assert CLEAR_REMINDER not in effects
-
-    # Control on: the unit is switched on, the reminder cleared.
-    sim.command(ControlSwitchCommand(source=Source.BUTTON, enabled=True))
+    # "Turn control on": the unit is switched on, the reminder cleared.
+    sim.command(ControlSwitchCommand(source=Source.NOTIFICATION, enabled=True))
     decision, effects = sim.run()
     assert decision.mode is Mode.AUTOMATIC
     assert of_type(effects, TurnOn) == [TurnOn(entity_id=OFF_SWITCH)]
@@ -270,3 +270,42 @@ def test_e60_q15_running_unit_while_disabled_gets_no_reminder() -> None:
     assert sim.state.off_since is None
     sim.advance(hours=48)
     assert not _reminders(sim.run()[1])
+
+
+def test_e60_reminder_shown_when_control_is_switched_off_is_replaced() -> None:
+    """E60: a pause reminder (Resume) is replaced by the control-off one at once."""
+    sim = _sim()
+    sim.command(PauseCommand(source=Source.BUTTON))
+    sim.run()
+    sim.advance(hours=8)
+    assert _reminders(sim.run()[1]) == [Notify(kind=NotifyKind.REMINDER, off_since=T0)]
+    sim.advance(hours=1)
+    sim.command(ControlSwitchCommand(source=Source.BUTTON, enabled=False))
+    _, effects = sim.run()
+    assert _reminders(effects) == [
+        Notify(kind=NotifyKind.REMINDER_CONTROL_OFF, off_since=T0)
+    ]
+    assert sim.state.last_reminder == T0 + timedelta(hours=8)  # same schedule
+    sim.advance(hours=1)
+    assert not _reminders(sim.run()[1])
+    sim.advance(hours=22)
+    assert len(_reminders(sim.run()[1])) == 1
+
+
+def test_e60_control_on_during_safety_off_replaces_the_reminder() -> None:
+    """E60: control on while the unit stays off (safety_off): back to Resume."""
+    sim = _sim()
+    sim.command(ControlSwitchCommand(source=Source.BUTTON, enabled=False))
+    sim.run()
+    sim.warn(SMOKE)  # safety_when_disabled: the unit is switched off
+    decision, _ = sim.run()
+    assert decision.mode is Mode.SAFETY_OFF
+    sim.advance(hours=24)
+    assert _reminders(sim.run()[1]) == [
+        Notify(kind=NotifyKind.REMINDER_CONTROL_OFF, off_since=T0)
+    ]
+    sim.advance(hours=1)
+    sim.command(ControlSwitchCommand(source=Source.BUTTON, enabled=True))
+    decision, effects = sim.run()
+    assert decision.mode is Mode.SAFETY_OFF
+    assert _reminders(effects) == [Notify(kind=NotifyKind.REMINDER, off_since=T0)]

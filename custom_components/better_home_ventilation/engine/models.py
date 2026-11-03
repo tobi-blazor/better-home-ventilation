@@ -190,6 +190,9 @@ class NotifyKind(StrEnum):
     RESTART = "restart"
     RESTARTED = "restarted"
     REMINDER = "reminder"
+    #: The reminder while control is disabled: its action switches control
+    #: on instead of ``resume()``, which has nothing to end then.
+    REMINDER_CONTROL_OFF = "reminder_control_off"
 
 
 class NotificationTag(StrEnum):
@@ -207,6 +210,7 @@ NOTIFY_TAGS: Final = {
     NotifyKind.RESTART: NotificationTag.SAFETY,
     NotifyKind.RESTARTED: NotificationTag.SAFETY,
     NotifyKind.REMINDER: NotificationTag.REMINDER,
+    NotifyKind.REMINDER_CONTROL_OFF: NotificationTag.REMINDER,
 }
 
 
@@ -974,6 +978,7 @@ class Notify:
     - ``restart``: ``restart_at`` is the deadline of the restart wait.
     - ``restarted``: no data.
     - ``reminder``: ``off_since`` is the start of the off state.
+    - ``reminder_control_off``: as ``reminder``, while control is disabled.
 
     The engine always emits them; the glue sends nothing if the matching
     ``notify_*`` option is off.

@@ -317,8 +317,16 @@ def test_q14_format_with_warning_text() -> None:
 
 
 REMINDER_TEXTS = {
-    "en": ("Ventilation off since", "Moisture protection is inactive.", "Resume"),
-    "de": ("Lüftung aus seit", "Der Feuchteschutz ist nicht aktiv.", "Fortsetzen"),
+    "en": (
+        "Ventilation off since",
+        "Moisture protection is inactive.",
+        "Turn control on",
+    ),
+    "de": (
+        "Lüftung aus seit",
+        "Der Feuchteschutz ist nicht aktiv.",
+        "Steuerung einschalten",
+    ),
 }
 
 
@@ -333,7 +341,9 @@ async def test_q15_reminder_while_control_is_off_and_unit_stopped(
 ) -> None:
     """Q15: a pause stopped the unit, then control off: reminded after 24 h.
 
-    The usual reminder with Resume (BHV-24); cleared when control is on.
+    The reminder offers "Turn control on" instead of Resume (owner decision
+    2026-11-03, BHV-24); tapping it switches control on, the unit is started
+    and the reminder cleared.
     """
     entry = await setup_entry(hass, notify_services=[PHONE], off_entity=STANDBY_SWITCH)
     await advance(hass, freezer, 61)
@@ -360,21 +370,19 @@ async def test_q15_reminder_while_control_is_off_and_unit_stopped(
     await advance(hass, freezer, 16 * 3600)
 
     [reminder] = reminders()
-    title, message, resume = REMINDER_TEXTS[language]
+    title, message, control_on = REMINDER_TEXTS[language]
     assert reminder.data == {
         "title": f"{title} {format_time(off_since, dt_util.now())}",
         "message": message,
         "data": {
             "tag": f"bhv_{short}_reminder",
-            "actions": [{"action": f"BHV_{short}_RESUME", "title": resume}],
+            "actions": [{"action": f"BHV_{short}_CONTROL_ON", "title": control_on}],
         },
     }
 
-    await controller.async_command(
-        ControlSwitchCommand(source=Source.SERVICE, enabled=True)
-    )
-    await hass.async_block_till_done()
+    await tap(hass, f"BHV_{short}_CONTROL_ON")
 
+    assert controller.state.control_enabled
     assert mode_of(hass) == "fallback"  # the CO₂ sensor went stale meanwhile
     assert unit.calls_for("switch", "turn_off")  # switched on again
     assert reminders()[-1].data == {
@@ -814,6 +822,10 @@ def test_action_commands_and_helpers() -> None:
     assert type(action_command(Action.RESTART)).__name__ == "ResumeCommand"
     assert type(action_command(Action.RESUME)).__name__ == "ResumeCommand"
     assert type(action_command(Action.KEEP_OFF)).__name__ == "KeepOffCommand"
+    control_on = action_command(Action.CONTROL_ON)
+    assert isinstance(control_on, ControlSwitchCommand)
+    assert control_on.enabled
+    assert control_on.source is Source.NOTIFICATION
     assert service_name("notify.mobile_app_x") == "mobile_app_x"
     assert service_name("mobile_app_x") == "mobile_app_x"
     now = dt_util.now()

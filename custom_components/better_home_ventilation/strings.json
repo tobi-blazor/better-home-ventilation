@@ -405,7 +405,7 @@
         "data_description": {
           "notify_services": "The notify.mobile_app services of the Companion apps that get the notifications. A service that no longer exists is not selected here and is removed on saving.",
           "notify_safety": "Safety shutdown with Keep ventilating, the restart question with Restart now and Keep off, the restart notice, and a warning while the Control switch is off.",
-          "notify_reminders": "Reminder with Resume while the unit stays off (moisture protection is inactive), repeated every 24 hours.",
+          "notify_reminders": "Reminder with Resume while the unit stays off (moisture protection is inactive), repeated every 24 hours; while the Control switch is off with Turn control on.",
           "notify_problems": "A notification when a problem persists longer than the problem delay (Control settings, Advanced); cleared when it is resolved.",
           "pause_reminder_after": "First reminder after a pause until resumed has lasted this long (at least 1 minute).",
           "off_notice_after": "First reminder after a timed pause or a safety shutdown has lasted this long, or the unit has stood still this long while the Control switch is off (at least 1 minute)."
@@ -828,6 +828,7 @@
     "notify_action_restart": "Restart now",
     "notify_action_keep_off": "Keep off",
     "notify_action_resume": "Resume",
+    "notify_action_control_on": "Turn control on",
     "notify_problem_missing_entity": "{entities} no longer exists; the ventilation runs without it. See the repair issue.",
     "issue_where_actuator": "actuator (step Actuator)",
     "issue_where_off_entity": "off actuator (step Actuator)",

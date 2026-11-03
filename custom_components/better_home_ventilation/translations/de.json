@@ -405,7 +405,7 @@
         "data_description": {
           "notify_services": "Die notify.mobile_app-Dienste der Companion Apps, die die Benachrichtigungen erhalten. Ein Dienst, der nicht mehr existiert, ist hier nicht gewählt und wird beim Speichern entfernt.",
           "notify_safety": "Sicherheitsabschaltung mit Weiter lüften, die Frage zum Wiedereinschalten mit Jetzt einschalten und Aus lassen , der Hinweis auf das Wiedereinschalten sowie eine Warnung bei ausgeschalteter Regelung.",
-          "notify_reminders": "Erinnerung mit Fortsetzen, solange das Gerät aus bleibt (der Feuchteschutz ist nicht aktiv), alle 24 Stunden wiederholt.",
+          "notify_reminders": "Erinnerung mit Fortsetzen, solange das Gerät aus bleibt (der Feuchteschutz ist nicht aktiv), alle 24 Stunden wiederholt; bei ausgeschalteter Regelung mit Steuerung einschalten.",
           "notify_problems": "Eine Benachrichtigung, wenn ein Problem länger als die Verzögerung für Probleme (Einstellungen unter Regelung) besteht; sie wird entfernt, wenn es behoben ist.",
           "pause_reminder_after": "Erste Erinnerung, nachdem eine Pause bis zum Fortsetzen so lange gedauert hat (mindestens 1 Minute).",
           "off_notice_after": "Erste Erinnerung, nachdem eine befristete Pause oder eine Sicherheitsabschaltung so lange gedauert hat oder das Gerät bei ausgeschalteter Regelung so lange stillsteht (mindestens 1 Minute)."
@@ -828,6 +828,7 @@
     "notify_action_restart": "Jetzt einschalten",
     "notify_action_keep_off": "Aus lassen",
     "notify_action_resume": "Fortsetzen",
+    "notify_action_control_on": "Steuerung einschalten",
     "notify_problem_missing_entity": "{entities} existiert nicht mehr; die Lüftung läuft ohne sie weiter. Siehe die Reparaturmeldung.",
     "issue_where_actuator": "Aktor (Schritt Aktor)",
     "issue_where_off_entity": "Aus-Aktor (Schritt Aktor)",

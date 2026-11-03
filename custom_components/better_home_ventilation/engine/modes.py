@@ -620,7 +620,10 @@ def update_reminders(
 
     In ``disabled`` a stopped unit (:func:`unit_stopped`) counts as an off
     state (owner decision on Q15); while ``stopped`` is unknown (None) the
-    previous status is kept.
+    previous status is kept. While control is disabled the reminder is
+    ``reminder_control_off`` (action "Turn control on", owner decision
+    2026-11-03); a shown reminder is replaced when the control switch
+    changes and the off state goes on.
     """
     off = mode in OFF_MODES or (
         mode is Mode.DISABLED
@@ -633,11 +636,25 @@ def update_reminders(
         return replace(state, off_since=None, last_reminder=None), effects, None
     off_since = state.off_since or now
     state = replace(state, off_since=off_since)
+    kind = (
+        NotifyKind.REMINDER
+        if state.control_enabled
+        else NotifyKind.REMINDER_CONTROL_OFF
+    )
     due = _reminder_due(state, off_since, mode, options)
     if in_grace or now < due:
-        return state, [], due
+        effects = []
+        if (
+            not in_grace
+            and state.last_reminder is not None
+            and state.pending_trigger is Trigger.CONTROL_SWITCH
+        ):
+            # The control switch changed while a reminder is shown and the
+            # unit stays off: replace it, so its action fits (same schedule).
+            effects.append(Notify(kind=kind, off_since=off_since))
+        return state, effects, due
     state = replace(state, last_reminder=now)
-    reminder = Notify(kind=NotifyKind.REMINDER, off_since=off_since)
+    reminder = Notify(kind=kind, off_since=off_since)
     return state, [reminder], now + REMINDER_INTERVAL
 
 
