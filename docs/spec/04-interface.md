@@ -23,7 +23,7 @@ Entities are `available` as long as the controller runs; they do not become unav
 
 | Key | Platform | Phase | Category | Created when | Details |
 |---|---|---|---|---|---|
-| `setpoint` | sensor | 0.1 | – | always | flow m³/h, `device_class` volume_flow_rate, `state_class` measurement. State = setpoint after shaping (what the unit should run at). In off modes: 0 |
+| `setpoint` | sensor | 0.1 | – | always | flow m³/h, `device_class` volume_flow_rate, `state_class` measurement. State = setpoint after shaping (what the unit should run at): the written value, or the flow shaping holds while nothing is written (also during the startup grace, while the actuator is unavailable or not ready, and while a write awaits its confirmation), see [02-control.md](02-control.md#output-shaping). In off modes: 0. In `disabled`: the demand (shadow run). One state per evaluation |
 | `reason` | sensor | 0.1 | – | always | `device_class` enum, options = all reasons (see below) |
 | `mode` | sensor | 0.1 | – | always | `device_class` enum: `automatic`, `fallback`, `boost`, `shower`, `cooking`, `off`, `safety_off`, `disabled`. State icons in `icons.json` |
 | `ends_at` | sensor | 0.1 | – | always | `device_class` timestamp: end of the current boost/pause/auto boost/restart wait, otherwise `None` |
@@ -56,13 +56,16 @@ Commands from the buttons, the control switch and the profile select carry `sour
 
 ### Reasons (`reason` sensor options)
 
-`minimum`, `co2`, `humidity_high`, `dryness_protection`, `away`, `quiet_limit`, `fallback`, `boost`, `shower`, `cooking`, `off`, `safety_off`.
+`minimum`, `co2`, `humidity_high`, `co2_and_humidity_high`, `dryness_protection`, `away`, `quiet_limit`, `fallback`, `boost`, `shower`, `cooking`, `off`, `safety_off`.
+
+`co2_and_humidity_high` (en "CO₂ and humidity", de „CO₂ und Feuchte“, icon `mdi:cloud-percent`): CO₂ and humidity-high ask for about the same flow ([02-control.md](02-control.md#reason)).
 
 ### Setpoint attributes
 
 | Attribute | Content |
 |---|---|
 | `mode`, `reason` | as the enum sensors |
+| `reasons` | list of the single reasons behind `reason`: `[co2, humidity_high]` for `co2_and_humidity_high`, otherwise `[reason]` |
 | `profile` | active profile |
 | `target` | flow the active mode asks for, before shaping |
 | `written`, `last_write` | last value written to the unit (flow) and its time (timestamp) |

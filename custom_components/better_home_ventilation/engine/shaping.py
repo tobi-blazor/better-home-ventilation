@@ -37,11 +37,14 @@ def shape(
     now: datetime,
     last_write: datetime | None,
     options: Options,
+    strict_down: bool = False,
 ) -> ShapingResult:
     """Apply bypass, minimum write interval, step limits and the asymmetric dead band.
 
     ``target`` is already quantised and clamped. A hold where target and
     current are equal reports no ``blocked_by`` (nothing to write).
+    ``strict_down``: the dead band down does not apply (the flow is above an
+    active quiet limit, BHV-14); the interval and the step limit still do.
     """
     if bypass or current is None:
         return ShapingResult(value=target)
@@ -52,7 +55,7 @@ def shape(
         return ShapingResult(value=None, blocked_by=WriteBlock.INTERVAL)
     if difference > 0 and difference >= options.deadband_up:
         value = current + min(difference, options.max_step_up)
-    elif difference < 0 and -difference >= options.deadband_down:
+    elif difference < 0 and (strict_down or -difference >= options.deadband_down):
         value = current - min(-difference, options.max_step_down)
     else:
         return ShapingResult(value=None, blocked_by=WriteBlock.DEADBAND)

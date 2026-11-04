@@ -35,12 +35,14 @@ from .models import (
     Decision,
     Effect,
     FireEvent,
+    Limit,
     Mode,
     OffMethod,
     Options,
     Problem,
     ProblemId,
     ProblemKey,
+    Reason,
     SafetyRestore,
     ScheduleAt,
     Snapshot,
@@ -139,6 +141,7 @@ def evaluate(
         bypass_reason=mode_changed or readiness.restored,
         ready=readiness.ready,
         in_grace=in_grace,
+        quiet=_quiet_strict(mode, reason, demand.limits, options),
     )
     state = out.state
     effects: list[Effect] = [*readiness.corrections, *out.effects]
@@ -293,6 +296,7 @@ def _write_stage(
     bypass_reason: bool,
     ready: bool,
     in_grace: bool,
+    quiet: _QuietStrict | None = None,
 ) -> _Output:
     """Shape the target, map it and decide off/on and writes behind the gate.
 
@@ -302,11 +306,21 @@ def _write_stage(
     the startup grace (02-control.md#startup); while control is disabled it
     is the only write, apart from restoring the unit after it
     (``safety_when_disabled``).
+
+    The setpoint is what the unit should run at: the written value, or
+    ``current`` when nothing is written (shaping holds or a gate blocks the
+    write), 0 in the off modes. ``disabled`` shows the target (shadow run,
+    BHV-03).
     """
     now = snapshot.now
     actuator = snapshot.actuator
     native_now = current_native(options, actuator)
     flow_now = native_to_flow(options, native_now)
+    if actuator.awaiting_confirmation and state.last_written_flow is not None:
+        # The unit is still taking the last written value (02-control.md,
+        # output shaping): it counts as current until the actuator confirms it.
+        flow_now = state.last_written_flow
+        native_now = flow_to_native(flow_now, options, actuator)
     current = flow_now if flow_now is not None else state.last_written_flow
     running = unit_running(options, snapshot)
     low, high = flow_range(options, actuator)
@@ -437,9 +451,15 @@ def _write_stage(
         now=now,
         last_write=state.last_write,
         options=options,
+        strict_down=(
+            quiet is not None and current is not None and quiet.applies(current, target)
+        ),
     )
     value = shaped.value
     hold_reason = shaped.blocked_by
+    # What the unit runs at when nothing is written; 0 while it waits to be
+    # switched on again (stopped by the integration, a gate may keep it so).
+    held = 0.0 if turn_on else (current if current is not None else target)
     native = None
     if value is not None:
         native = flow_to_native(value, options, actuator, flow_now)
@@ -454,14 +474,15 @@ def _write_stage(
     if value is None or native is None:
         return _Output(
             state=state,
-            setpoint=current if current is not None else target,
+            setpoint=held,
             target=target,
             blocked_by=blocked or hold_reason,
         )
     if blocked is not None:
+        # Nothing reaches the unit: it keeps running at `current`.
         return _Output(
             state=replace(state, bypass_pending=state.bypass_pending or bypass_reason),
-            setpoint=value,
+            setpoint=held,
             target=target,
             blocked_by=blocked,
         )
@@ -475,6 +496,36 @@ def _write_stage(
         target=target,
         written=value,
         effects=tuple(effects),
+    )
+
+
+@dataclass(frozen=True, kw_only=True)
+class _QuietStrict:
+    """The active quiet limit and whether it set the target."""
+
+    max_flow: float
+    capped: bool
+
+    def applies(self, current: float, target: float) -> bool:
+        """Return True if ``current`` is above the quiet limit (strict down)."""
+        cap = min(self.max_flow, target) if self.capped else self.max_flow
+        return current > cap
+
+
+def _quiet_strict(
+    mode: Mode, reason: Reason, limits: Sequence[Limit], options: Options
+) -> _QuietStrict | None:
+    """When the quiet limit is strict for this target, or None (BHV-14).
+
+    02-control.md#output-shaping: in ``automatic`` and ``fallback`` with the
+    quiet limit active, a current flow above ``quiet_max_flow``, or above the
+    target while the target is the quiet limit (reason ``quiet_limit``, e.g.
+    quantised or clamped below it), is brought down without the dead band.
+    """
+    if mode not in (Mode.AUTOMATIC, Mode.FALLBACK) or Limit.QUIET not in limits:
+        return None
+    return _QuietStrict(
+        max_flow=options.quiet_max_flow, capped=reason is Reason.QUIET_LIMIT
     )
 
 

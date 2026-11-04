@@ -78,7 +78,11 @@ def _float_attribute(attributes: Mapping[str, Any], name: str) -> float | None:
 
 
 def actuator_snapshot(
-    options: Options, state: State | None, *, foreign_change: bool = False
+    options: Options,
+    state: State | None,
+    *,
+    foreign_change: bool = False,
+    awaiting_confirmation: bool = False,
 ) -> ActuatorSnapshot:
     """Build the engine view of the actuator from its HA state."""
     if state is None:
@@ -88,6 +92,7 @@ def actuator_snapshot(
         return ActuatorSnapshot(
             state=state.state,
             foreign_change=foreign_change,
+            awaiting_confirmation=awaiting_confirmation,
             step=_float_attribute(attributes, "percentage_step"),
             percentage=_float_attribute(attributes, "percentage"),
         )
@@ -95,11 +100,16 @@ def actuator_snapshot(
         return ActuatorSnapshot(
             state=state.state,
             foreign_change=foreign_change,
+            awaiting_confirmation=awaiting_confirmation,
             step=_float_attribute(attributes, "step"),
             min_value=_float_attribute(attributes, "min"),
             max_value=_float_attribute(attributes, "max"),
         )
-    return ActuatorSnapshot(state=state.state, foreign_change=foreign_change)
+    return ActuatorSnapshot(
+        state=state.state,
+        foreign_change=foreign_change,
+        awaiting_confirmation=awaiting_confirmation,
+    )
 
 
 def off_actuator_snapshot(
@@ -175,6 +185,7 @@ class _Expected:
     """The state a command of the writer is expected to bring, and until when."""
 
     matches: Callable[[State], bool]
+    sent: datetime
     until: datetime
 
 
@@ -258,6 +269,20 @@ class ActuatorWriter:
         if state.context.id not in self._contexts:
             self._contexts.append(state.context.id)
 
+    def awaiting_confirmation(self, state: State | None) -> bool:
+        """Return True while the last command for this entity is not confirmed.
+
+        The command is inside :data:`CONFIRM_WINDOW` and the entity has not
+        changed its state since the command was sent (02-control.md#output-shaping:
+        the unit is taking the written value). Any state change after the
+        command ends this, whether it confirms the command or not.
+        """
+        if state is None or (expected := self._expected.get(state.entity_id)) is None:
+            return False
+        return (
+            dt_util.utcnow() <= expected.until and state.last_changed <= expected.sent
+        )
+
     @callback
     def observe(self, actuator: ActuatorSnapshot) -> None:
         """Clear ``write_mismatch`` once the actuator shows the written value."""
@@ -327,8 +352,9 @@ class ActuatorWriter:
         if state is not None and not is_unavailable(state.state) and matches(state):
             self._expected.pop(entity_id, None)
             return
+        sent = dt_util.utcnow()
         self._expected[entity_id] = _Expected(
-            matches=matches, until=dt_util.utcnow() + CONFIRM_WINDOW
+            matches=matches, sent=sent, until=sent + CONFIRM_WINDOW
         )
 
     async def _async_switch(self, entity_id: str, *, stop: bool) -> bool:

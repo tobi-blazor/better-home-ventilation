@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, time
 
 from .models import Contributions, Limit, Options, Profile, Reason
+from .shaping import quantise
 from .validity import Readings
 
 
@@ -106,6 +107,26 @@ def humidity_high_suppressed(dryness: Dryness, options: Options, now: datetime) 
     )
 
 
+def _co2_and_humidity(
+    d_co2: float | None, d_hum: float | None, options: Options
+) -> bool:
+    """Return True if CO₂ and humidity-high ask for about the same flow.
+
+    02-control.md#reason: both allowed and above the minimum (also after
+    quantisation), and their quantised values differ by at most one
+    ``flow_quantum``. Without fallback the larger one is then the demand.
+    A quantised value changes only when its contribution crosses a
+    quantisation step, not with every sensor reading, so the reason stays
+    stable at the edge of the band.
+    """
+    if d_co2 is None or d_hum is None:
+        return False
+    quantum = options.flow_quantum
+    q_co2, q_hum = quantise(d_co2, quantum), quantise(d_hum, quantum)
+    d_min = options.min_flow
+    return min(d_co2, d_hum, q_co2, q_hum) > d_min and abs(q_co2 - q_hum) <= quantum
+
+
 @dataclass(frozen=True, kw_only=True)
 class DemandResult:
     """Automatic demand after the limits, plus everything the decision shows."""
@@ -169,6 +190,10 @@ def compute_demand(
     # Reason of the automatic demand, in the order of the spec table.
     if fallback and demand == options.fallback_flow:
         reason = Reason.FALLBACK
+    elif not fallback and _co2_and_humidity(
+        d_co2, d_hum if hum_allowed else None, options
+    ):
+        reason = Reason.CO2_AND_HUMIDITY_HIGH
     elif hum_allowed and d_hum == demand and hum_term > d_min:
         reason = Reason.HUMIDITY_HIGH
     elif d_co2 is not None and d_co2 == demand and d_co2 > d_min:

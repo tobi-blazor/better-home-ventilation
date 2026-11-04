@@ -51,6 +51,7 @@ def setpoint_attributes(decision: Decision) -> dict[str, Any]:
     attributes: dict[str, Any] = {
         "mode": str(decision.mode),
         "reason": str(decision.reason),
+        "reasons": [str(reason) for reason in decision.reasons],
         "profile": str(decision.profile),
         "target": decision.target,
         "written": decision.last_written_flow,

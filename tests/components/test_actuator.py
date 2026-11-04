@@ -292,3 +292,34 @@ async def test_late_write_confirmation_uses_the_tolerance(
         assert state is not None
         writer.observe_change(state)
         assert writer.is_own(state.context) is own
+
+
+async def test_awaiting_confirmation_until_the_actuator_changes(
+    hass: HomeAssistant, unit: MockUnit, freezer: FrozenDateTimeFactory
+) -> None:
+    """A write awaits its confirmation until the actuator changes or the window ends.
+
+    02-control.md#output-shaping: meanwhile the written value counts as
+    `current`; an attribute-only update does not end it, any new state does.
+    """
+    unit.ignore.add(NUMBER_FLOW)
+    hass.states.async_set(NUMBER_FLOW, "190", {"step": 1})
+    writer = ActuatorWriter(hass, options(), asyncio.Lock(), lambda: None)
+    assert not writer.awaiting_confirmation(hass.states.get(NUMBER_FLOW))
+    assert await writer.async_write(WriteFlow(flow=240, native=240.0))
+    writer.async_cancel()
+    assert writer.awaiting_confirmation(hass.states.get(NUMBER_FLOW))
+
+    freezer.tick(timedelta(seconds=1))
+    hass.states.async_set(NUMBER_FLOW, "190", {"step": 1, "max": 400})
+    assert writer.awaiting_confirmation(hass.states.get(NUMBER_FLOW))
+
+    freezer.tick(CONFIRM_WINDOW)
+    assert not writer.awaiting_confirmation(hass.states.get(NUMBER_FLOW))
+
+    assert await writer.async_write(WriteFlow(flow=240, native=240.0))
+    writer.async_cancel()
+    freezer.tick(timedelta(seconds=1))
+    hass.states.async_set(NUMBER_FLOW, "300", {"step": 1}, context=Context())
+    assert not writer.awaiting_confirmation(hass.states.get(NUMBER_FLOW))
+    assert not writer.awaiting_confirmation(None)

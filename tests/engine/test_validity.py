@@ -6,7 +6,7 @@ from datetime import timedelta
 
 import pytest
 
-from engine.models import InputValue
+from engine.models import InputValue, Mode, Reason
 from engine.validity import (
     CO2_RANGE,
     HUMIDITY_RANGE,
@@ -29,6 +29,22 @@ def test_e03_bhv18_unavailable_co2_is_ignored() -> None:
     assert decision.inputs.co2_max_entity == CO2_B
     assert decision.invalid_inputs == (CO2_A,)
     assert decision.target == 110  # ramp(900) = 109.1, quantised
+
+
+def test_e03a_bhv18_low_co2_of_a_miscalibrated_sensor_is_valid() -> None:
+    """E3a: 189 and 249 ppm are valid (no fallback, no problem); 99 ppm is not."""
+    sim = Sim(values={CO2_A: 189, CO2_B: 249})
+    decision, _ = sim.run()
+    assert decision.mode is Mode.AUTOMATIC
+    assert decision.invalid_inputs == ()
+    assert decision.inputs.co2_max == 249
+    assert (decision.target, decision.reason) == (80, Reason.MINIMUM)
+
+    sim.set(CO2_A, 99)
+    sim.set(CO2_B, 99)
+    decision, _ = sim.run()
+    assert decision.mode is Mode.FALLBACK
+    assert decision.invalid_inputs == (CO2_A, CO2_B)
 
 
 def test_e05_bhv18_stale_value_is_invalid() -> None:
@@ -55,7 +71,8 @@ def test_e05_bhv18_stale_value_is_invalid() -> None:
         ("abc", CO2_RANGE),
         ("nan", CO2_RANGE),
         ("inf", CO2_RANGE),
-        ("249", CO2_RANGE),
+        ("99.9", CO2_RANGE),
+        ("0", CO2_RANGE),
         ("10001", CO2_RANGE),
         ("100.5", HUMIDITY_RANGE),
         ("-1", HUMIDITY_RANGE),
@@ -75,7 +92,9 @@ def test_bhv18_invalid_values_are_excluded(
 @pytest.mark.parametrize(
     ("state", "valid_range", "expected"),
     [
-        ("250", CO2_RANGE, 250.0),
+        ("100", CO2_RANGE, 100.0),
+        ("189", CO2_RANGE, 189.0),  # miscalibrated sensor at night
+        ("249", CO2_RANGE, 249.0),
         ("10000", CO2_RANGE, 10000.0),
         ("0", HUMIDITY_RANGE, 0.0),
         ("100", HUMIDITY_RANGE, 100.0),

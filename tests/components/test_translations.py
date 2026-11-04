@@ -29,7 +29,11 @@ from custom_components.better_home_ventilation.const import (
     SUBENTRY_READINESS_CONDITION,
     SUBENTRY_WARNING_SOURCE,
 )
-from custom_components.better_home_ventilation.engine.models import ProblemKey
+from custom_components.better_home_ventilation.engine.models import (
+    Mode,
+    ProblemKey,
+    Reason,
+)
 from custom_components.better_home_ventilation.issues import ENTITY_OPTIONS
 from custom_components.better_home_ventilation.notifications import Action
 
@@ -364,6 +368,18 @@ def test_off_actuator_texts_match(language: str) -> None:
     assert setup == options
     for error in ("off_entity_is_actuator", "off_entity_not_found"):
         assert strings["config"]["error"][error] == strings["options"]["error"][error]
+
+
+@pytest.mark.parametrize("language", list(FILES))
+def test_enum_sensor_states_are_translated_and_have_icons(language: str) -> None:
+    """Every reason and mode has a state name and a state icon (04-interface)."""
+    sensors = _load(language)["entity"]["sensor"]
+    icons = json.loads((INTEGRATION / "icons.json").read_text(encoding="utf-8"))
+    for key, enum in (("reason", Reason), ("mode", Mode)):
+        assert set(sensors[key]["state"]) == {str(item) for item in enum}
+        assert set(icons["entity"]["sensor"][key]["state"]) == {
+            str(item) for item in enum
+        }
 
 
 def test_translation_files_match() -> None:
