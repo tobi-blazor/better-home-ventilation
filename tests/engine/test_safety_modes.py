@@ -475,39 +475,128 @@ def test_e31_bhv44_safety_when_control_disabled() -> None:
     assert sim.run()[1] == []
 
 
-def test_safety_when_disabled_off() -> None:
-    """Without ``safety_when_disabled`` a disabled control stays hands-off."""
+def test_e59_q14_warning_while_disabled_notifies_without_switching() -> None:
+    """E59: control disabled, ``safety_when_disabled`` off, warning -> notified.
+
+    Owner decision on Q14 (2026-10-30): the notification ``safety_disabled``
+    is sent (nothing is switched), again for a new warning, and cleared when
+    the warning ends.
+    """
     sim = _sim(safety_when_disabled=False)
     sim.command(ControlSwitchCommand(source=Source.BUTTON, enabled=False))
     sim.run()
     sim.warn(SMOKE)
     decision, effects = sim.run()
     assert decision.mode is Mode.DISABLED
-    assert effects == []
     assert len(decision.warnings) == 1
+    [smoke] = decision.warnings
+    assert effects == [Notify(kind=NotifyKind.SAFETY_DISABLED, warnings=(smoke,))]
+    assert Notify(kind=NotifyKind.SAFETY_DISABLED).tag is NotificationTag.SAFETY
+
+    # still active: not sent again, nothing switched
+    sim.advance(minutes=5)
+    assert sim.run()[1] == []
+
+    # a new warning is notified, the newest first
+    sim.warn(NINA_1, FIRE)
+    decision, effects = sim.run()
+    notice = _notify(effects, NotifyKind.SAFETY_DISABLED)
+    assert [w.headline for w in notice.warnings] == [FIRE.headline, None]
+    assert not of_type(effects, TurnOff)
+    assert not writes(effects)
+
+    # one warning ends: nothing; the last one ends: cleared, no restart wait
     sim.clear(SMOKE)
-    sim.run()
+    assert sim.run()[1] == []
+    sim.clear(NINA_1)
+    decision, effects = sim.run()
+    assert decision.mode is Mode.DISABLED
+    assert effects == [CLEAR_SAFETY]
     assert sim.state.safety.restart_pending is None
+    sim.advance(minutes=5)
+    assert sim.run()[1] == []
 
 
-def test_control_switched_off_during_safety_off_clears_notification() -> None:
-    """Leaving safety_off by the control switch clears the safety notification."""
+def test_e59_q14_override_and_removed_override_while_disabled() -> None:
+    """E59: an override clears the notice; removing it notifies again."""
+    sim = _sim(safety_when_disabled=False)
+    sim.command(ControlSwitchCommand(source=Source.BUTTON, enabled=False))
+    sim.run()
+    sim.warn(SMOKE)
+    sim.run()
+    sim.command(OverrideSafetyCommand(source=Source.NOTIFICATION))
+    decision, effects = sim.run()
+    assert decision.mode is Mode.DISABLED
+    assert effects == [CLEAR_SAFETY]
+    sim.command(RemoveOverrideCommand(source=Source.SERVICE))
+    decision, effects = sim.run()
+    assert _notify(effects, NotifyKind.SAFETY_DISABLED)
+    assert not of_type(effects, TurnOff)
+
+
+def test_e59_q14_control_switched_off_during_safety_off_replaces_notice() -> None:
+    """E59: control off during a warning replaces ``safety``; on shuts down again."""
     sim = _sim(safety_when_disabled=False)
     sim.warn(SMOKE)
     sim.run()
     sim.command(ControlSwitchCommand(source=Source.BUTTON, enabled=False))
     decision, effects = sim.run()
     assert decision.mode is Mode.DISABLED
-    assert effects == [
-        CLEAR_SAFETY,
-        *of_type(effects, FireEvent),
+    assert of_type(effects, Notify) == [
+        Notify(kind=NotifyKind.SAFETY_DISABLED, warnings=decision.warnings)
     ]
+    assert not of_type(effects, ClearNotification)
+    assert not of_type(effects, TurnOn)
     # switched on again during the warning: safety_off and a notification
     sim.command(ControlSwitchCommand(source=Source.BUTTON, enabled=True))
     decision, effects = sim.run()
     assert decision.mode is Mode.SAFETY_OFF
     assert _notify(effects, NotifyKind.SAFETY)
+    assert CLEAR_SAFETY not in effects
     assert _event(effects)["trigger"] == "control_switch"
+    # and off again: the notice replaces it once more
+    sim.command(ControlSwitchCommand(source=Source.BUTTON, enabled=False))
+    _, effects = sim.run()
+    assert _notify(effects, NotifyKind.SAFETY_DISABLED)
+
+
+def test_control_switched_off_during_restart_wait_clears_notification() -> None:
+    """Leaving safety_off by the control switch without a warning clears it."""
+    sim = _sim(safety_when_disabled=False)
+    sim.warn(SMOKE)
+    sim.run()
+    sim.clear(SMOKE)
+    sim.run()
+    assert sim.state.safety.restart_pending is not None
+    sim.command(ControlSwitchCommand(source=Source.BUTTON, enabled=False))
+    decision, effects = sim.run()
+    assert decision.mode is Mode.DISABLED
+    assert CLEAR_SAFETY in effects
+    assert not of_type(effects, Notify)
+
+
+def test_e59_q14_notice_survives_a_restart() -> None:
+    """E59: after a restart the loaded warning is not notified again."""
+    sim = _sim(safety_when_disabled=False)
+    sim.command(ControlSwitchCommand(source=Source.BUTTON, enabled=False))
+    sim.run()
+    sim.warn(SMOKE)
+    sim.run()
+    restarted = _reload(sim)
+    decision, effects = restarted.run()
+    assert decision.mode is Mode.DISABLED
+    assert not of_type(effects, Notify)
+    restarted.clear(SMOKE)
+    restarted.advance(minutes=5)  # end of the startup grace
+    _, effects = restarted.run()
+    assert CLEAR_SAFETY in effects
+
+    # without a warning before the restart nothing is cleared
+    quiet = _sim(safety_when_disabled=False)
+    quiet.command(ControlSwitchCommand(source=Source.BUTTON, enabled=False))
+    quiet.run()
+    _, effects = _reload(quiet).run()
+    assert CLEAR_SAFETY not in effects
 
 
 def test_keep_off_while_disabled_does_not_restore() -> None:
@@ -841,6 +930,163 @@ def test_bhv40_pause_and_boost_during_safety_off() -> None:
     sim.run()
     sim.command(ResumeCommand(source=Source.BUTTON))
     assert sim.run()[0].mode is Mode.AUTOMATIC
+
+
+# --- Q13: the readiness gate also applies to the safety off --------------------
+
+
+def _not_ready(sim: Sim) -> list[tuple[ProblemKey, str | None]]:
+    assert sim.decision is not None
+    return [
+        (p.key, p.entity_id)
+        for p in sim.decision.problems
+        if p.key is ProblemKey.NOT_READY
+    ]
+
+
+def test_e58_q13_safety_off_waits_for_readiness_and_is_a_problem() -> None:
+    """E58: an unmet readiness condition blocks the safety off; ``not_ready``.
+
+    Owner decision on Q13 (2026-10-30): the readiness gate also applies to the
+    safety TurnOff. Without ``auto_correct`` the problem is raised at once, the
+    problem sensor follows after ``problem_delay``; the off is written as soon
+    as the condition is met.
+    """
+    condition = ReadinessCondition(
+        entity_id=READY, expected_state="Remote", auto_correct=False
+    )
+    sim = _sim(readiness_conditions=(condition,))
+    sim.set(READY, "Local")
+    sim.run()
+    sim.advance(minutes=20)
+    sim.warn(SMOKE)
+    decision, effects = sim.run()
+    assert decision.mode is Mode.SAFETY_OFF
+    assert decision.setpoint == 0
+    assert decision.write_blocked_by is WriteBlock.NOT_READY
+    assert not of_type(effects, TurnOff)
+    # the warning is notified, saying that the off could not be written yet
+    # (owner decision 2026-11-03)
+    notice = _notify(effects, NotifyKind.SAFETY)
+    assert notice.off_blocked_by is WriteBlock.NOT_READY
+    assert notice.warnings == decision.warnings
+    assert _not_ready(sim) == [(ProblemKey.NOT_READY, READY)]
+    assert decision.problem  # unmet for longer than problem_delay
+    sim.advance(minutes=1)
+    assert not of_type(sim.run()[1], Notify)  # not repeated while blocked
+
+    sim.set(READY, "Remote")
+    decision, effects = sim.run()
+    assert of_type(effects, TurnOff) == [TurnOff(entity_id=OFF_SWITCH)]
+    assert decision.write_blocked_by is None
+    assert _not_ready(sim) == []
+    # the normal wording replaces it (same tag), once
+    assert of_type(effects, Notify) == [
+        Notify(kind=NotifyKind.SAFETY, warnings=decision.warnings)
+    ]
+    sim.advance(minutes=1)
+    assert not of_type(sim.run()[1], Notify)
+
+
+def test_e58_q13_safety_off_after_failed_corrections_is_not_ready() -> None:
+    """E58 with ``auto_correct``: corrections first, ``not_ready`` after 3 attempts."""
+    condition = ReadinessCondition(
+        entity_id=READY, expected_state="Remote", auto_correct=True
+    )
+    sim = _sim(readiness_conditions=(condition,))
+    sim.set(READY, "Remote")
+    sim.run()
+    sim.set(READY, "Local")
+    sim.warn(SMOKE)
+    decision, effects = sim.run()
+    assert decision.mode is Mode.SAFETY_OFF
+    assert decision.write_blocked_by is WriteBlock.NOT_READY
+    assert of_type(effects, CorrectReadiness)
+    assert not of_type(effects, TurnOff)
+    assert _not_ready(sim) == []
+
+    # the unit ignores the correction: two more attempts, then the problem
+    for _ in range(2):
+        sim.advance(seconds=60)
+        _, effects = sim.run()
+        assert of_type(effects, CorrectReadiness)
+        assert not of_type(effects, TurnOff)
+    sim.advance(seconds=60)
+    decision, effects = sim.run()
+    assert not of_type(effects, TurnOff)
+    assert _not_ready(sim) == [(ProblemKey.NOT_READY, READY)]
+    assert not decision.problem  # the sensor waits problem_delay
+    sim.advance(minutes=10)
+    decision, _ = sim.run()
+    assert decision.problem
+
+    # a later correction works: the safety off follows at once
+    sim.set(READY, "Remote")
+    _, effects = sim.run()
+    assert of_type(effects, TurnOff) == [TurnOff(entity_id=OFF_SWITCH)]
+    assert _notify(effects, NotifyKind.SAFETY).off_blocked_by is None
+
+
+def test_e58_blocked_off_unavailable_and_already_stopped() -> None:
+    """E58: an unavailable actuator blocks too; a stopped unit is not blocked."""
+    sim = _sim()
+    sim.set_off("unavailable")
+    sim.warn(SMOKE)
+    decision, effects = sim.run()
+    assert decision.write_blocked_by is WriteBlock.UNAVAILABLE
+    assert _notify(effects, NotifyKind.SAFETY).off_blocked_by is (
+        WriteBlock.UNAVAILABLE
+    )
+    sim.set_off("off")
+    _, effects = sim.run()
+    assert of_type(effects, TurnOff) == [TurnOff(entity_id=OFF_SWITCH)]
+    assert _notify(effects, NotifyKind.SAFETY).off_blocked_by is None
+
+    # paused (stopped) before the warning: unmet readiness blocks nothing
+    condition = ReadinessCondition(
+        entity_id=READY, expected_state="Remote", auto_correct=False
+    )
+    paused = _sim(readiness_conditions=(condition,))
+    paused.set(READY, "Remote")
+    paused.command(PauseCommand(source=Source.BUTTON))
+    paused.run()
+    paused.set(READY, "Local")
+    paused.warn(SMOKE)
+    _, effects = paused.run()
+    assert _notify(effects, NotifyKind.SAFETY).off_blocked_by is None
+
+    # without off actuator: the lowest value is the off
+    lowest = Sim(
+        make_options(actuator_min=0, warning_sources=(SMOKE_SOURCE,)),
+        actuator="unavailable",
+        values={SMOKE: "on"},
+    )
+    _, effects = lowest.run()
+    assert _notify(effects, NotifyKind.SAFETY).off_blocked_by is (
+        WriteBlock.UNAVAILABLE
+    )
+    lowest.set_actuator("120")
+    _, effects = lowest.run()
+    assert [w.flow for w in writes(effects)] == [0]
+    assert _notify(effects, NotifyKind.SAFETY).off_blocked_by is None
+
+
+def test_e58_blocked_wording_after_a_restart() -> None:
+    """E58: after a load the wording that fits now is assumed to be shown."""
+    condition = ReadinessCondition(
+        entity_id=READY, expected_state="Remote", auto_correct=False
+    )
+    sim = _sim(readiness_conditions=(condition,))
+    sim.set(READY, "Local")
+    sim.warn(SMOKE)
+    sim.run()
+    restarted = _reload(sim)
+    _, effects = restarted.run()
+    assert not of_type(effects, Notify)
+    restarted.set(READY, "Remote")
+    _, effects = restarted.run()
+    assert of_type(effects, TurnOff) == [TurnOff(entity_id=OFF_SWITCH)]
+    assert _notify(effects, NotifyKind.SAFETY).off_blocked_by is None
 
 
 def test_source_unavailable_problem_after_grace() -> None:

@@ -14,6 +14,7 @@ from typing import Final
 
 from .demand import DemandResult
 from .detector import active_kinds, end_auto_boosts
+from .mapping import current_native, off_native, same_native
 from .models import (
     AUTO_BOOST_MODES,
     OFF_MODES,
@@ -46,6 +47,7 @@ from .models import (
     Source,
     Trigger,
     WarningInfo,
+    WriteBlock,
 )
 from .safety import by_priority, collect_warnings
 
@@ -364,6 +366,22 @@ def unit_running(options: Options, snapshot: Snapshot) -> bool | None:
     return state != stopped
 
 
+def unit_stopped(options: Options, snapshot: Snapshot) -> bool | None:
+    """Return whether the unit stands still, for the reminders while disabled (Q15).
+
+    With an off actuator: it is in the stopped state. Without one: the
+    actuator shows its lowest value, the value an off state writes (a ``fan``
+    is off). None while the entity is unavailable/unknown or has no value.
+    """
+    if options.off_entity is not None:
+        running = unit_running(options, snapshot)
+        return None if running is None else not running
+    native = current_native(options, snapshot.actuator)
+    if native is None:
+        return None
+    return same_native(native, off_native(options, snapshot.actuator))
+
+
 def _foreign_change(options: Options, snapshot: Snapshot) -> bool:
     if options.off_entity is not None:
         return (
@@ -508,8 +526,15 @@ def safety_notifications(
     *,
     mode: Mode,
     previous_mode: Mode | None,
+    off_blocked: WriteBlock | None = None,
 ) -> tuple[ControllerState, list[Effect]]:
     """Notifications of the safety shutdown (BHV-41, BHV-43; 04-interface.md).
+
+    ``off_blocked`` is the gate that kept the off from being written in this
+    evaluation (owner decision 2026-11-03 on the Q13 follow-up): the
+    notification ``safety`` then says that the ventilation could not be
+    switched off yet, and it is sent again in the normal wording as soon as
+    the off is written.
 
     - ``safety`` when the unit enters ``safety_off`` because of a warning, or a
       new warning shuts down while it already is in ``safety_off``.
@@ -518,17 +543,36 @@ def safety_notifications(
       restart wait (or at once with ``restart_confirm_timeout`` 0).
     - otherwise leaving ``safety_off`` (override, resume, keep off, control
       switch) clears the safety notification.
+    - ``safety_disabled`` while control is disabled without
+      ``safety_when_disabled`` and a warning blocks (owner decision on Q14):
+      sent when the first warning blocks (also when control is switched off
+      during ``safety_off``, replacing ``safety``, or an override is removed)
+      and again for a new warning; cleared when no warning blocks any more.
+      Nothing is switched.
     """
     effects: list[Effect] = []
     was_safety = previous_mode is Mode.SAFETY_OFF
     restarted = state.restarted_pending or update.ended_without_wait
+    blocking = by_priority(state.safety.blocking.values())
+    older = tuple(w for w in blocking if w not in update.new_blocking)
+    notified_disabled = False
+    notified_blocked = False
     if mode is Mode.SAFETY_OFF:
-        blocking = by_priority(state.safety.blocking.values())
         if blocking and (update.new_blocking or not was_safety):
-            older = tuple(w for w in blocking if w not in update.new_blocking)
             effects.append(
-                Notify(kind=NotifyKind.SAFETY, warnings=(*update.new_blocking, *older))
+                Notify(
+                    kind=NotifyKind.SAFETY,
+                    warnings=(*update.new_blocking, *older),
+                    off_blocked_by=off_blocked,
+                )
             )
+            notified_blocked = off_blocked is not None
+        elif blocking and state.safety_blocked_notified:
+            if off_blocked is None:
+                # The off has been written: the normal wording replaces it.
+                effects.append(Notify(kind=NotifyKind.SAFETY, warnings=blocking))
+            else:
+                notified_blocked = True
         elif update.restart_started and state.safety.restart_pending is not None:
             effects.append(
                 Notify(
@@ -536,12 +580,32 @@ def safety_notifications(
                     restart_at=state.safety.restart_pending.deadline,
                 )
             )
+    elif mode is Mode.DISABLED and blocking:
+        # A blocking warning in ``disabled`` means safety_when_disabled is off.
+        if update.new_blocking or not state.safety_disabled_notified:
+            effects.append(
+                Notify(
+                    kind=NotifyKind.SAFETY_DISABLED,
+                    warnings=(*update.new_blocking, *older),
+                )
+            )
+        notified_disabled = True
     elif was_safety:
         if restarted:
             effects.append(Notify(kind=NotifyKind.RESTARTED))
         else:
             effects.append(ClearNotification(tag=NotificationTag.SAFETY))
-    return replace(state, restarted_pending=False), effects
+    elif state.safety_disabled_notified:
+        effects.append(ClearNotification(tag=NotificationTag.SAFETY))
+    return (
+        replace(
+            state,
+            restarted_pending=False,
+            safety_disabled_notified=notified_disabled,
+            safety_blocked_notified=notified_blocked,
+        ),
+        effects,
+    )
 
 
 # --- Reminders (BHV-24) ------------------------------------------------------
@@ -567,6 +631,7 @@ def update_reminders(
     *,
     now: datetime,
     in_grace: bool,
+    stopped: bool | None = None,
 ) -> tuple[ControllerState, list[Effect], datetime | None]:
     """Track ``off_since`` and send reminders for long off states (BHV-24).
 
@@ -575,19 +640,44 @@ def update_reminders(
     lasts. Nothing is sent during the startup grace. When the off state ends,
     a sent reminder is cleared. Returns the new state, the effects and the
     time of the next reminder (None outside off states).
+
+    In ``disabled`` a stopped unit (:func:`unit_stopped`) counts as an off
+    state (owner decision on Q15); while ``stopped`` is unknown (None) the
+    previous status is kept. While control is disabled the reminder is
+    ``reminder_control_off`` (action "Turn control on", owner decision
+    2026-11-03); a shown reminder is replaced when the control switch
+    changes and the off state goes on.
     """
-    if mode not in OFF_MODES:
+    off = mode in OFF_MODES or (
+        mode is Mode.DISABLED
+        and (stopped if stopped is not None else state.off_since is not None)
+    )
+    if not off:
         effects: list[Effect] = []
         if state.last_reminder is not None:
             effects.append(ClearNotification(tag=NotificationTag.REMINDER))
         return replace(state, off_since=None, last_reminder=None), effects, None
     off_since = state.off_since or now
     state = replace(state, off_since=off_since)
+    kind = (
+        NotifyKind.REMINDER
+        if state.control_enabled
+        else NotifyKind.REMINDER_CONTROL_OFF
+    )
     due = _reminder_due(state, off_since, mode, options)
     if in_grace or now < due:
-        return state, [], due
+        effects = []
+        if (
+            not in_grace
+            and state.last_reminder is not None
+            and state.pending_trigger is Trigger.CONTROL_SWITCH
+        ):
+            # The control switch changed while a reminder is shown and the
+            # unit stays off: replace it, so its action fits (same schedule).
+            effects.append(Notify(kind=kind, off_since=off_since))
+        return state, effects, due
     state = replace(state, last_reminder=now)
-    reminder = Notify(kind=NotifyKind.REMINDER, off_since=off_since)
+    reminder = Notify(kind=kind, off_since=off_since)
     return state, [reminder], now + REMINDER_INTERVAL
 
 

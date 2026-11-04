@@ -297,10 +297,24 @@ def test_menu_errors_and_aborts_are_translated(language: str) -> None:
 def test_notification_texts_and_issues_are_translated(language: str) -> None:
     """Every notification kind, problem, action and repair issue has a text."""
     common = _load(language)["common"]
-    for kind in ("safety", "restart", "restarted", "reminder", "problem"):
+    for kind in (
+        "safety",
+        "safety_disabled",
+        "restart",
+        "restarted",
+        "reminder",
+        "problem",
+    ):
         assert common[f"notify_{kind}_title"]
     for key in (
         "notify_safety_message_no_details",
+        "notify_safety_disabled_message",
+        "notify_safety_disabled_message_no_details",
+        "notify_safety_blocked_title",
+        "notify_safety_blocked_message",
+        "notify_safety_blocked_message_no_details",
+        "notify_blocked_not_ready",
+        "notify_blocked_unavailable",
         "notify_restart_message",
         "notify_restarted_message",
         "notify_reminder_message",
@@ -311,6 +325,22 @@ def test_notification_texts_and_issues_are_translated(language: str) -> None:
     for action in Action:
         assert common[f"notify_action_{action.lower()}"], action
     assert set(PLACEHOLDER.findall(common["notify_safety_title"])) == {"headline"}
+    assert set(PLACEHOLDER.findall(common["notify_safety_disabled_title"])) == {
+        "headline"
+    }
+    assert set(PLACEHOLDER.findall(common["notify_safety_disabled_message"])) == {
+        "text"
+    }
+    assert set(
+        PLACEHOLDER.findall(common["notify_safety_disabled_message_no_details"])
+    ) == {"source"}
+    assert set(PLACEHOLDER.findall(common["notify_safety_blocked_message"])) == {
+        "text",
+        "reason",
+    }
+    assert set(
+        PLACEHOLDER.findall(common["notify_safety_blocked_message_no_details"])
+    ) == {"source", "reason"}
     assert set(PLACEHOLDER.findall(common["notify_restart_message"])) == {"time"}
     assert set(PLACEHOLDER.findall(common["notify_reminder_title"])) == {"time"}
     issue = _load(language)["issues"]["missing_notify_service"]

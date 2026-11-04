@@ -67,6 +67,7 @@ from .modes import (
     resolve_mode,
     safety_notifications,
     unit_running,
+    unit_stopped,
     update_reminders,
     update_safety,
     wake_times,
@@ -92,6 +93,14 @@ def evaluate(
     grace_until = snapshot.started_at + options.startup_grace
     in_grace = now < grace_until
     first_evaluation = not state.started
+    if first_evaluation:
+        # After a load the notification of a warning while control is disabled
+        # is still on the phones if the loaded warnings blocked (Q14).
+        state = replace(
+            state,
+            safety_disabled_notified=state.last_mode is Mode.DISABLED
+            and bool(state.safety.blocking),
+        )
 
     # 1. Timers, external stop/start and the warning sources change the
     #    controller state first.
@@ -159,14 +168,26 @@ def evaluate(
     )
     state = out.state
     effects: list[Effect] = [*readiness.corrections, *out.effects]
+    if first_evaluation and previous_mode is Mode.SAFETY_OFF:
+        # After a load: assume the phones show the wording that fits now.
+        state = replace(state, safety_blocked_notified=out.off_blocked is not None)
 
     # 5. Notifications: safety shutdown and restart (BHV-41, BHV-43), reminders
     #    for long off states (BHV-24).
     state, notices = safety_notifications(
-        state, safety, mode=mode, previous_mode=previous_mode
+        state,
+        safety,
+        mode=mode,
+        previous_mode=previous_mode,
+        off_blocked=out.off_blocked if mode is Mode.SAFETY_OFF else None,
     )
     state, reminders, reminder_at = update_reminders(
-        state, mode, options, now=now, in_grace=in_grace
+        state,
+        mode,
+        options,
+        now=now,
+        in_grace=in_grace,
+        stopped=unit_stopped(options, snapshot),
     )
     effects.extend((*notices, *reminders))
 
@@ -309,6 +330,9 @@ class _Output:
     blocked_by: WriteBlock | None = None
     off_method: OffMethod | None = None
     effects: tuple[Effect, ...] = ()
+    #: The gate that kept an off state from stopping the unit (not when the
+    #: unit is already stopped).
+    off_blocked: WriteBlock | None = None
 
 
 def _write_stage(
@@ -420,6 +444,7 @@ def _write_stage(
                     target=0.0,
                     blocked_by=blocked,
                     off_method=OffMethod.OFF_ACTUATOR,
+                    off_blocked=blocked if running is not False else None,
                 )
             stopped = replace(state, stopped_by_integration=True)
             if remember:
@@ -440,6 +465,7 @@ def _write_stage(
                 target=0.0,
                 blocked_by=blocked,
                 off_method=OffMethod.MINIMUM,
+                off_blocked=(blocked if not same_native(native_now, lowest) else None),
             )
         flow = native_to_flow(options, lowest) or 0.0
         written = _written(state, now, flow)

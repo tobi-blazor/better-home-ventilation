@@ -388,7 +388,7 @@
         },
         "data_description": {
           "restart_confirm_timeout": "Endet die letzte Warnung, bleibt das Gerät aus und fragt auf den Telefonen, ob es wieder einschalten soll. Ohne Antwort schaltet es nach dieser Zeit ein. 0 schaltet sofort ein.",
-          "safety_when_disabled": "Das Gerät auch bei ausgeschaltetem Regelungsschalter für eine Warnung ausschalten und nach dem Wiedereinschalten in den vorherigen Zustand bringen. Ausgeschaltet werden Warnungen nur an den Entitäten angezeigt."
+          "safety_when_disabled": "Das Gerät auch bei ausgeschaltetem Regelungsschalter für eine Warnung ausschalten und nach dem Wiedereinschalten in den vorherigen Zustand bringen. Ausgeschaltet wird eine Warnung nur an den Entitäten angezeigt und gemeldet; das Gerät wird nicht geschaltet."
         }
       },
       "notifications": {
@@ -404,11 +404,11 @@
         },
         "data_description": {
           "notify_services": "Die notify.mobile_app-Dienste der Companion Apps, die die Benachrichtigungen erhalten. Ein Dienst, der nicht mehr existiert, ist hier nicht gewählt und wird beim Speichern entfernt.",
-          "notify_safety": "Sicherheitsabschaltung mit Weiter lüften, die Frage zum Wiedereinschalten mit Jetzt einschalten und Aus lassen sowie der Hinweis auf das Wiedereinschalten.",
-          "notify_reminders": "Erinnerung mit Fortsetzen, solange das Gerät aus bleibt (der Feuchteschutz ist nicht aktiv), alle 24 Stunden wiederholt.",
+          "notify_safety": "Sicherheitsabschaltung mit Weiter lüften, die Frage zum Wiedereinschalten mit Jetzt einschalten und Aus lassen , der Hinweis auf das Wiedereinschalten sowie eine Warnung bei ausgeschalteter Regelung.",
+          "notify_reminders": "Erinnerung mit Fortsetzen, solange das Gerät aus bleibt (der Feuchteschutz ist nicht aktiv), alle 24 Stunden wiederholt; bei ausgeschalteter Regelung mit Steuerung einschalten.",
           "notify_problems": "Eine Benachrichtigung, wenn ein Problem länger als die Verzögerung für Probleme (Einstellungen unter Regelung) besteht; sie wird entfernt, wenn es behoben ist.",
           "pause_reminder_after": "Erste Erinnerung, nachdem eine Pause bis zum Fortsetzen so lange gedauert hat (mindestens 1 Minute).",
-          "off_notice_after": "Erste Erinnerung, nachdem eine befristete Pause oder eine Sicherheitsabschaltung so lange gedauert hat (mindestens 1 Minute)."
+          "off_notice_after": "Erste Erinnerung, nachdem eine befristete Pause oder eine Sicherheitsabschaltung so lange gedauert hat oder das Gerät bei ausgeschalteter Regelung so lange stillsteht (mindestens 1 Minute)."
         }
       }
     }
@@ -804,6 +804,14 @@
     "provider_none": "keiner (nur ein/aus, Filter gelten nicht)",
     "notify_safety_title": "Lüftung aus: {headline}",
     "notify_safety_message_no_details": "{source} meldet eine Warnung. Die Lüftung wurde ausgeschaltet.",
+    "notify_safety_blocked_title": "Warnung: {headline}",
+    "notify_safety_blocked_message": "{text} Die Lüftung konnte noch nicht ausgeschaltet werden ({reason}).",
+    "notify_safety_blocked_message_no_details": "{source} meldet eine Warnung. Die Lüftung konnte noch nicht ausgeschaltet werden ({reason}).",
+    "notify_blocked_not_ready": "Bereitschaftsbedingung nicht erfüllt",
+    "notify_blocked_unavailable": "Aktor nicht verfügbar",
+    "notify_safety_disabled_title": "Warnung: {headline}",
+    "notify_safety_disabled_message": "{text} Die Regelung ist aus, deshalb schaltet die Integration die Lüftung nicht ab.",
+    "notify_safety_disabled_message_no_details": "{source} meldet eine Warnung. Die Regelung ist aus, deshalb schaltet die Integration die Lüftung nicht ab.",
     "notify_restart_title": "Warnung aufgehoben",
     "notify_restart_message": "Lüftung wieder einschalten? Sie startet automatisch um {time}.",
     "notify_restarted_title": "Lüftung wieder eingeschaltet",
@@ -825,6 +833,7 @@
     "notify_action_restart": "Jetzt einschalten",
     "notify_action_keep_off": "Aus lassen",
     "notify_action_resume": "Fortsetzen",
+    "notify_action_control_on": "Steuerung einschalten",
     "notify_problem_missing_entity": "{entities} existiert nicht mehr; die Lüftung läuft ohne sie weiter. Siehe die Reparaturmeldung.",
     "issue_where_actuator": "Aktor (Schritt Aktor)",
     "issue_where_off_entity": "Aus-Aktor (Schritt Aktor)",

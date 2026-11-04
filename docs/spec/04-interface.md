@@ -153,10 +153,12 @@ Sent via the configured `notify.mobile_app_*` services (`notify.<service>` with 
 
 | Kind | Title / message (en; de in translations) | Actions | Tag |
 |---|---|---|---|
-| safety | "Ventilation off: <headline>" / "<recommended actions, otherwise description; HTML stripped, max. 300 chars> (<sender>)". Without details: "Ventilation off: <source name>" / "<source name> reports a warning. The ventilation was switched off." | `KEEP_VENTILATING` → `override_safety()`, `OK` → nothing | `bhv_<entry8>_safety` |
+| safety | "Ventilation off: <headline>" / "<recommended actions, otherwise description; HTML stripped, max. 300 chars> (<sender>)". Without details: "Ventilation off: <source name>" / "<source name> reports a warning. The ventilation was switched off." While the off could not be written yet ([03-modes.md](03-modes.md#flow)): "Warning: <headline>" / "<text, or: <source name> reports a warning.> The ventilation could not be switched off yet (<readiness not met / actuator unavailable>).", replaced by the normal wording once the off is written | `KEEP_VENTILATING` → `override_safety()`, `OK` → nothing | `bhv_<entry8>_safety` |
+| safety_disabled | "Warning: <headline>" / "<recommended actions, otherwise description, as for safety> Control is off, so the integration does not switch the ventilation off." Without details: "<source name> reports a warning. Control is off, so the integration does not switch the ventilation off." Only while control is disabled and `safety_when_disabled` is off ([03-modes.md](03-modes.md#flow), Q14) | `OK` → nothing | `bhv_<entry8>_safety` |
 | restart | "Warning lifted" / "Restart ventilation? Restarts automatically at <time>." | `RESTART` → `resume()`, `KEEP_OFF` → `keep_off()` | `bhv_<entry8>_safety` (replaces) |
 | restarted | "Ventilation restarted" / "The warning has ended; the ventilation runs again." | – | `bhv_<entry8>_safety` |
 | reminder | "Ventilation off since <time>" / "Moisture protection is inactive." | `RESUME` → `resume()` | `bhv_<entry8>_reminder` |
+| reminder_control_off | as reminder, while control is disabled: a stopped unit in `disabled` ([03-modes.md](03-modes.md#reminders-bhv-24), Q15) or `safety_off` with `safety_when_disabled` | `CONTROL_ON` → control switch on (owner decision 2026-11-03) | `bhv_<entry8>_reminder` |
 | problem | "Ventilation problem" / problem text (`common.notify_problem_<key>`, with the friendly names of the problem's entities) | – | `bhv_<entry8>_problem_<key>` |
 
 `<entry8>` = first 8 characters of the entry id. Action ids are `BHV_<entry8>_<ACTION>`. `<time>` is `HH:MM` in local time, with the date if it is not today.
@@ -168,7 +170,8 @@ Sent via the configured `notify.mobile_app_*` services (`notify.<service>` with 
 
 Details (decided 2026-10-29 for M9):
 
-- **Options:** the `notify_*` options switch the kinds: `notify_safety` covers safety, restart and restarted, `notify_reminders` the reminder, `notify_problems` the problem notifications. A clear is sent only for an enabled kind. The priority data is sent with safety and restart (the two that ask for an answer), not with restarted.
+- **Options:** the `notify_*` options switch the kinds: `notify_safety` covers safety, safety_disabled, restart and restarted, `notify_reminders` reminder and reminder_control_off, `notify_problems` the problem notifications. A clear is sent only for an enabled kind. The priority data is sent with safety, safety_disabled and restart (a hazard or a question), not with restarted.
+- **safety_disabled** offers only `OK` (decided 2026-10-30 for Q14): while control is disabled the integration switches nothing, so "Keep ventilating" would change nothing now and would only lift the incident in advance for the time control is switched on again; that stays possible with the `safety_override` switch or the service.
 - **Targets:** every configured service that exists gets the notification. If services are configured but none of them exists, the persistent notification is used, so a safety shutdown is never silent.
 - **Problems:** one notification per problem key, sent when a problem of the key first persists longer than `problem_delay`, not repeated while it persists, cleared when no problem of the key is left. Problems are decisions of the engine; the glue sends them after each evaluation.
 - **Never blocking:** each notification runs in its own task after the previous one (so a clear never overtakes its notification); each service call has a timeout of 10 s; a failing service is logged once (warning) until it works again (info).

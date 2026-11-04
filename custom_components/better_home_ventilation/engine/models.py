@@ -184,9 +184,15 @@ class NotifyKind(StrEnum):
     """Kind of a notification (04-interface.md#notifications)."""
 
     SAFETY = "safety"
+    #: A warning while control is disabled and ``safety_when_disabled`` is
+    #: off: the integration does not switch the unit off (Q14).
+    SAFETY_DISABLED = "safety_disabled"
     RESTART = "restart"
     RESTARTED = "restarted"
     REMINDER = "reminder"
+    #: The reminder while control is disabled: its action switches control
+    #: on instead of ``resume()``, which has nothing to end then.
+    REMINDER_CONTROL_OFF = "reminder_control_off"
 
 
 class NotificationTag(StrEnum):
@@ -200,9 +206,11 @@ class NotificationTag(StrEnum):
 #: ``safety``).
 NOTIFY_TAGS: Final = {
     NotifyKind.SAFETY: NotificationTag.SAFETY,
+    NotifyKind.SAFETY_DISABLED: NotificationTag.SAFETY,
     NotifyKind.RESTART: NotificationTag.SAFETY,
     NotifyKind.RESTARTED: NotificationTag.SAFETY,
     NotifyKind.REMINDER: NotificationTag.REMINDER,
+    NotifyKind.REMINDER_CONTROL_OFF: NotificationTag.REMINDER,
 }
 
 
@@ -810,6 +818,13 @@ class ControllerState:
     #: The restart wait ended by its timeout; the next evaluation sends
     #: "restarted".
     restarted_pending: bool = False
+    #: The notification ``safety_disabled`` is shown: a warning while control
+    #: is disabled without ``safety_when_disabled`` (Q14). After a load it is
+    #: derived from the loaded warnings.
+    safety_disabled_notified: bool = False
+    #: The notification ``safety`` on the phones says that the off could not
+    #: be written yet; it is replaced once the off is written.
+    safety_blocked_notified: bool = False
 
 
 # --- Decision ----------------------------------------------------------------
@@ -960,10 +975,15 @@ class Notify:
     """Send a notification (04-interface.md#notifications); the glue formats it.
 
     - ``safety``: ``warnings`` are the blocking warnings, most severe and
-      newest first (the title uses the first one).
+      newest first (the title uses the first one). ``off_blocked_by`` is set
+      while the off could not be written yet (``not_ready``,
+      ``unavailable``); the text then says so.
+    - ``safety_disabled``: as ``safety``, while control is disabled and the
+      integration does not switch the unit off (Q14).
     - ``restart``: ``restart_at`` is the deadline of the restart wait.
     - ``restarted``: no data.
     - ``reminder``: ``off_since`` is the start of the off state.
+    - ``reminder_control_off``: as ``reminder``, while control is disabled.
 
     The engine always emits them; the glue sends nothing if the matching
     ``notify_*`` option is off.
@@ -973,6 +993,7 @@ class Notify:
     warnings: tuple[WarningInfo, ...] = ()
     restart_at: datetime | None = None
     off_since: datetime | None = None
+    off_blocked_by: WriteBlock | None = None
 
     @property
     def tag(self) -> NotificationTag:

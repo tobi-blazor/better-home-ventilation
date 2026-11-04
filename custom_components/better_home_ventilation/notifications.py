@@ -52,6 +52,7 @@ from .const import (
 from .engine.models import (
     ClearNotification,
     Command,
+    ControlSwitchCommand,
     Decision,
     KeepOffCommand,
     NotificationTag,
@@ -61,6 +62,8 @@ from .engine.models import (
     ProblemKey,
     ResumeCommand,
     Source,
+    WarningInfo,
+    WriteBlock,
 )
 from .engine.safety import notification_text, warning_title
 
@@ -94,29 +97,38 @@ class Action(StrEnum):
     RESTART = "RESTART"
     KEEP_OFF = "KEEP_OFF"
     RESUME = "RESUME"
+    CONTROL_ON = "CONTROL_ON"
 
 
 #: Actions of each notification kind, in the order they are shown.
 KIND_ACTIONS: Final[Mapping[NotifyKind, tuple[Action, ...]]] = {
     NotifyKind.SAFETY: (Action.KEEP_VENTILATING, Action.OK),
+    # The integration does not act while control is disabled: an override
+    # would change nothing now (Q14), so only OK.
+    NotifyKind.SAFETY_DISABLED: (Action.OK,),
     NotifyKind.RESTART: (Action.RESTART, Action.KEEP_OFF),
     NotifyKind.RESTARTED: (),
     NotifyKind.REMINDER: (Action.RESUME,),
+    NotifyKind.REMINDER_CONTROL_OFF: (Action.CONTROL_ON,),
 }
 
 #: Option that switches each notification kind on or off.
 KIND_OPTION: Final[Mapping[NotifyKind, str]] = {
     NotifyKind.SAFETY: CONF_NOTIFY_SAFETY,
+    NotifyKind.SAFETY_DISABLED: CONF_NOTIFY_SAFETY,
     NotifyKind.RESTART: CONF_NOTIFY_SAFETY,
     NotifyKind.RESTARTED: CONF_NOTIFY_SAFETY,
     NotifyKind.REMINDER: CONF_NOTIFY_REMINDERS,
+    NotifyKind.REMINDER_CONTROL_OFF: CONF_NOTIFY_REMINDERS,
 }
 TAG_OPTION: Final[Mapping[NotificationTag, str]] = {
     NotificationTag.SAFETY: CONF_NOTIFY_SAFETY,
     NotificationTag.REMINDER: CONF_NOTIFY_REMINDERS,
 }
 #: Kinds sent with the time-sensitive / high priority data.
-URGENT_KINDS: Final = frozenset({NotifyKind.SAFETY, NotifyKind.RESTART})
+URGENT_KINDS: Final = frozenset(
+    {NotifyKind.SAFETY, NotifyKind.SAFETY_DISABLED, NotifyKind.RESTART}
+)
 
 #: Priority data of safety notifications: iOS interruption level, Android
 #: priority and time to live (the companion app docs; the same keys as the
@@ -158,6 +170,8 @@ def action_command(action: Action) -> Command | None:
             return ResumeCommand(source=source)
         case Action.KEEP_OFF:
             return KeepOffCommand(source=source)
+        case Action.CONTROL_ON:
+            return ControlSwitchCommand(source=source, enabled=True)
     return None
 
 
@@ -225,8 +239,8 @@ def format_notify(
 ) -> Message | None:
     """Format a ``Notify`` effect (04-interface.md#notifications).
 
-    Returns None for a ``safety`` notification without warnings (the engine
-    always sends at least one).
+    Returns None for a ``safety`` or ``safety_disabled`` notification without
+    warnings (the engine always sends at least one).
     """
     kind = effect.kind
     actions = tuple(
@@ -239,10 +253,27 @@ def format_notify(
             if not effect.warnings:
                 return None
             warning = effect.warnings[0]
+            if effect.off_blocked_by is not None:
+                return _format_blocked(effect.off_blocked_by, warning, texts, actions)
             message = notification_text(warning) or _text(
                 texts, "notify_safety_message_no_details", source=warning.source_name
             )
             title = _text(texts, "notify_safety_title", headline=warning_title(warning))
+        case NotifyKind.SAFETY_DISABLED:
+            if not effect.warnings:
+                return None
+            warning = effect.warnings[0]
+            if (text := notification_text(warning)) is not None:
+                message = _text(texts, "notify_safety_disabled_message", text=text)
+            else:
+                message = _text(
+                    texts,
+                    "notify_safety_disabled_message_no_details",
+                    source=warning.source_name,
+                )
+            title = _text(
+                texts, "notify_safety_disabled_title", headline=warning_title(warning)
+            )
         case NotifyKind.RESTART:
             title = _text(texts, "notify_restart_title")
             restart_at = effect.restart_at or now
@@ -252,13 +283,36 @@ def format_notify(
         case NotifyKind.RESTARTED:
             title = _text(texts, "notify_restarted_title")
             message = _text(texts, "notify_restarted_message")
-        case NotifyKind.REMINDER:
+        case NotifyKind.REMINDER | NotifyKind.REMINDER_CONTROL_OFF:
             off_since = effect.off_since or now
             title = _text(
                 texts, "notify_reminder_title", time=format_time(off_since, now)
             )
             message = _text(texts, "notify_reminder_message")
     return Message(title=title, message=message, actions=actions, urgent=urgent)
+
+
+def _format_blocked(
+    blocked: WriteBlock,
+    warning: WarningInfo,
+    texts: Mapping[str, str],
+    actions: tuple[tuple[str, str], ...],
+) -> Message:
+    """Format ``safety`` while the off could not be written yet."""
+    reason = _text(texts, f"notify_blocked_{blocked}")
+    if (text := notification_text(warning)) is not None:
+        message = _text(
+            texts, "notify_safety_blocked_message", text=text, reason=reason
+        )
+    else:
+        message = _text(
+            texts,
+            "notify_safety_blocked_message_no_details",
+            source=warning.source_name,
+            reason=reason,
+        )
+    title = _text(texts, "notify_safety_blocked_title", headline=warning_title(warning))
+    return Message(title=title, message=message, actions=actions, urgent=True)
 
 
 def format_problem(

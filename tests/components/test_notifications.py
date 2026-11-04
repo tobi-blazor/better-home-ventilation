@@ -25,9 +25,12 @@ from pytest_homeassistant_custom_component.common import (
 
 from custom_components.better_home_ventilation.const import DOMAIN
 from custom_components.better_home_ventilation.engine.models import (
+    ControlSwitchCommand,
     Mode,
     NotifyKind,
+    PauseCommand,
     ProblemKey,
+    Source,
 )
 from custom_components.better_home_ventilation.notifications import (
     Action,
@@ -37,8 +40,8 @@ from custom_components.better_home_ventilation.notifications import (
     service_name,
 )
 
-from .common import FAN, NUMBER_FLOW, MockUnit, advance
-from .test_controller import controller_of, problem_keys, setup_entry
+from .common import CONTROL_MODE, FAN, NUMBER_FLOW, STANDBY_SWITCH, MockUnit, advance
+from .test_controller import controller_of, problem_keys, readiness, setup_entry
 from .test_safety import SMOKE, mode_of, set_state, source, turn
 
 PHONE = "mobile_app_example_phone"
@@ -204,6 +207,233 @@ async def test_c10_keep_off_and_reminder_with_resume(
     }
 
 
+SAFETY_DISABLED_TEXTS = {
+    "en": (
+        "Warning: Outdoor smoke",
+        "Outdoor smoke reports a warning. Control is off, so the integration"
+        " does not switch the ventilation off.",
+        "OK",
+    ),
+    "de": (
+        "Warnung: Outdoor smoke",
+        "Outdoor smoke meldet eine Warnung. Die Regelung ist aus, deshalb"
+        " schaltet die Integration die Lüftung nicht ab.",
+        "OK",
+    ),
+}
+
+
+@pytest.mark.parametrize("language", ["en", "de"])
+@pytest.mark.usefixtures("entities")
+async def test_q14_warning_while_control_is_off_notifies_only(
+    hass: HomeAssistant,
+    unit: MockUnit,
+    freezer: FrozenDateTimeFactory,
+    phone: list[ServiceCall],
+    language: str,
+) -> None:
+    """Q14: control off, `safety_when_disabled` off: notified, nothing switched.
+
+    Only the action OK; time-sensitive like the safety notification; cleared
+    when the warning ends (BHV-41, BHV-44).
+    """
+    entry = await warning_entry(
+        hass, freezer, notify_services=[PHONE], safety_when_disabled=False
+    )
+    # After the setup: the entity ids stay English, the texts follow.
+    hass.config.language = language
+    short = entry8(entry)
+    await hass.services.async_call(
+        "switch",
+        "turn_off",
+        {"entity_id": "switch.ventilation_control"},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+    calls = len(unit.calls)
+
+    await set_state(hass, SMOKE, "on")
+
+    assert mode_of(hass) == "disabled"
+    assert unit.calls[calls:] == []
+    [call] = phone
+    title, message, ok = SAFETY_DISABLED_TEXTS[language]
+    assert call.data == {
+        "title": title,
+        "message": message,
+        "data": {
+            "tag": f"bhv_{short}_safety",
+            "actions": [{"action": f"BHV_{short}_OK", "title": ok}],
+            "push": {"interruption-level": "time-sensitive"},
+            "priority": "high",
+            "ttl": 0,
+        },
+    }
+
+    await tap(hass, f"BHV_{short}_OK")
+    assert not controller_of(entry).state.safety.overridden
+
+    await set_state(hass, SMOKE, "off")
+
+    assert phone[-1].data == {
+        "message": "clear_notification",
+        "data": {"tag": f"bhv_{short}_safety"},
+    }
+    assert controller_of(entry).state.safety.restart_pending is None
+    assert unit.calls[calls:] == []
+
+
+def test_q13_format_blocked_with_warning_text() -> None:
+    """Q13 follow-up: the blocked wording with the warning text and the reason."""
+    from custom_components.better_home_ventilation.engine.models import (  # noqa: PLC0415
+        Notify,
+        WarningInfo,
+        WriteBlock,
+    )
+
+    warning = WarningInfo(
+        source_id="nina",
+        source_name="City warnings",
+        entity_id="binary_sensor.example_city_warning_1",
+        incident_key="nina:fire",
+        headline="Fire in the industrial area",
+        text=None,
+        recommended_actions="Close windows and doors.",
+        severity=None,
+        sender=None,
+        since=dt_util.now(),
+    )
+    texts = {
+        "notify_safety_blocked_title": "Warning: {headline}",
+        "notify_safety_blocked_message": "{text} Not off yet ({reason}).",
+        "notify_blocked_unavailable": "actuator unavailable",
+    }
+    notice = Notify(
+        kind=NotifyKind.SAFETY,
+        warnings=(warning,),
+        off_blocked_by=WriteBlock.UNAVAILABLE,
+    )
+    message = format_notify(notice, "abcdefghij", texts, dt_util.now())
+    assert message is not None
+    assert message.title == "Warning: Fire in the industrial area"
+    assert message.message == (
+        "Close windows and doors. Not off yet (actuator unavailable)."
+    )
+    assert message.urgent
+    assert [title for _, title in message.actions] == [
+        "notify_action_keep_ventilating",
+        "notify_action_ok",
+    ]
+
+
+def test_q14_format_with_warning_text() -> None:
+    """Q14: with details the text of the warning comes first."""
+    from custom_components.better_home_ventilation.engine.models import (  # noqa: PLC0415
+        Notify,
+        WarningInfo,
+    )
+
+    warning = WarningInfo(
+        source_id="nina",
+        source_name="City warnings",
+        entity_id="binary_sensor.example_city_warning_1",
+        incident_key="nina:fire",
+        headline="Fire in the industrial area",
+        text="Smoke is drifting over the city.",
+        recommended_actions="Close windows and doors.",
+        severity=None,
+        sender="Fire brigade",
+        since=dt_util.now(),
+    )
+    texts = {
+        "notify_safety_disabled_title": "Warning: {headline}",
+        "notify_safety_disabled_message": "{text} Control is off.",
+    }
+    notice = Notify(kind=NotifyKind.SAFETY_DISABLED, warnings=(warning,))
+    message = format_notify(notice, "abcdefghij", texts, dt_util.now())
+    assert message is not None
+    assert message.title == "Warning: Fire in the industrial area"
+    assert message.message == "Close windows and doors. (Fire brigade) Control is off."
+    assert message.urgent
+    empty = Notify(kind=NotifyKind.SAFETY_DISABLED)
+    assert format_notify(empty, "abcdefghij", texts, dt_util.now()) is None
+
+
+REMINDER_TEXTS = {
+    "en": (
+        "Ventilation off since",
+        "Moisture protection is inactive.",
+        "Turn control on",
+    ),
+    "de": (
+        "Lüftung aus seit",
+        "Der Feuchteschutz ist nicht aktiv.",
+        "Steuerung einschalten",
+    ),
+}
+
+
+@pytest.mark.parametrize("language", ["en", "de"])
+@pytest.mark.usefixtures("entities")
+async def test_q15_reminder_while_control_is_off_and_unit_stopped(
+    hass: HomeAssistant,
+    unit: MockUnit,
+    freezer: FrozenDateTimeFactory,
+    phone: list[ServiceCall],
+    language: str,
+) -> None:
+    """Q15: a pause stopped the unit, then control off: reminded after 24 h.
+
+    The reminder offers "Turn control on" instead of Resume (owner decision
+    2026-11-03, BHV-24); tapping it switches control on, the unit is started
+    and the reminder cleared.
+    """
+    entry = await setup_entry(hass, notify_services=[PHONE], off_entity=STANDBY_SWITCH)
+    await advance(hass, freezer, 61)
+    hass.config.language = language
+    short = entry8(entry)
+    controller = controller_of(entry)
+    await controller.async_command(PauseCommand(source=Source.SERVICE))
+    await hass.async_block_till_done()
+    assert unit.calls_for("switch", "turn_on")  # the standby switch: stopped
+    off_since = dt_util.now()
+    await controller.async_command(
+        ControlSwitchCommand(source=Source.SERVICE, enabled=False)
+    )
+    await hass.async_block_till_done()
+    assert mode_of(hass) == "disabled"
+
+    def reminders() -> list[ServiceCall]:
+        # The sensors go stale meanwhile: problem notifications are sent too.
+        tag = f"bhv_{short}_reminder"
+        return [call for call in phone if call.data["data"]["tag"] == tag]
+
+    await advance(hass, freezer, 8 * 3600)
+    assert reminders() == []
+    await advance(hass, freezer, 16 * 3600)
+
+    [reminder] = reminders()
+    title, message, control_on = REMINDER_TEXTS[language]
+    assert reminder.data == {
+        "title": f"{title} {format_time(off_since, dt_util.now())}",
+        "message": message,
+        "data": {
+            "tag": f"bhv_{short}_reminder",
+            "actions": [{"action": f"BHV_{short}_CONTROL_ON", "title": control_on}],
+        },
+    }
+
+    await tap(hass, f"BHV_{short}_CONTROL_ON")
+
+    assert controller.state.control_enabled
+    assert mode_of(hass) == "fallback"  # the CO₂ sensor went stale meanwhile
+    assert unit.calls_for("switch", "turn_off")  # switched on again
+    assert reminders()[-1].data == {
+        "message": "clear_notification",
+        "data": {"tag": f"bhv_{short}_reminder"},
+    }
+
+
 @pytest.mark.usefixtures("entities")
 async def test_restarted_after_the_timeout(
     hass: HomeAssistant,
@@ -344,6 +574,114 @@ async def test_problem_notification_after_problem_delay(
     )
 
     assert phone[-1].data == {"message": "clear_notification", "data": {"tag": tag}}
+
+
+BLOCKED_TEXTS = {
+    "en": {
+        "title": "Warning: Outdoor smoke",
+        "blocked": (
+            "Outdoor smoke reports a warning. The ventilation could not be"
+            " switched off yet (readiness not met)."
+        ),
+        "problem_title": "Ventilation problem",
+        "problem": (
+            "The readiness condition on Unit control mode is not met; "
+            "nothing is written to the unit."
+        ),
+        "off_title": "Ventilation off: Outdoor smoke",
+        "off": "Outdoor smoke reports a warning. The ventilation was switched off.",
+    },
+    "de": {
+        "title": "Warnung: Outdoor smoke",
+        "blocked": (
+            "Outdoor smoke meldet eine Warnung. Die Lüftung konnte noch nicht"
+            " ausgeschaltet werden (Bereitschaftsbedingung nicht erfüllt)."
+        ),
+        "problem_title": "Problem mit der Lüftung",
+        "problem": (
+            "Die Bereitschaftsbedingung an Unit control mode ist nicht erfüllt;"
+            " es wird nichts an das Gerät geschrieben."
+        ),
+        "off_title": "Lüftung aus: Outdoor smoke",
+        "off": "Outdoor smoke meldet eine Warnung. Die Lüftung wurde ausgeschaltet.",
+    },
+}
+
+
+@pytest.mark.parametrize("language", ["en", "de"])
+@pytest.mark.usefixtures("entities")
+async def test_q13_blocked_safety_off_is_notified_as_not_ready(
+    hass: HomeAssistant,
+    unit: MockUnit,
+    freezer: FrozenDateTimeFactory,
+    phone: list[ServiceCall],
+    language: str,
+) -> None:
+    """Q13: a safety off blocked by readiness is the problem `not_ready`.
+
+    The warning is notified at once, saying that the ventilation could not be
+    switched off yet (owner decision 2026-11-03); nothing is written; the
+    problem notification follows after `problem_delay`; once the condition is
+    met the off is written and the normal safety notification replaces the
+    first one (same tag).
+    """
+    hass.states.async_set(SMOKE, "off")
+    entry = await setup_entry(
+        hass,
+        notify_services=[PHONE],
+        subentries=[
+            # Without details the periodic evaluations finish within
+            # `async_block_till_done` (no provider tasks in the background).
+            source(entity_id=SMOKE, name="Outdoor smoke", data={"details": "none"}),
+            readiness(CONTROL_MODE, "Remote", auto_correct=False),
+        ],
+    )
+    await advance(hass, freezer, 61)
+    hass.config.language = language
+    short = entry8(entry)
+    texts = BLOCKED_TEXTS[language]
+
+    await set_state(hass, SMOKE, "on")
+
+    assert mode_of(hass) == "safety_off"
+    [blocked] = phone
+    assert blocked.data["title"] == texts["title"]
+    assert blocked.data["message"] == texts["blocked"]
+    assert blocked.data["data"]["tag"] == f"bhv_{short}_safety"
+    assert [a["action"] for a in blocked.data["data"]["actions"]] == [
+        f"BHV_{short}_KEEP_VENTILATING",
+        f"BHV_{short}_OK",
+    ]
+    assert blocked.data["data"]["priority"] == "high"
+    assert unit.calls_for("number", "set_value") == []
+    assert ("not_ready", CONTROL_MODE) in problem_keys(controller_of(entry))
+
+    # `not_ready` since the setup (unmet in the grace): notified 10 min later.
+    await advance(hass, freezer, 8 * 60)
+    assert len(phone) == 1
+    await advance(hass, freezer, 60)
+
+    problem = phone[-1]
+    assert problem.data == {
+        "title": texts["problem_title"],
+        "message": texts["problem"],
+        "data": {"tag": f"bhv_{short}_problem_not_ready"},
+    }
+    assert unit.calls_for("number", "set_value") == []
+
+    await set_state(hass, CONTROL_MODE, "Remote", {"options": ["Manual", "Remote"]})
+
+    assert [call.data["value"] for call in unit.calls_for("number", "set_value")] == [
+        0.0
+    ]
+    replaced, cleared = phone[-2:]
+    assert replaced.data["title"] == texts["off_title"]
+    assert replaced.data["message"] == texts["off"]
+    assert replaced.data["data"]["tag"] == f"bhv_{short}_safety"
+    assert cleared.data == {
+        "message": "clear_notification",
+        "data": {"tag": f"bhv_{short}_problem_not_ready"},
+    }
 
 
 @pytest.mark.usefixtures("entities")
@@ -575,6 +913,10 @@ def test_action_commands_and_helpers() -> None:
     assert type(action_command(Action.RESTART)).__name__ == "ResumeCommand"
     assert type(action_command(Action.RESUME)).__name__ == "ResumeCommand"
     assert type(action_command(Action.KEEP_OFF)).__name__ == "KeepOffCommand"
+    control_on = action_command(Action.CONTROL_ON)
+    assert isinstance(control_on, ControlSwitchCommand)
+    assert control_on.enabled
+    assert control_on.source is Source.NOTIFICATION
     assert service_name("notify.mobile_app_x") == "mobile_app_x"
     assert service_name("mobile_app_x") == "mobile_app_x"
     now = dt_util.now()
