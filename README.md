@@ -4,12 +4,12 @@ Demand-controlled ventilation for central home ventilation units (MVHR / HRV / E
 
 One integration instead of a pile of helpers, template sensors and automations: pick the entity that sets your unit's flow and your room sensors in a dialog, and Better Home Ventilation calculates the flow the unit should run at, writes it calmly to the unit and tells you why it chose that value.
 
-> **Status: 0.1.0, for test runs only.** Version 0.1 contains the demand control, profiles, boost and pause. It does **not** yet contain the safety shutdown on hazard warnings (smoke, fire, chemical release). Use 0.1 for supervised test runs, not for unattended everyday operation: keep your existing automation for daily use until 0.2. See [What 0.1 does not do yet](#what-01-does-not-do-yet).
+> **Status: 0.3.0.** Contains the demand control, profiles, boost and pause, the safety shutdown on hazard warnings with phone notifications, voice control, diagnostics and repairs, and automatic boosts on showering and cooking. Summer operation with bypass control is planned for 0.4. See [Not included yet](#not-included-yet).
 
 ## Contents
 
 - [What it does](#what-it-does)
-- [What 0.1 does not do yet](#what-01-does-not-do-yet)
+- [Not included yet](#not-included-yet)
 - [Use cases](#use-cases)
 - [Requirements and supported units](#requirements-and-supported-units)
 - [Installation](#installation)
@@ -44,25 +44,18 @@ One integration instead of a pile of helpers, template sensors and automations: 
 - **Profiles.** A fixed set of strategies (balanced, air quality, quiet, winter) that you switch in daily use from a select entity.
 - **Calm output.** A minimum time between changes, a maximum step per change, an asymmetric dead band and rounding to a flow step: no flapping between two values. Boosts, pauses and profile changes act at once.
 - **Boost and pause.** Buttons and actions for a boost (level and duration, pressing again extends it) and a pause (for a duration or until resumed). Stopping the unit at the unit itself counts as a pause.
-- **Automatic boosts** (0.3, in development). A fast humidity rise in a bathroom or an air quality rise in the kitchen (or the hob or hood switching on) raises the flow until the air is back to normal, capped at night.
+- **Automatic boosts.** A fast humidity rise in a bathroom or an air quality rise in the kitchen (or the hob or hood switching on) raises the flow until the air is back to normal, capped at night.
 - **Robust.** Failed, stale or implausible sensor values are ignored, never read as 0. Without any valid CO₂ sensor a fallback flow is used. Readiness conditions (for example a control mode the unit must be in) are checked and can be corrected automatically. Boost, pause, profile and the control switch survive restarts.
 - **Traceable.** A setpoint sensor carries the full decision (mode, reason, every contribution, limits, invalid inputs, why nothing was written) as attributes; a reason sensor and a mode sensor make the history readable; every mode change appears in the logbook.
 
 Works with any unit Home Assistant can control through a `number` (m³/h or %), a `fan` (percentage) or a `select` (stages). The integration contains no device driver: it uses the entities your unit's own integration (or ESPHome package) already provides.
 
-## What 0.1 does not do yet
+## Not included yet
 
 | Feature | Planned for |
 |---|---|
-| **Safety shutdown** on hazard warnings (official warnings such as NINA, smoke detectors, any `binary_sensor`), with override and confirmed restart | 0.2 |
-| Phone notifications (safety, problems) | 0.2 |
-| Reminders for long pauses and long off states | 0.2 |
-| Voice commands (Assist intents) | 0.2 |
-| Diagnostics download, repair issues (for example for a removed sensor) | 0.2 |
-| Replay of recorded sensor history through the control logic | 0.2 |
-| Automatic boosts on showering (bathroom humidity rise) and cooking (kitchen air quality rise, hob or hood) | 0.3 (in development, [Automatic boosts](#automatic-boosts)) |
-
-Because the safety shutdown is missing, **0.1 is meant for test runs** on a real installation while someone is around, not for unattended everyday operation. Until 0.2, problems are only visible on the problem sensor; there are no notifications.
+| Season detection, bypass control (free cooling on summer nights with a dew point check) and a bypass boost | 0.4 |
+| Public repository in the HACS default list, brand images | 1.0 |
 
 ## Use cases
 
@@ -273,7 +266,7 @@ Section **Manual boost**:
 
 The profile is not an option: it is chosen in daily use with the **Profile** entity.
 
-> **Unreleased (0.3, in development):** the sections below. How the detection works and how to tune it: [Automatic boosts](#automatic-boosts).
+How the shower and cooking detection works and how to tune it: [Automatic boosts](#automatic-boosts).
 
 A detection is on when its sensors are selected; there are no extra switches. A sensor can be in only one input group (CO₂, room humidity, bathroom humidity, cooking), and every selected entity must exist.
 
@@ -314,8 +307,6 @@ Errors: a level or the quiet cap outside minimum flow to max flow; a sensor used
 
 ### Safety
 
-> **Unreleased (0.2, in development).**
-
 | Key | UI name | Default | Meaning |
 |---|---|---|---|
 | `restart_confirm_timeout` | Restart confirmation timeout | 30 min | When the last warning ends, the unit stays off and asks on the phones whether to restart ([phone notifications](#phone-notifications)). Without an answer it restarts after this time. 0 restarts at once. |
@@ -324,8 +315,6 @@ Errors: a level or the quiet cap outside minimum flow to max flow; a sensor used
 The warning sources themselves are added on the integration page ([below](#warning-sources)); the step's description links there.
 
 ### Notifications
-
-> **Unreleased (0.2, in development).**
 
 | Key | UI name | Default | Meaning |
 |---|---|---|---|
@@ -363,8 +352,6 @@ How it works:
 - This also applies to a [safety shutdown](#warning-sources): while a condition is not met the unit is not switched off either. The mode is still "Safety off", and the safety notification says **Warning: <headline>** … "The ventilation could not be switched off yet (readiness not met)."; the problem `not_ready` (and its notification after the problem delay) shows it as well. The unit is switched off as soon as the condition is met, and the safety notification is replaced by the normal **Ventilation off: <headline>**.
 
 ## Warning sources
-
-> **Unreleased (0.2, in development).** Warning sources, the safety shutdown and the [phone notifications](#phone-notifications) are in the development branch.
 
 A warning source is a hazard signal that switches the ventilation off (**safety shutdown**), so that smoke or a chemical cloud outside is not pulled into the house and smoke inside is not spread through the ducts. Each source has its own trigger and filters, so a smoke detector, a NINA region and a weather warning sensor can be combined.
 
@@ -416,8 +403,6 @@ Any other entity with a `headline`/`title`/`event` or `description`/`text`/`mess
 **Indoor gas detectors are not a recommended source.** With gas in the house the advice is not to operate electrical equipment, to open the windows and to leave the building; switching the unit does not help and is itself switching. Indoor smoke and CO detectors are good sources (smoke must not be spread through the ducts; CO near a fireplace).
 
 ## Phone notifications
-
-> **Unreleased (0.2, in development).**
 
 The integration sends notifications to the phones selected in **Notifications** ([options](#notifications)), through the `notify.mobile_app_*` actions of the [Home Assistant Companion app](https://companion.home-assistant.io/). Texts are in the server language (English and German).
 
@@ -520,8 +505,6 @@ The **Reason** sensor names the rule or mode that determined the setpoint:
 During a boost the reason is the automatic rule (for example `co2`) when the automatic demand is higher than the boost level.
 
 ## Automatic boosts
-
-> **Unreleased (0.3, in development).**
 
 Two detections raise the flow on their own while someone showers or cooks, and return to automatic control afterwards. They are set in **Boosts** ([options](#boosts)); without sensors they are off.
 
@@ -664,8 +647,6 @@ Every mode change appears in the logbook of the device, linked to the **Mode** s
 
 ## Voice control
 
-> **Unreleased (0.2, in development).**
-
 The integration registers four intents for Assist. They have no entity target; they act on the ventilation entry.
 
 | Intent | Slots | Does | Answer (example) |
@@ -691,8 +672,6 @@ Independently of the intents, every button and switch of the integration can be 
 
 ## Repair issues
 
-> **Unreleased (0.2, in development).**
-
 Repair issues appear under **Settings → System → Repairs**.
 
 | Issue | When | Fix |
@@ -702,8 +681,6 @@ Repair issues appear under **Settings → System → Repairs**.
 | **Stored state of … was reset** | the stored state could not be read (damaged, or written by a newer version after a downgrade) and was replaced by the defaults: boost, pause and overrides ended, the control switch is on, the profile is Balanced | check the **Control** switch and the **Profile**; the issue is for information only, ignore it (it is gone after the next restart) |
 
 ## Diagnostics
-
-> **Unreleased (0.2, in development).**
 
 **Download diagnostics** in the entry's menu (⋮) on the integration page gives a JSON file for bug reports and for the [replay](#replay-of-recorded-history):
 
@@ -717,8 +694,6 @@ Repair issues appear under **Settings → System → Repairs**.
 The selected phones (notify services) are removed from the file, entity attributes are not included, and the states of `person` and `device_tracker` entities are reduced to `home` / `not_home`. Warning texts are included as received.
 
 ## Replay of recorded history
-
-> **Unreleased (0.2, in development).**
 
 `tools/replay.py` runs recorded sensor history through the same control logic and reports what the integration would have done, before you let it write to your unit. It needs only Python 3.14, not Home Assistant. Run it from a clone of the repository:
 
@@ -841,7 +816,7 @@ If the unit has no such entity, the lowest value is all the integration can do. 
 
 ### Stopping the unit at the unit counts as a pause
 
-If the off actuator (or a `fan` actuator without an off actuator) is switched to "stopped" by anyone other than the integration, for example at the unit's panel or in its app before a filter change, the integration takes it as a **pause until resumed** (logbook: "at the unit"). Starting the unit there again ends the pause. Changes from or to `unavailable` (for example when the unit restarts) are not commands, and while the **Control** switch is off such changes are ignored. A pause has no reminder in 0.1, so remember to resume.
+If the off actuator (or a `fan` actuator without an off actuator) is switched to "stopped" by anyone other than the integration, for example at the unit's panel or in its app before a filter change, the integration takes it as a **pause until resumed** (logbook: "at the unit"). Starting the unit there again ends the pause. Changes from or to `unavailable` (for example when the unit restarts) are not commands, and while the **Control** switch is off such changes are ignored. A reminder follows after the time set in the [Notifications](#notifications) options.
 
 Many devices report a command only on their next poll (for example an ESPHome Modbus device every 30 s). If the unit reaches the state the integration has just switched it to within 60 s, that is the integration's own change, not a stop or start at the unit: a pause for one hour stays a pause for one hour.
 
