@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-04
+
+Safety shutdown on hazard warnings, phone notifications, voice control, diagnostics and repairs, and automatic boosts on showering and cooking. Phases 0.2 and 0.3 are released together; there is no 0.2.0. Existing 0.1 entries are migrated on the first start.
+
 ### Added
 
 - Warning sources: **Add warning source** on the integration page adds a hazard signal that switches the ventilation off (safety shutdown). A source is one entity (`binary_sensor`, `input_boolean`, `switch`, a `sensor` with a numeric threshold or a `sensor`/`select` with a list of states) or one device, whose binary sensors all count (for example a NINA region with several message slots; new slots are picked up automatically). Each source has its own name, trigger and filters and can be reconfigured or deleted.
@@ -71,5 +75,6 @@ First version, for test runs on a real installation. The safety shutdown on haza
 - The off actuator and the state that means "stopped" can be chosen during setup or later in the options; without one the unit is set to its lowest value, which some units do not take as a stop. An off actuator that does not exist or is the actuator itself is rejected.
 - A unit that confirms a command only on its next poll (for example an ESPHome Modbus device) is handled: reaching the state or value the integration has just commanded within 60 s counts as the integration's own change, not as a stop, start or flow change at the unit.
 
-[Unreleased]: https://github.com/tobi-blazor/better-home-ventilation/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/tobi-blazor/better-home-ventilation/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/tobi-blazor/better-home-ventilation/compare/v0.1.0...v0.3.0
 [0.1.0]: https://github.com/tobi-blazor/better-home-ventilation/releases/tag/v0.1.0

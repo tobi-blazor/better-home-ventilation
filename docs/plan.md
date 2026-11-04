@@ -217,6 +217,7 @@ Done when: on a phone, "Keep ventilating", "Restart now", "Keep off" and "Resume
 - [ ] Acceptance items for safety from [06-testing.md](spec/06-testing.md#acceptance-checklist-real-installation) with a template `binary_sensor` as test warning
 - [ ] Switch over for everyday operation: disable the old automation permanently
 - [ ] `quality_scale.yaml`, `CHANGELOG.md`, tag `v0.2.0` (`quality_scale.yaml` and `CHANGELOG.md` done in M10; the tag follows the acceptance)
+- [x] Released together with 0.3 as `v0.3.0` (owner decision 2026-11-04); there is no `v0.2.0`. The acceptance items above stay open
 
 Done when: all 0.2 acceptance items are checked on the real installation.
 
@@ -230,7 +231,8 @@ Spec: [03-modes.md](spec/03-modes.md#automatic-boosts).
 - [x] Modes `shower`/`cooking`, night cap for auto boosts, priority between them, persistence of active boosts and cooldowns – BHV-32
 - [x] Entities `shower_detected`, `cooking_detected`, created only when configured
 - [x] Tests E33–E37 and component tests for the new options and entities
-- [ ] Real installation: tune `shower_rise` and `cooking_rise` with replay data, `CHANGELOG.md`, tag `v0.3.0`
+- [ ] Real installation: tune `shower_rise` and `cooking_rise` with replay data
+- [x] `CHANGELOG.md`, tag `v0.3.0`, GitHub release (2026-11-04, owner decision before the real-installation items)
 
 ## M12 Summer and bypass, release 0.4.0
 

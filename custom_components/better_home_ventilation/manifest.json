@@ -10,5 +10,5 @@
   "iot_class": "calculated",
   "issue_tracker": "https://github.com/tobi-blazor/better-home-ventilation/issues",
   "requirements": [],
-  "version": "0.1.0"
+  "version": "0.3.0"
 }

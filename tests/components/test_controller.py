@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import asyncio
 from datetime import timedelta
+import json
 import logging
+from pathlib import Path
 from typing import Any
 
 from freezegun.api import FrozenDateTimeFactory
@@ -143,7 +145,12 @@ async def test_device_is_created(hass: HomeAssistant, unit: MockUnit) -> None:
     assert device.model == MODEL
     assert device.entry_type is dr.DeviceEntryType.SERVICE
     assert device.name == "Ventilation"
-    assert device.sw_version == "0.1.0"
+    manifest = json.loads(
+        (
+            Path(__file__).parents[2] / "custom_components" / DOMAIN / "manifest.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert device.sw_version == manifest["version"]
 
 
 @pytest.mark.usefixtures("entities")
