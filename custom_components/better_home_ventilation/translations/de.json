@@ -6,7 +6,7 @@
     },
     "error": {
       "actuator_not_found": "Die Aktor-Entität existiert nicht.",
-      "duplicate_sensor": "Ein Sensor ist sowohl als CO₂- als auch als Feuchtesensor ausgewählt.",
+      "duplicate_sensor": "Ein Sensor ist in mehr als einer Eingangsgruppe ausgewählt (CO₂, Raumfeuchte, Badfeuchte, Kochen).",
       "max_flow_required": "Bitte den maximalen Volumenstrom eingeben. Er kann nur aus dem Aktor übernommen werden, wenn dieser eine Zahl-Entität in m³/h mit einem Maximum zwischen 10 und 2000 ist.",
       "no_inputs": "Bitte mindestens einen CO₂- oder Feuchtesensor auswählen.",
       "off_entity_is_actuator": "Der Aus-Aktor muss eine andere Entität als der Aktor sein.",
@@ -74,10 +74,10 @@
       "actuator_not_found": "Die Aktor-Entität existiert nicht.",
       "co2_range": "Das CO₂-Ende muss höher als der CO₂-Beginn sein.",
       "dryness_overlap": "Die Trockenheitsschwelle plus Hysterese muss unter dem Beginn der Feuchte-Rampe liegen.",
-      "duplicate_sensor": "Ein Sensor ist sowohl als CO₂- als auch als Feuchtesensor ausgewählt.",
+      "duplicate_sensor": "Ein Sensor ist in mehr als einer Eingangsgruppe ausgewählt (CO₂, Raumfeuchte, Badfeuchte, Kochen).",
       "fallback_range": "Der Ersatz-Volumenstrom muss zwischen Mindest- und maximalem Volumenstrom liegen.",
       "humidity_range": "Das Ende der Feuchte-Rampe muss höher als ihr Beginn sein.",
-      "level_range": "Die Boost-Stufe muss zwischen Mindest- und maximalem Volumenstrom liegen.",
+      "level_range": "Stufen und die Ruhe-Obergrenze müssen zwischen Mindest- und maximalem Volumenstrom liegen.",
       "night_window": "Das Nachtfenster darf nicht zur selben Uhrzeit beginnen und enden.",
       "no_inputs": "Bitte mindestens einen CO₂- oder Feuchtesensor auswählen.",
       "off_entity_is_actuator": "Der Aus-Aktor muss eine andere Entität als der Aktor sein.",
@@ -111,7 +111,7 @@
       },
       "actuator": {
         "title": "Aktor",
-        "description": "Die Volumenströme wurden beim Anlegen aus dem maximalen Volumenstrom berechnet und ändern sich nicht mit ihm (maximal {max_flow} m³/h, Minimum {min_flow} m³/h, Ersatz {fallback_flow} m³/h, Ruhebegrenzung {quiet_max_flow} m³/h, Boost {boost_default_level} m³/h). Passe sie bei Bedarf unter Regelung und Boost an.",
+        "description": "Die Volumenströme wurden beim Anlegen aus dem maximalen Volumenstrom berechnet und ändern sich nicht mit ihm (maximal {max_flow} m³/h, Minimum {min_flow} m³/h, Ersatz {fallback_flow} m³/h, Ruhebegrenzung {quiet_max_flow} m³/h, Boost {boost_default_level} m³/h, Duschen {shower_level} m³/h, Kochen {cooking_level} m³/h, Ruhe-Obergrenze automatischer Boosts {auto_boost_quiet_cap} m³/h). Passe sie bei Bedarf unter Regelung und Boost an.",
         "data": {
           "actuator": "Aktor",
           "max_flow": "Maximaler Volumenstrom"
@@ -301,7 +301,7 @@
       },
       "boosts": {
         "title": "Boost",
-        "description": "Standardwerte für manuelle Boosts über Dashboard, Aktionen und Sprache.",
+        "description": "Manuelle Boosts über Dashboard, Aktionen und Sprache sowie die automatischen Boosts nach dem Duschen und beim Kochen.",
         "sections": {
           "manual": {
             "name": "Manueller Boost",
@@ -315,6 +315,66 @@
               "boost_default_duration": "Dauer eines Boosts, wenn keine angegeben ist.",
               "boost_default_level": "Volumenstrom eines Boosts, wenn keine Stufe angegeben ist. Ist der automatische Bedarf höher, gilt dieser.",
               "boost_max_duration": "Durch Verlängern dauert ein Boost nie länger als diese Zeit ab jetzt."
+            }
+          },
+          "shower": {
+            "name": "Duscherkennung",
+            "description": "Ein schneller Anstieg der Feuchte in einem Bad startet einen automatischen Boost, bis die Feuchte wieder nahe dem Wert vor dem Anstieg liegt. Ohne Badsensoren ist die Erkennung aus.",
+            "data": {
+              "bathroom_humidity_sensors": "Feuchtesensoren im Bad",
+              "shower_rise": "Anstieg",
+              "shower_window": "Zeitfenster",
+              "shower_end_offset": "Abstand zum Ende",
+              "shower_level": "Stufe",
+              "shower_max_duration": "Höchstdauer"
+            },
+            "data_description": {
+              "bathroom_humidity_sensors": "Nur Feuchtesensoren in Bädern, nicht im Spritzbereich der Dusche. Sie dienen nur der Duscherkennung, nie der Raumfeuchte; ein Sensor kann nicht in beiden sein.",
+              "shower_rise": "Duschen wird erkannt, wenn die Feuchte um so viel über ihrem niedrigsten Wert im Zeitfenster liegt.",
+              "shower_window": "Zeitraum, über den der Anstieg gemessen wird. Ein langsamerer Anstieg ist kein Duschen.",
+              "shower_end_offset": "Der Boost endet, wenn die Feuchte wieder beim Wert vor dem Anstieg plus diesem Abstand liegt.",
+              "shower_level": "Volumenstrom, solange Duschen erkannt ist. Ist der automatische Bedarf höher, gilt dieser.",
+              "shower_max_duration": "Der Boost endet spätestens nach dieser Zeit, auch wenn die Feuchte hoch bleibt."
+            }
+          },
+          "cooking": {
+            "name": "Kocherkennung",
+            "description": "Ein schneller Anstieg eines Luftqualitätssensors in der Küche oder eine optionale Auslöser-Entität wie die Kochfeldleistung oder die Dunstabzugshaube startet einen automatischen Boost. Ohne Sensoren und Auslöser ist die Erkennung aus.",
+            "data": {
+              "cooking_sensors": "Luftqualitätssensoren in der Küche",
+              "cooking_higher_is_worse": "Höherer Wert ist schlechter",
+              "cooking_rise": "Anstieg",
+              "cooking_window": "Zeitfenster",
+              "cooking_end_offset": "Abstand zum Ende",
+              "cooking_trigger": "Auslöser-Entität",
+              "cooking_trigger_threshold": "Auslöser-Schwelle",
+              "cooking_trigger_run_on": "Nachlauf nach dem Auslöser",
+              "cooking_level": "Stufe",
+              "cooking_max_duration": "Höchstdauer"
+            },
+            "data_description": {
+              "cooking_sensors": "IAQ- oder VOC-Sensoren in der Küche, nicht direkt über dem Kochfeld (Dampf und Hitze verfälschen die Werte). Nicht der Sensor im Abluftkanal.",
+              "cooking_higher_is_worse": "An für VOC-Werte und IAQ-Indizes, bei denen ein höherer Wert schlechtere Luft bedeutet. Aus für Qualitätswerte, bei denen ein niedrigerer Wert schlechter ist; die Erkennung sucht dann einen Abfall.",
+              "cooking_rise": "Kochen wird erkannt, wenn der Wert um so viel schlechter ist als sein bester Wert im Zeitfenster, in der Einheit des Sensors.",
+              "cooking_window": "Zeitraum, über den der Anstieg gemessen wird.",
+              "cooking_end_offset": "Der Boost endet, wenn der Wert wieder beim Wert vor dem Anstieg plus diesem Abstand liegt.",
+              "cooking_trigger": "Optional: eine Entität, die beim Kochen an ist (Haube, Schalter des Kochfelds), oder ein Leistungssensor des Kochfelds. Sie startet den Boost direkt.",
+              "cooking_trigger_threshold": "Ein numerischer Auslöser, zum Beispiel die Kochfeldleistung in W, gilt über diesem Wert als aktiv. Für An/Aus-Entitäten ohne Bedeutung.",
+              "cooking_trigger_run_on": "Der Boost läuft so lange weiter, nachdem der Auslöser inaktiv wurde.",
+              "cooking_level": "Volumenstrom, solange Kochen erkannt ist. Ist der automatische Bedarf höher, gilt dieser.",
+              "cooking_max_duration": "Der Boost endet spätestens nach dieser Zeit ab seinem Start."
+            }
+          },
+          "common": {
+            "name": "Automatische Boosts",
+            "description": "Gemeinsame Einstellungen der Dusch- und Kocherkennung.",
+            "data": {
+              "auto_boost_quiet_cap": "Ruhe-Obergrenze",
+              "auto_boost_cooldown": "Sperrzeit"
+            },
+            "data_description": {
+              "auto_boost_quiet_cap": "Höchster Volumenstrom eines automatischen Boosts, solange die Ruhebegrenzung gilt (Nachtfenster, im Profil Ruhe den ganzen Tag). Manuelle Boosts werden nicht begrenzt.",
+              "auto_boost_cooldown": "Nach dem Ende eines automatischen Boosts kann sein Sensor so lange keinen neuen starten."
             }
           }
         }
@@ -561,6 +621,12 @@
       },
       "safety_warning": {
         "name": "Sicherheitswarnung"
+      },
+      "shower_detected": {
+        "name": "Duschen erkannt"
+      },
+      "cooking_detected": {
+        "name": "Kochen erkannt"
       }
     },
     "button": {
@@ -765,6 +831,9 @@
     "issue_where_co2_sensors": "CO₂-Sensoren (Schritt Eingänge)",
     "issue_where_humidity_sensors": "Feuchtesensoren (Schritt Eingänge)",
     "issue_where_presence_entities": "Anwesenheit (Schritt Eingänge)",
+    "issue_where_bathroom_humidity_sensors": "Feuchtesensoren im Bad (Schritt Boost)",
+    "issue_where_cooking_sensors": "Luftqualitätssensoren in der Küche (Schritt Boost)",
+    "issue_where_cooking_trigger": "Auslöser-Entität fürs Kochen (Schritt Boost)",
     "issue_where_readiness_condition": "Bereitschaftsbedingung {title}",
     "issue_where_warning_source": "Warnquelle {title}",
     "intent_boost": "{name} läuft bis {time} verstärkt mit {level} m³/h.",

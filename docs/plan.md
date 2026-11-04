@@ -224,12 +224,12 @@ Done when: all 0.2 acceptance items are checked on the real installation.
 
 Spec: [03-modes.md](spec/03-modes.md#automatic-boosts).
 
-- [ ] Options migration and sections `shower`, `cooking`, `common` in the `boosts` step; validation `duplicate_sensor`, `level_range`
-- [ ] `detector.py`: rise detector with window, baseline, end offset, maximum duration, cooldown, `higher_is_worse` – BHV-30, 31
-- [ ] Cooking trigger entity with threshold and run-on
-- [ ] Modes `shower`/`cooking`, night cap for auto boosts, priority between them, persistence of active boosts and cooldowns – BHV-32
-- [ ] Entities `shower_detected`, `cooking_detected`, created only when configured
-- [ ] Tests E33–E37 and component tests for the new options and entities
+- [x] Options migration and sections `shower`, `cooking`, `common` in the `boosts` step; validation `duplicate_sensor`, `level_range`
+- [x] `detector.py`: rise detector with window, baseline, end offset, maximum duration, cooldown, `higher_is_worse` – BHV-30, 31
+- [x] Cooking trigger entity with threshold and run-on
+- [x] Modes `shower`/`cooking`, night cap for auto boosts, priority between them, persistence of active boosts and cooldowns – BHV-32
+- [x] Entities `shower_detected`, `cooking_detected`, created only when configured
+- [x] Tests E33–E37 and component tests for the new options and entities
 - [ ] Real installation: tune `shower_rise` and `cooking_rise` with replay data, `CHANGELOG.md`, tag `v0.3.0`
 
 ## M12 Summer and bypass, release 0.4.0

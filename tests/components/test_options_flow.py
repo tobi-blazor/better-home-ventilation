@@ -22,13 +22,21 @@ from custom_components.better_home_ventilation.const import (
     CONF_ACTUATOR_MAX,
     CONF_ACTUATOR_MIN,
     CONF_ACTUATOR_UNIT,
+    CONF_AUTO_BOOST_COOLDOWN,
+    CONF_AUTO_BOOST_QUIET_CAP,
     CONF_AWAY_ENABLED,
+    CONF_BATHROOM_HUMIDITY_SENSORS,
     CONF_BOOST_DEFAULT_DURATION,
     CONF_BOOST_DEFAULT_LEVEL,
     CONF_BOOST_MAX_DURATION,
     CONF_CO2_END,
     CONF_CO2_SENSORS,
     CONF_CO2_START,
+    CONF_COOKING_HIGHER_IS_WORSE,
+    CONF_COOKING_LEVEL,
+    CONF_COOKING_SENSORS,
+    CONF_COOKING_TRIGGER,
+    CONF_COOKING_TRIGGER_RUN_ON,
     CONF_DEADBAND_DOWN,
     CONF_DRYNESS_HYSTERESIS,
     CONF_DRYNESS_THRESHOLD,
@@ -55,6 +63,9 @@ from custom_components.better_home_ventilation.const import (
     CONF_RESTART_CONFIRM_TIMEOUT,
     CONF_SAFETY_WHEN_DISABLED,
     CONF_SELECT_MAPPING,
+    CONF_SHOWER_LEVEL,
+    CONF_SHOWER_RISE,
+    CONF_SHOWER_WINDOW,
     CONF_STALE_TIMEOUT,
     DOMAIN,
     OFF_STATE_OFF,
@@ -62,11 +73,14 @@ from custom_components.better_home_ventilation.const import (
 )
 
 from .common import (
+    BATHROOM_HUMIDITY,
     CO2_BEDROOM,
     CO2_LIVING,
     FAN,
+    HOB_POWER,
     HUMIDITY_BEDROOM,
     HUMIDITY_LIVING,
+    KITCHEN_VOC,
     NUMBER_FLOW,
     NUMBER_PERCENT,
     NUMBER_RAW,
@@ -186,6 +200,9 @@ async def test_actuator_form_shows_current_values_and_hint(
         "fallback_flow": "150",
         "quiet_max_flow": "250",
         "boost_default_level": "300",
+        "shower_level": "250",
+        "cooking_level": "250",
+        "auto_boost_quiet_cap": "200",
     }
 
 
@@ -561,11 +578,22 @@ async def test_control_errors(
 async def test_boosts_save(
     hass: HomeAssistant, entry: MockConfigEntry, reload_spy: MagicMock
 ) -> None:
-    """The boosts step has only the `manual` section in 0.1."""
+    """The boosts step: manual boost, shower, cooking and the collapsed common part."""
     result = await _open(hass, entry, "boosts")
     schema = result["data_schema"]
-    assert list(sections(schema)) == ["manual"]
+    assert list(sections(schema)) == ["manual", "shower", "cooking", "common"]
+    assert sections(schema)["common"].options == {"collapsed": True}
+    assert sections(schema)["shower"].options == {"collapsed": False}
     assert suggested(schema, CONF_BOOST_DEFAULT_LEVEL) == 300
+    assert suggested(schema, CONF_SHOWER_LEVEL) == 250
+    assert suggested(schema, CONF_AUTO_BOOST_QUIET_CAP) == 200
+    assert suggested(schema, CONF_BATHROOM_HUMIDITY_SENSORS) == []
+    assert suggested(schema, CONF_COOKING_TRIGGER) is None
+    assert suggested(schema, CONF_SHOWER_WINDOW) == {
+        "hours": 0,
+        "minutes": 10,
+        "seconds": 0,
+    }
     assert suggested(schema, CONF_BOOST_MAX_DURATION) == {
         "hours": 4,
         "minutes": 0,
@@ -591,6 +619,124 @@ async def test_boosts_level_range(hass: HomeAssistant, entry: MockConfigEntry) -
 
     assert result["errors"] == {"manual": "level_range"}
     assert suggested(result["data_schema"], CONF_BOOST_DEFAULT_LEVEL) == 50
+
+
+@pytest.mark.parametrize(
+    ("key", "value", "section"),
+    [
+        (CONF_SHOWER_LEVEL, 75, "shower"),
+        (CONF_COOKING_LEVEL, 60, "cooking"),
+        (CONF_AUTO_BOOST_QUIET_CAP, 50, "common"),
+    ],
+)
+async def test_auto_boost_level_range(
+    hass: HomeAssistant, entry: MockConfigEntry, key: str, value: int, section: str
+) -> None:
+    """Auto boost levels and the quiet cap lie within min ... max flow."""
+    result = await _open(hass, entry, "boosts")
+    result = await _submit(hass, result, **{key: value})
+    assert result["errors"] == {section: "level_range"}
+
+
+async def test_bhv30_boosts_save_detectors(
+    hass: HomeAssistant, entry: MockConfigEntry, reload_spy: MagicMock
+) -> None:
+    """Detector sensors, the trigger and tuning values are stored flat."""
+    result = await _open(hass, entry, "boosts")
+    result = await _submit(
+        hass,
+        result,
+        **{
+            CONF_BATHROOM_HUMIDITY_SENSORS: [BATHROOM_HUMIDITY],
+            CONF_SHOWER_RISE: 6.5,
+            CONF_SHOWER_WINDOW: {"minutes": 15},
+            CONF_COOKING_SENSORS: [KITCHEN_VOC],
+            CONF_COOKING_HIGHER_IS_WORSE: False,
+            CONF_COOKING_TRIGGER: HOB_POWER,
+            CONF_COOKING_TRIGGER_RUN_ON: {"minutes": 20},
+            CONF_AUTO_BOOST_COOLDOWN: {"minutes": 5},
+        },
+    )
+    await _assert_saved_and_reloaded(hass, entry, result, reload_spy)
+    options = entry.options
+    assert options[CONF_BATHROOM_HUMIDITY_SENSORS] == [BATHROOM_HUMIDITY]
+    assert options[CONF_SHOWER_RISE] == 6.5
+    assert options[CONF_SHOWER_WINDOW] == 900
+    assert options[CONF_COOKING_SENSORS] == [KITCHEN_VOC]
+    assert options[CONF_COOKING_HIGHER_IS_WORSE] is False
+    assert options[CONF_COOKING_TRIGGER] == HOB_POWER
+    assert options[CONF_COOKING_TRIGGER_RUN_ON] == 1200
+    assert options[CONF_AUTO_BOOST_COOLDOWN] == 300
+    assert "shower" not in options
+
+
+async def test_boosts_clearing_the_trigger_removes_it(
+    hass: HomeAssistant, entities: None
+) -> None:
+    """A cleared trigger entity is removed from the options."""
+    entry = mock_entry(**{CONF_COOKING_TRIGGER: HOB_POWER})
+    entry.add_to_hass(hass)
+    result = await _open(hass, entry, "boosts")
+    assert suggested(result["data_schema"], CONF_COOKING_TRIGGER) == HOB_POWER
+    user_input = _form_input(result)
+    del user_input["cooking"][CONF_COOKING_TRIGGER]
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], user_input
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert CONF_COOKING_TRIGGER not in entry.options
+
+
+@pytest.mark.parametrize(
+    ("changes", "errors"),
+    [
+        (
+            {CONF_BATHROOM_HUMIDITY_SENSORS: [HUMIDITY_LIVING]},
+            {"shower": "duplicate_sensor"},
+        ),
+        ({CONF_COOKING_SENSORS: [CO2_LIVING]}, {"cooking": "duplicate_sensor"}),
+        (
+            {
+                CONF_BATHROOM_HUMIDITY_SENSORS: [BATHROOM_HUMIDITY],
+                CONF_COOKING_SENSORS: [BATHROOM_HUMIDITY],
+            },
+            {"cooking": "duplicate_sensor"},
+        ),
+        (
+            {CONF_COOKING_SENSORS: [HOB_POWER], CONF_COOKING_TRIGGER: HOB_POWER},
+            {"cooking": "duplicate_sensor"},
+        ),
+        (
+            {CONF_BATHROOM_HUMIDITY_SENSORS: ["sensor.gone_humidity"]},
+            {"shower": "sensor_not_found"},
+        ),
+        ({CONF_COOKING_TRIGGER: "sensor.gone_power"}, {"cooking": "sensor_not_found"}),
+    ],
+)
+async def test_boosts_sensor_validation(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+    changes: dict[str, Any],
+    errors: dict[str, str],
+) -> None:
+    """A sensor in two input groups or one that does not exist is rejected."""
+    result = await _open(hass, entry, "boosts")
+    result = await _submit(hass, result, **changes)
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == errors
+
+
+async def test_inputs_duplicate_with_a_stored_bathroom_sensor(
+    hass: HomeAssistant, entities: None
+) -> None:
+    """A room humidity sensor that is a bathroom sensor: the form field reports it."""
+    entry = mock_entry(**{CONF_BATHROOM_HUMIDITY_SENSORS: [HUMIDITY_BEDROOM]})
+    entry.add_to_hass(hass)
+    result = await _open(hass, entry, "inputs")
+    result = await _submit(
+        hass, result, **{CONF_HUMIDITY_SENSORS: [HUMIDITY_LIVING, HUMIDITY_BEDROOM]}
+    )
+    assert result["errors"] == {"rooms": "duplicate_sensor"}
 
 
 # --- safety and notifications (0.2) ------------------------------------------------

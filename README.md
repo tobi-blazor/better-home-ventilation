@@ -20,6 +20,7 @@ One integration instead of a pile of helpers, template sensors and automations: 
 - [Phone notifications](#phone-notifications)
 - [Profiles](#profiles)
 - [How the setpoint is calculated](#how-the-setpoint-is-calculated)
+- [Automatic boosts](#automatic-boosts)
 - [When the setpoint is updated](#when-the-setpoint-is-updated)
 - [Entities](#entities)
 - [Actions](#actions)
@@ -43,6 +44,7 @@ One integration instead of a pile of helpers, template sensors and automations: 
 - **Profiles.** A fixed set of strategies (balanced, air quality, quiet, winter) that you switch in daily use from a select entity.
 - **Calm output.** A minimum time between changes, a maximum step per change, an asymmetric dead band and rounding to a flow step: no flapping between two values. Boosts, pauses and profile changes act at once.
 - **Boost and pause.** Buttons and actions for a boost (level and duration, pressing again extends it) and a pause (for a duration or until resumed). Stopping the unit at the unit itself counts as a pause.
+- **Automatic boosts** (0.3, in development). A fast humidity rise in a bathroom or an air quality rise in the kitchen (or the hob or hood switching on) raises the flow until the air is back to normal, capped at night.
 - **Robust.** Failed, stale or implausible sensor values are ignored, never read as 0. Without any valid CO₂ sensor a fallback flow is used. Readiness conditions (for example a control mode the unit must be in) are checked and can be corrected automatically. Boost, pause, profile and the control switch survive restarts.
 - **Traceable.** A setpoint sensor carries the full decision (mode, reason, every contribution, limits, invalid inputs, why nothing was written) as attributes; a reason sensor and a mode sensor make the history readable; every mode change appears in the logbook.
 
@@ -58,7 +60,7 @@ Works with any unit Home Assistant can control through a `number` (m³/h or %), 
 | Voice commands (Assist intents) | 0.2 |
 | Diagnostics download, repair issues (for example for a removed sensor) | 0.2 |
 | Replay of recorded sensor history through the control logic | 0.2 |
-| Automatic boosts on showering (bathroom humidity rise) and cooking (kitchen air quality rise) | 0.3 |
+| Automatic boosts on showering (bathroom humidity rise) and cooking (kitchen air quality rise, hob or hood) | 0.3 (in development, [Automatic boosts](#automatic-boosts)) |
 
 Because the safety shutdown is missing, **0.1 is meant for test runs** on a real installation while someone is around, not for unattended everyday operation. Until 0.2, problems are only visible on the problem sensor; there are no notifications.
 
@@ -271,6 +273,45 @@ Section **Manual boost**:
 
 The profile is not an option: it is chosen in daily use with the **Profile** entity.
 
+> **Unreleased (0.3, in development):** the sections below. How the detection works and how to tune it: [Automatic boosts](#automatic-boosts).
+
+A detection is on when its sensors are selected; there are no extra switches. A sensor can be in only one input group (CO₂, room humidity, bathroom humidity, cooking), and every selected entity must exist.
+
+Section **Shower detection**:
+
+| Key | UI name | Default | Range | Meaning |
+|---|---|---|---|---|
+| `bathroom_humidity_sensors` | Bathroom humidity sensors | none | | Humidity sensors in bathrooms only. They feed only the shower detection, never the room humidity. |
+| `shower_rise` | Rise | 8 % | 1–40 | A shower is detected when the humidity is this much above its lowest value within the window. |
+| `shower_window` | Window | 10 min | | Time over which the rise is measured. A slower rise is no shower. |
+| `shower_end_offset` | End offset | 5 % | 0–30 | The boost ends when the humidity is back at the value before the rise plus this offset. |
+| `shower_level` | Level | 250 m³/h (62.5 % of max) | minimum–max | Flow while a shower is detected. The automatic demand still wins if it is higher. |
+| `shower_max_duration` | Maximum duration | 1 h | | The boost ends after this time at the latest, also if the humidity stays high. |
+
+Section **Cooking detection**:
+
+| Key | UI name | Default | Range | Meaning |
+|---|---|---|---|---|
+| `cooking_sensors` | Kitchen air quality sensors | none | | IAQ or VOC sensors in the kitchen, not directly above the hob. Any numeric sensor; the values are in its own unit. |
+| `cooking_higher_is_worse` | Higher value is worse | on | | On for VOC values and IAQ indexes where higher means worse air. Off for quality scores where lower is worse; the detection then looks for a fall. |
+| `cooking_rise` | Rise | 50 | 1–500 | Cooking is detected when the value is this much worse than its best value within the window. |
+| `cooking_window` | Window | 10 min | | Time over which the rise is measured. |
+| `cooking_end_offset` | End offset | 15 | 0–200 | The boost ends when the value is back at the value before the rise plus this offset. |
+| `cooking_trigger` | Trigger entity | none | | Optional: a `binary_sensor`, `switch`, `fan` or `light` that is on while cooking (hood, hob switch), or a `sensor` such as the hob power. It starts the boost directly. |
+| `cooking_trigger_threshold` | Trigger threshold | 100 | ≥ 0 | A numeric trigger counts as active above this value (e.g. W). Ignored for on/off entities. |
+| `cooking_trigger_run_on` | Run-on after the trigger | 15 min | | The boost keeps running for this time after the trigger turned inactive. |
+| `cooking_level` | Level | 250 m³/h (62.5 % of max) | minimum–max | Flow while cooking is detected. The automatic demand still wins if it is higher. |
+| `cooking_max_duration` | Maximum duration | 90 min | | The boost ends after this time from its start at the latest. |
+
+Section **Automatic boosts** (collapsed):
+
+| Key | UI name | Default | Range | Meaning |
+|---|---|---|---|---|
+| `auto_boost_quiet_cap` | Quiet cap | 200 m³/h (50 % of max) | minimum–max | Highest flow of an automatic boost while the quiet limit applies (night window, all day in the quiet profile, never in the air quality profile). Manual boosts are not capped. |
+| `auto_boost_cooldown` | Cooldown | 10 min | | After an automatic boost ends, its sensor cannot start a new one for this time. |
+
+Errors: a level or the quiet cap outside minimum flow to max flow; a sensor used in more than one input group; a selected entity does not exist.
+
 ### Safety
 
 > **Unreleased (0.2, in development).**
@@ -440,6 +481,7 @@ All values are flows in m³/h. The calculation has five stages: **contributions 
 | Automatic | the demand |
 | Fallback (no valid CO₂ sensor) | the demand, which contains the fallback flow |
 | Boost | the boost level, or the demand before the quiet limit if that is higher |
+| Shower, Cooking | the level of the [automatic boost](#automatic-boosts) (capped while the quiet limit applies), or the demand if that is higher |
 | Off (pause) | the unit is stopped; the setpoint is 0 |
 | Control off | the demand is calculated and shown, nothing is written |
 
@@ -471,9 +513,43 @@ The **Reason** sensor names the rule or mode that determined the setpoint:
 | `boost` | a manual boost |
 | `off` | a pause |
 | `safety_off` | a safety shutdown or the wait for the restart confirmation ([warning sources](#warning-sources)) |
-| `shower`, `cooking` | reserved for 0.3; not used yet |
+| `shower`, `cooking` | an [automatic boost](#automatic-boosts) after a shower or while cooking |
 
 During a boost the reason is the automatic rule (for example `co2`) when the automatic demand is higher than the boost level.
+
+## Automatic boosts
+
+> **Unreleased (0.3, in development).**
+
+Two detections raise the flow on their own while someone showers or cooks, and return to automatic control afterwards. They are set in **Boosts** ([options](#boosts)); without sensors they are off.
+
+**Shower.** Each bathroom humidity sensor has its own detector. It keeps the values of the last **Window** (10 min). When the humidity is at least **Rise** (8 %) above the lowest value of the window, a shower boost starts: the flow goes to the **Level** (250 m³/h) at once, the lowest value is remembered as the baseline. The boost ends when the humidity is back at the baseline plus the **End offset** (5 %), after the **Maximum duration** (1 h) at the latest, or when the sensor has been invalid (unavailable, stale) for longer than the stale timeout (30 min). Example: 55 % → 64 % within 6 minutes starts the boost with baseline 55 %; it ends at 60 %.
+
+**Cooking.** The same detector on kitchen air quality sensors (IAQ, VOC): **Rise** 50 in the unit of the sensor, **End offset** 15. For a quality score where a lower value is worse, turn **Higher value is worse** off; the detector then looks for a fall. In addition, a **Trigger entity** (the hood, a hob switch, or the hob power above the **Trigger threshold**, 100 W) starts the cooking boost directly; it runs on for **Run-on after the trigger** (15 min) after the trigger turned off, at most **Maximum duration** (90 min) from its start. A trigger that stays on after the maximum duration must turn off before it starts a new boost.
+
+**Rules for both:**
+
+- The mode is **Shower** or **Cooking** (priority below a pause and a manual boost, above fallback and automatic). With both active the higher level wins; with equal levels cooking.
+- The target is the level, or the automatic demand if that is higher (then the reason is the automatic rule, e.g. `co2`).
+- While the quiet limit applies (night window; all day in the quiet profile; never in the air quality profile) the level is capped at the **Quiet cap** (200 m³/h). Manual boosts are not capped. Above the humidity override the demand is not capped and still wins.
+- **Resume** ends an automatic boost; switching **Control** off ends it as well. After every end the detector waits for the **Cooldown** (10 min) before it can start again.
+- A pause or a manual boost has priority; an automatic boost that is still active takes over when it ends. While **Control** is off the detection runs and is shown, nothing is written.
+- Active automatic boosts and cooldowns survive a restart; the values of the window are collected again.
+- Every start and end appears in the logbook ("switched to Shower (detected, until 19:05)", "back to Automatic (detection ended)"); the **Ends at** entity shows the latest end.
+
+**Sensor placement.**
+
+- Bathroom sensors: in the bathroom, at head height, away from the shower spray and not directly at the extract valve (the extract air dilutes the rise). One sensor per bathroom; a guest bathroom gets its own. Never select a bathroom sensor as room humidity sensor: a shower would drive the humidity-high ramp to the max flow and distort the dryness protection.
+- Kitchen sensors: an IAQ or VOC sensor in the kitchen, 1–2 m from the hob, not directly above it (steam, heat and grease give false values) and not in the extract duct. Cleaning agents, perfume and an open window to a smoker also raise VOC; the cooldown and the end offset keep such a boost short.
+- A smart plug or a power meter of the hob is the most reliable cooking signal; combine it with the air quality sensor if the hob is not always used (an oven, a toaster).
+
+**Tuning.**
+
+1. Install the sensors, keep the defaults and watch a week of history of the sensors and of **Shower detected** / **Cooking detected**.
+2. Missed showers (a slow rise, a large bathroom, a window open): lower **Rise** (e.g. 6 %) or extend the **Window** (15 min). False starts (a humid day, laundry drying): raise **Rise**.
+3. A boost that ends too early: lower the **End offset**; one that runs too long (the bathroom stays humid): raise it, or shorten the **Maximum duration**.
+4. For the kitchen, look at the typical rise of your sensor while cooking: VOC sensors in ppb may rise by several hundred, IAQ indexes by 50–150. Set **Rise** to about half of a typical cooking rise.
+5. The [replay tool](#replay-of-recorded-history) runs recorded history of the bathroom and kitchen sensors with your settings, so you can try other values on past days; the [diagnostics](#diagnostics) show the values the detectors currently hold.
 
 ## When the setpoint is updated
 
@@ -481,15 +557,15 @@ The integration is event driven; it does not poll anything.
 
 | Trigger | When |
 |---|---|
-| state change of a room sensor or presence entity | after the debounce time (10 s); further changes within that time are evaluated together |
+| state change of a room sensor, presence entity, bathroom or kitchen sensor or the cooking trigger | after the debounce time (10 s); further changes within that time are evaluated together |
 | periodic | every evaluation interval (1 min) |
-| boost, pause, resume, profile change, control switch, end of a boost or pause | at once |
+| boost, pause, resume, profile change, control switch, end of a boost, pause or automatic boost | at once |
 | state change of the actuator, off actuator, a readiness entity or a warning source | at once (warning details are fetched first, at most 10 s) |
 | saving options, readiness conditions or warning sources | the entry is reloaded |
 
 Control starts once Home Assistant has started. During the startup grace (1 min) the entities show values but nothing is written and no input problems are raised, because many sensors become available a few seconds after start; only a safety shutdown is applied at once. The setpoint keeps the flow the unit runs at until the first write after the grace.
 
-Input values count only when they are **valid**: not `unavailable`, `unknown` or empty; numeric; reported within the stale timeout (30 min, also when the value did not change); and plausible (CO₂ 100–10000 ppm, humidity 0–100 %). Invalid values are left out of every calculation, listed in the setpoint attribute `invalid_inputs`, and reported as a problem after the problem delay.
+Input values count only when they are **valid**: not `unavailable`, `unknown` or empty; numeric; reported within the stale timeout (30 min, also when the value did not change); and plausible (CO₂ 100–10000 ppm, humidity 0–100 %, any number for kitchen sensors). Invalid values are left out of every calculation, listed in the setpoint attribute `invalid_inputs`, and reported as a problem after the problem delay.
 
 ## Entities
 
@@ -499,11 +575,11 @@ All entities belong to one device per entry (named after the entry, model "Deman
 |---|---|---|---|
 | Setpoint | `sensor.ventilation_setpoint` | | Flow the unit should run at (m³/h), after shaping; 0 in a pause. Attributes below. |
 | Reason | `sensor.ventilation_reason` | | Rule or mode that determined the setpoint ([reasons](#reasons)). |
-| Mode | `sensor.ventilation_mode` | | Automatic, Fallback, Boost, Off, Safety shutdown (with [warning sources](#warning-sources)), Control off. (Shower and Cooking exist as states but are not used yet.) |
-| Ends at | `sensor.ventilation_ends_at` | | End of the current boost or timed pause; empty otherwise. |
+| Mode | `sensor.ventilation_mode` | | Automatic, Fallback, Boost, Shower, Cooking ([automatic boosts](#automatic-boosts)), Off, Safety shutdown (with [warning sources](#warning-sources)), Control off. |
+| Ends at | `sensor.ventilation_ends_at` | | End of the current boost or timed pause, the latest end of an automatic boost; empty otherwise. |
 | Boost | `button.ventilation_boost` | | Starts a boost with the **Boost duration** and **Boost level**; pressing again extends it by the duration. |
 | Pause | `button.ventilation_pause` | | Stops the unit for the **Pause duration**. |
-| Resume | `button.ventilation_resume` | | Ends a boost or pause and returns to automatic control. |
+| Resume | `button.ventilation_resume` | | Ends a boost, pause or automatic boost and returns to automatic control. |
 | Control | `switch.ventilation_control` | | Off: the integration writes nothing (no flow, no off/on, no readiness correction), rejects boost and pause, and ends a running boost or pause. It keeps calculating; the mode is "Control off". When it is switched on again after a pause had stopped the unit, the unit is started again. |
 | Profile | `select.ventilation_profile` | | Balanced, Air quality, Quiet, Winter ([profiles](#profiles)). |
 | Boost duration | `select.ventilation_boost_duration` | config | 15 min, 30 min, 1 h, 2 h. Restored after a restart. |
@@ -511,6 +587,8 @@ All entities belong to one device per entry (named after the entry, model "Deman
 | Pause duration | `select.ventilation_pause_duration` | config | 1 h (initial), 4 h, 8 h, Until resumed. Restored after a restart. |
 | Problem | `binary_sensor.ventilation_problem` | diagnostic | On while a problem persists longer than the problem delay. |
 | Safety warning | `binary_sensor.ventilation_safety_warning` | | Only with a warning source. On while any warning is active, overridden or not. Attribute `warnings`: list of `{source, headline, severity, overridden, since}`. |
+| Shower detected | `binary_sensor.ventilation_shower_detected` | | Only with bathroom humidity sensors (0.3). On while a shower boost is active, also behind a pause or a manual boost. |
+| Cooking detected | `binary_sensor.ventilation_cooking_detected` | | Only with kitchen sensors or a cooking trigger (0.3). On while a cooking boost is active. |
 | Safety override | `switch.ventilation_safety_override` | | Only with a warning source. On: the active warnings are overridden and the unit keeps running. Off: an active warning switches the unit off again. Without an active warning turning it on has no effect. |
 
 ### Setpoint attributes
@@ -522,7 +600,7 @@ All entities belong to one device per entry (named after the entry, model "Deman
 | `target` | flow the active mode asks for, before shaping |
 | `written`, `last_write` | last flow written to the unit and when |
 | `actuator_value` | current native value of the actuator (not recorded) |
-| `contributions` | `minimum`, `co2`, `humidity_high`, `fallback`, `boost`, `shower`, `cooking` (flow or empty) |
+| `contributions` | `minimum`, `co2`, `humidity_high`, `fallback`, `boost`, `shower`, `cooking` (flow or empty; `shower` and `cooking` are the capped levels while the automatic boost is active) |
 | `co2_max`, `co2_max_entity` | highest valid CO₂ value and its sensor |
 | `humidity_max`, `humidity_max_entity`, `humidity_mean` | highest and mean valid room humidity |
 | `limits` | active limits: `away`, `quiet`, `dry` (also when they did not change the value) |
@@ -575,10 +653,10 @@ Between boost and pause the last command wins. A boost or pause that ends while 
 
 | Event | When | Data |
 |---|---|---|
-| `better_home_ventilation_mode_changed` | the mode changed | `entry_id`, `device_id`, `name`, `from_mode`, `to_mode`, `reason`, `setpoint`, `trigger`, `source`, `warning` (headline of the warning, or the source name, when the new mode is `safety_off`), `ends_at` (end of a new boost or timed pause, ISO 8601) |
+| `better_home_ventilation_mode_changed` | the mode changed | `entry_id`, `device_id`, `name`, `from_mode`, `to_mode`, `reason`, `setpoint`, `trigger`, `source`, `warning` (headline of the warning, or the source name, when the new mode is `safety_off`), `ends_at` (end of a new boost or timed pause, the latest end of an automatic boost, ISO 8601) |
 | `better_home_ventilation_readiness_corrected` | a readiness condition was corrected automatically | `entry_id`, `entity_id`, `from_state`, `to_state` |
 
-`trigger` is one of `startup`, `command`, `timeout`, `timeout_while_offline`, `inputs_lost`, `inputs_restored`, `control_switch`, and with warning sources `warning`, `warning_ended` and `override`. `source` (for commands) is `button`, `service`, `voice`, `notification` or `external` (at the unit).
+`trigger` is one of `startup`, `command`, `timeout`, `timeout_while_offline`, `inputs_lost`, `inputs_restored`, `control_switch`, with warning sources `warning`, `warning_ended` and `override`, and for automatic boosts `detector_start` and `detector_end` (an automatic boost that ends at its maximum duration has `timeout`, one whose sensor failed `inputs_lost`). `source` (for commands) is `button`, `service`, `voice`, `notification` or `external` (at the unit).
 
 Every mode change appears in the logbook of the device, linked to the **Mode** sensor, for example "Ventilation switched to Boost (button, until 18:30)" or "Ventilation back to Automatic (timeout)". The text is in the server language. The setpoint itself is not logged per write; its history is in the **Setpoint** sensor.
 
@@ -628,7 +706,8 @@ Repair issues appear under **Settings → System → Repairs**.
 **Download diagnostics** in the entry's menu (⋮) on the integration page gives a JSON file for bug reports and for the [replay](#replay-of-recorded-history):
 
 - the settings (options) and all readiness conditions and warning sources,
-- the stored state (boost, pause, profile, control switch, warnings, overrides),
+- the stored state (boost, pause, profile, control switch, warnings, overrides, active automatic boosts and cooldowns),
+- the values the shower and cooking detectors currently hold (`controller.detectors`),
 - the current state, `last_changed` and `last_reported` of every entity the integration reads,
 - the last 100 decisions (mode, reason, setpoint, every contribution, limits, invalid inputs, problems, why nothing was written),
 - the current problems and warnings.
@@ -645,7 +724,7 @@ The selected phones (notify services) are removed from the file, entity attribut
 python tools/replay.py history.csv options.json --tz Europe/Berlin --decisions decisions.csv
 ```
 
-- `history.csv`: one row per recorded state with a header row and the columns `time`, `entity_id`, `state` (ISO 8601 times; times without offset are in `--tz`). The history download of Home Assistant (`entity_id,state,last_changed`) and InfluxDB exports (`_time`, `_value`) work as they are. Include the CO₂ and humidity sensors and the presence entities; the actuator is simulated.
+- `history.csv`: one row per recorded state with a header row and the columns `time`, `entity_id`, `state` (ISO 8601 times; times without offset are in `--tz`). The history download of Home Assistant (`entity_id,state,last_changed`) and InfluxDB exports (`_time`, `_value`) work as they are. Include the CO₂ and humidity sensors and the presence entities, and for the [automatic boosts](#automatic-boosts) the bathroom and kitchen sensors and the cooking trigger; the actuator is simulated.
 - `options.json`: the [diagnostics download](#diagnostics) of the entry (or just its options). Edit the options in the file to try other settings.
 - `--profile balanced|air_quality|quiet|winter` (default balanced), `--interval` (seconds between periodic evaluations, default the evaluation interval of the options), `--stale` (a sensor without a recorded state for the stale timeout counts as invalid; off by default, because recordings usually hold only changes), `--decisions` (one CSV row per evaluation).
 
@@ -671,7 +750,7 @@ Writes per day: mean 32.7, max 52 (2026-01-12), total 98
 Longest at max flow (400 m³/h): never
 ```
 
-The replay assumes that the unit takes every written value at once. It leaves out readiness conditions, warning sources and manual commands (boost, pause). Replay a winter month before going live and check the share of `co2` against `minimum` and the writes per day.
+The replay assumes that the unit takes every written value at once. It leaves out readiness conditions, warning sources and manual commands (boost, pause). Replay a winter month before going live and check the share of `co2` against `minimum` and the writes per day. To tune the shower and cooking detection, replay days with showers and cooking and compare the time in the modes `shower` and `cooking` (and the rows of `--decisions`) with when someone actually showered or cooked.
 
 ## Examples
 
@@ -681,7 +760,7 @@ The replay assumes that the unit takes every written value at once. It leaves ou
 
 ### Automations
 
-Boost while the cooker hood runs (until the automatic cooking detection of 0.3 arrives):
+Boost while the cooker hood runs (with 0.3, select the hood as **Trigger entity** of the [cooking detection](#automatic-boosts) instead):
 
 ```yaml
 triggers:
@@ -734,7 +813,7 @@ A sensor in the extract duct measures the mixed air of the whole home, diluted b
 
 ### Which humidity sensors should I use?
 
-Only sensors in **living and sleeping rooms**. Not in bathrooms (a shower would drive the humidity-high ramp to the max flow and distort the mean that dryness protection relies on; shower detection comes in 0.3 with its own sensors), not in rooms with a humidifier (the integration would ventilate the added moisture away, and the room would never look dry), and not in the extract duct.
+Only sensors in **living and sleeping rooms**. Not in bathrooms (a shower would drive the humidity-high ramp to the max flow and distort the mean that dryness protection relies on; bathroom sensors belong to the [shower detection](#automatic-boosts)), not in rooms with a humidifier (the integration would ventilate the added moisture away, and the room would never look dry), and not in the extract duct.
 
 ### Pets and away
 

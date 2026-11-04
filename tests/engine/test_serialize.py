@@ -9,6 +9,8 @@ from typing import Any
 import pytest
 
 from engine.models import (
+    AutoBoost,
+    AutoBoostKind,
     Boost,
     ControllerState,
     FireEvent,
@@ -263,6 +265,103 @@ def test_store_migration_1_1_to_1_2() -> None:
     assert "off_since" not in old
 
 
+_AUTO = {
+    "shower:sensor.bathroom_humidity": AutoBoost(
+        kind=AutoBoostKind.SHOWER,
+        entity_id="sensor.bathroom_humidity",
+        baseline=55.5,
+        started=T0 - timedelta(minutes=5),
+        deadline=T0 + timedelta(minutes=55),
+    ),
+    "cooking_trigger:sensor.hob_power": AutoBoost(
+        kind=AutoBoostKind.COOKING,
+        entity_id="sensor.hob_power",
+        baseline=None,
+        started=T0 - timedelta(minutes=5),
+        deadline=T0 + timedelta(minutes=10),
+    ),
+}
+
+
+def test_round_trip_of_the_03_fields() -> None:
+    """Active auto boosts and cooldowns survive a round trip (03-modes.md)."""
+    cooldown = {"cooking:sensor.kitchen_voc": T0 + timedelta(minutes=3)}
+    state = _persisted(auto_boosts=_AUTO, detector_cooldown=cooldown)
+    data = state_to_dict(state)
+    assert data["auto_boosts"]["shower:sensor.bathroom_humidity"] == {
+        "kind": "shower",
+        "entity_id": "sensor.bathroom_humidity",
+        "baseline": 55.5,
+        "started": "2026-01-15T11:55:00+00:00",
+        "deadline": "2026-01-15T12:55:00+00:00",
+    }
+    assert data["detector_cooldown"] == {
+        "cooking:sensor.kitchen_voc": "2026-01-15T12:03:00+00:00"
+    }
+    result = state_from_dict(data, T0)
+    assert result.state == state
+    assert result.expired is None
+
+
+def test_expired_auto_boost_ends_while_offline() -> None:
+    """Only the expired auto boost ends; the other keeps its deadline."""
+    state = _persisted(control_enabled=True, manual=None, auto_boosts=_AUTO)
+    result = state_from_dict(state_to_dict(state), T0 + timedelta(minutes=20))
+    assert result.expired == "auto boost"
+    assert list(result.state.auto_boosts) == ["shower:sensor.bathroom_humidity"]
+    assert result.state.pending_trigger is Trigger.TIMEOUT_WHILE_OFFLINE
+
+
+def test_store_migration_1_2_to_1_3() -> None:
+    """1.2 -> 1.3: empty auto boosts and cooldowns; everything else kept."""
+    old = state_to_dict(_persisted())
+    del old["auto_boosts"]
+    del old["detector_cooldown"]
+    migrated = migrate_store_data(1, 2, old)
+    assert migrated == {**old, "auto_boosts": {}, "detector_cooldown": {}}
+    assert "auto_boosts" not in old
+    assert state_from_dict(migrated, T0).state == _persisted()
+    # From 1.1 both steps run.
+    assert migrate_store_data(1, 1, old)["detector_cooldown"] == {}
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        {"auto_boosts": "x"},
+        {"auto_boosts": {"k": "x"}},
+        {"auto_boosts": {"k": {"kind": "bath", "entity_id": "sensor.x"}}},
+        {
+            "auto_boosts": {
+                "k": {
+                    "kind": "shower",
+                    "entity_id": "sensor.x",
+                    "baseline": "55",
+                    "started": "2026-01-15T12:00:00+00:00",
+                    "deadline": "2026-01-15T13:00:00+00:00",
+                }
+            }
+        },
+        {
+            "auto_boosts": {
+                "k": {
+                    "kind": "shower",
+                    "entity_id": "sensor.x",
+                    "started": "2026-01-15T12:00:00+00:00",
+                }
+            }
+        },
+        {"detector_cooldown": ["x"]},
+        {"detector_cooldown": {"k": None}},
+    ],
+)
+def test_corrupt_auto_boosts_reset(data: object) -> None:
+    """Unreadable auto boost data -> defaults and the ``state_reset`` flag."""
+    result = state_from_dict(data, T0)
+    assert result.reset
+    assert result.state == ControllerState()
+
+
 def test_store_migration_leaves_other_versions_and_bad_data() -> None:
     """Current or newer minor versions and non-mapping data are returned as is."""
     data = {"profile": "quiet"}
@@ -319,6 +418,8 @@ def test_runtime_fields_are_not_persisted() -> None:
         "manual",
         "safety",
         "safety_restore",
+        "auto_boosts",
+        "detector_cooldown",
         "dry_active",
         "dry_humidity_high_since",
         "off_since",

@@ -46,7 +46,7 @@ rules:
   config-entry-unloading: done
   docs-configuration-parameters:
     status: done
-    comment: README "Options" (including Safety and Notifications), "Readiness conditions" and "Warning sources" document every field of every options step and subentry flow with UI name, default and meaning, checked against strings.json.
+    comment: README "Options" (including Boosts with shower and cooking detection, Safety and Notifications), "Readiness conditions" and "Warning sources" document every field of every options step and subentry flow with UI name, default and meaning, checked against strings.json.
   docs-installation-parameters:
     status: done
     comment: README "Setup" documents every field of the three config flow steps.
@@ -65,7 +65,7 @@ rules:
   devices: done
   diagnostics:
     status: done
-    comment: Options, subentries, stored state, used entity states, the last 100 decisions, problems and warnings; notify services redacted, person/device_tracker states reduced to home/not_home.
+    comment: Options, subentries, stored state (including active automatic boosts and cooldowns), the runtime state of the shower and cooking detectors, used entity states, the last 100 decisions, problems and warnings; notify services redacted, person/device_tracker states reduced to home/not_home.
   discovery:
     status: exempt
     comment: Helper integration without a device or service to discover.
@@ -86,7 +86,7 @@ rules:
     comment: README "Requirements and supported units"; any unit controllable through a number, fan or select entity, no device-specific code.
   docs-supported-functions:
     status: done
-    comment: README "Entities", "Profiles", "How the setpoint is calculated", "Notifications", "Actions", "Events and logbook", "Voice control", "Repair issues" and "Diagnostics".
+    comment: README "Entities", "Profiles", "How the setpoint is calculated", "Automatic boosts", "Notifications", "Actions", "Events and logbook", "Voice control", "Repair issues" and "Diagnostics".
   docs-troubleshooting:
     status: done
     comment: README "Troubleshooting", "Repair issues" and "Diagnostics" (download for bug reports, replay of recorded history).
@@ -100,7 +100,7 @@ rules:
   entity-device-class: done
   entity-disabled-by-default:
     status: exempt
-    comment: Every entity is used in daily operation or for diagnosis; none is noisy enough to be disabled by default.
+    comment: Every entity is used in daily operation or for diagnosis; none is noisy enough to be disabled by default. Entities of features without inputs (safety, shower and cooking detection) are not created at all.
   entity-translations: done
   exception-translations: done
   icon-translations: done

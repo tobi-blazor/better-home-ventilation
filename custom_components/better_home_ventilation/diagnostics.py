@@ -1,9 +1,9 @@
 """Diagnostics download of an entry (BHV-54, docs/spec/04-interface.md#diagnostics).
 
 Content: the entry options, all subentries, the persisted controller state,
-the current states of all configured entities (state, ``last_changed``,
-``last_reported``), the last 100 decisions, the active problems and the
-current warnings. The options contain no secrets; the notify services are
+the runtime state of the shower and cooking detectors, the current states of
+all configured entities (state, ``last_changed``, ``last_reported``), the last
+100 decisions, the active problems and the current warnings. The options contain no secrets; the notify services are
 redacted anyway (they carry phone names), and person/device_tracker states
 are reduced to ``home``/``not_home`` (no zone names). The download can be
 fed to the replay tool (``tools/replay.py``) as its options file.
@@ -21,7 +21,11 @@ from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.core import HomeAssistant
 
 from .const import CONF_NOTIFY_SERVICES
-from .controller import BetterVentilationConfigEntry, VentilationController
+from .controller import (
+    BetterVentilationConfigEntry,
+    VentilationController,
+    detector_entities,
+)
 from .engine.models import entity_domain, is_unavailable
 from .engine.serialize import state_to_dict
 
@@ -70,6 +74,7 @@ def _entity_ids(controller: VentilationController) -> list[str]:
                 *options.co2_sensors,
                 *options.humidity_sensors,
                 *options.presence_entities,
+                *detector_entities(options),
                 *(condition.entity_id for condition in options.readiness_conditions),
                 *(
                     entity_id
@@ -97,6 +102,24 @@ def _entity_states(
             }
         )
     return states
+
+
+def _detectors(controller: VentilationController) -> dict[str, Any]:
+    """Runtime state of the shower and cooking detectors (not in the store).
+
+    Per detector key: the samples of the window (value negated when
+    ``higher_is_worse`` is false), the start of invalid input and, for the
+    trigger entity, whether it may start again. Active auto boosts and
+    cooldowns are in ``stored_state``.
+    """
+    return {
+        key: {
+            "samples": [[time.isoformat(), value] for time, value in runtime.samples],
+            "invalid_since": jsonable(runtime.invalid_since),
+            "armed": runtime.armed,
+        }
+        for key, runtime in sorted(controller.state.detectors.items())
+    }
 
 
 async def async_get_config_entry_diagnostics(
@@ -127,6 +150,7 @@ async def async_get_config_entry_diagnostics(
             "state_reset": controller.state_reset,
             "missing_entities": sorted(controller.missing_entities),
             "missing_notify_services": len(controller.missing_notify_services),
+            "detectors": _detectors(controller),
         },
         "stored_state": state_to_dict(controller.state),
         "entities": _entity_states(hass, controller),
